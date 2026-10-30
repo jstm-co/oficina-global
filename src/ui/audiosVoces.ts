@@ -12,7 +12,7 @@ const RELEER_MS = 10 * 60_000;
 
 let base: Promise<string | null> | null = null;
 
-/** `/_plugins/<uuid>/ui/`: en el TV está en la dirección; en Paperclip se pregunta una vez. */
+/** `/_plugins/<uuid>/ui/`: en el TV está en la dirección; en Paperclip se pregunta una vez. La vista 3D carga su visor de ahí. */
 export function baseUi(): Promise<string | null> {
   const m = typeof location !== "undefined" ? /^\/_plugins\/[^/]+\/ui\//.exec(location.pathname) : null;
   if (m) return Promise.resolve(m[0]);

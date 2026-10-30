@@ -83,6 +83,8 @@ export const CSS_RESUMEN = /* css */ `
 .of-rs-a { position: fixed; bottom: 14px; z-index: 45; display: flex; justify-content: center; pointer-events: none; }
 /* Sobre el piso de la Oficina (sus rótulos y globos van hasta 960), debajo de sus menús y hojas (990+); en las otras páginas, debajo de los diálogos del host */
 .of-rs-a.is-piso { z-index: 970; }
+/* Sobre la vista 3D (975), que tapa la ventana entera; debajo de sus fichas y menús */
+.of-rs-a.is-3d { z-index: 980; }
 .of-rsa-dock { width: min(880px, calc(100% - 48px)); display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
 .of-rsa-bar { position: relative; display: flex; align-items: center; gap: 6px; min-height: 64px; padding: 12px 10px 10px 12px; box-sizing: border-box; color: var(--of-fg);
   background: var(--of-popover); border: 1px solid var(--of-border); border-radius: 14px; box-shadow: var(--of-shadow-pop); animation: of-rs-up .2s cubic-bezier(.16,1,.3,1); font-size: 14px; line-height: 20px; }

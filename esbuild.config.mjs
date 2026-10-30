@@ -22,6 +22,19 @@ const tv = {
   define: { "process.env.NODE_ENV": '"production"' },
 };
 
+// Vista 3D (three.js), en su propio archivo: la página la carga solo al abrirla,
+// por su dirección completa (`src/ui/vista3d.tsx`). Las hojas de sprites se las
+// pasa la página, así que aquí no van.
+const oficina3d = {
+  entryPoints: { oficina3d: "src/ui/oficina3d/index.ts" },
+  outdir: "dist/ui",
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+};
+
 // Generador de los audios de las voces (JST-124): se corre a mano en la Mac
 // (`npm run voces -- --api …`), no lo carga Paperclip.
 const voces = {
@@ -50,6 +63,7 @@ await Promise.all([
   esbuild.build(presets.esbuild.manifest),
   esbuild.build({ ...presets.esbuild.ui, loader: { ...presets.esbuild.ui.loader, ...loader } }),
   esbuild.build(tv),
+  esbuild.build(oficina3d),
   esbuild.build(voces),
   existsSync(sonda.entryPoints[0]) ? esbuild.build(sonda) : null,
 ]);

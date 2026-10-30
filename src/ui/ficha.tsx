@@ -610,8 +610,9 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
 /**
  * Popover de la ficha en computador (§9): a la derecha del personaje (+12 px),
  * o a la izquierda si no cabe; al menos a 12 px del borde y a 60 px de arriba.
+ * `seguir`: el ancla se mueve sola (la de la vista 3D), y la ficha va con ella en cada cuadro.
  */
-export function FichaFlotante({ ancla, children, onCerrar, ancho = 340 }: { ancla: HTMLElement | null; children: ReactNode; onCerrar: () => void; ancho?: number }) {
+export function FichaFlotante({ ancla, children, onCerrar, ancho = 340, seguir = false }: { ancla: HTMLElement | null; children: ReactNode; onCerrar: () => void; ancho?: number; seguir?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -624,19 +625,30 @@ export function FichaFlotante({ ancla, children, onCerrar, ancho = 340 }: { ancl
       let x = r.right + 12;
       if (x + w > innerWidth - 12) x = r.left - w - 12;
       if (x < 12) x = Math.max(12, Math.min(innerWidth - w - 12, r.left));
+      // Un ancla pegada al borde derecho: la ficha a su izquierda tampoco se sale.
+      x = Math.max(12, Math.min(innerWidth - w - 12, x));
       const y = Math.max(60, Math.min(innerHeight - h - 12, r.top - 20));
-      setPos((p) => (p && p.left === x && p.top === y ? p : { left: x, top: y }));
+      const nx = Math.round(x);
+      const ny = Math.round(y);
+      setPos((p) => (p && p.left === nx && p.top === ny ? p : { left: nx, top: ny }));
     };
     ubicar();
     // La ficha crece cuando llega la última tarea: se vuelve a ubicar.
     const obs = new ResizeObserver(ubicar);
     obs.observe(el);
     window.addEventListener("resize", ubicar);
+    let vuelta = 0;
+    const cadaCuadro = () => {
+      ubicar();
+      vuelta = requestAnimationFrame(cadaCuadro);
+    };
+    if (seguir) vuelta = requestAnimationFrame(cadaCuadro);
     return () => {
       obs.disconnect();
       window.removeEventListener("resize", ubicar);
+      cancelAnimationFrame(vuelta);
     };
-  }, [ancla]);
+  }, [ancla, seguir]);
   useEffect(() => {
     const fuera = (e: MouseEvent) => {
       const t = e.target as Node;

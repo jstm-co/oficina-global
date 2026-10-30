@@ -69,7 +69,7 @@ export function Icono({ nombre, tam = 16, className }: { nombre: NombreIcono | s
  * del piso (18 px a 2x, 24 a 3x) y sus 2 ondas laten (quietas con movimiento
  * reducido).
  */
-function Parlante() {
+export function Parlante() {
   return (
     <i className="of-vzm" aria-hidden="true">
       <Icono nombre="volume-2" tam={12} />
@@ -77,7 +77,7 @@ function Parlante() {
   );
 }
 
-const esMarca = (m: MarcaVoz | null, tipo: MarcaVoz["tipo"], clave: string) => !!m && m.tipo === tipo && m.clave === clave;
+export const esMarca = (m: MarcaVoz | null, tipo: MarcaVoz["tipo"], clave: string) => !!m && m.tipo === tipo && m.clave === clave;
 
 export function claseEmpresa(prefijo: string): string {
   return CON_COLOR.includes(prefijo) ? `of-co-${prefijo.toLowerCase()}` : "of-co-none";
@@ -202,8 +202,8 @@ function Pantalla({ tipo, x, y, z, rm }: { tipo: TipoPantalla; x: number; y: num
 // ---------------------------------------------------------------------------
 
 // Libre en su escritorio solo mientras espera su turno para ir al descanso (cupo lleno, JST-137): sentado y quieto.
-const ANIM_PUESTO: Record<Dibujo, Animacion> = { trabaja: "teclear", toca: "mano", error: "error", pausa: "dormir", libre: "sentado" };
-const PANTALLA: Record<Dibujo, TipoPantalla> = { trabaja: "codigo", toca: "espera", error: "error", pausa: "dormida", libre: "apagada" };
+export const ANIM_PUESTO: Record<Dibujo, Animacion> = { trabaja: "teclear", toca: "mano", error: "error", pausa: "dormir", libre: "sentado" };
+export const PANTALLA: Record<Dibujo, TipoPantalla> = { trabaja: "codigo", toca: "espera", error: "error", pausa: "dormida", libre: "apagada" };
 
 export interface OpcionesPiso {
   /** Escala 1x (celular, widget): sin globos, con punto azul y efecto `aviso` (§2). */
@@ -315,7 +315,7 @@ function Andante({ agente, f, o, vida, extra, ahora }: { agente: AgenteVista; f:
  * Globo con el código de la tarea (HTML, nítido), centrado en (x, y): (x + 8, y + 1) del puesto, o (pies.x, pies.y − 23)
  * de quien camina. `anillo`: el rótulo de la sala habla de él (JST-138 §3.2).
  */
-function Globo({ agente, x, y, refEl, anillo = false, listo = false, abajo = null, voz = false }: { agente: AgenteVista; x: number; y: number; refEl?: (el: HTMLElement | null) => void; anillo?: boolean; listo?: boolean; abajo?: PisoAbajo | null; voz?: boolean }) {
+export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abajo = null, voz = false }: { agente: AgenteVista; x: number; y: number; refEl?: (el: HTMLElement | null) => void; anillo?: boolean; listo?: boolean; abajo?: PisoAbajo | null; voz?: boolean }) {
   const st = agente.st;
   const vz = voz ? <Parlante /> : null;
   const n = agente.teNecesita.length;
@@ -602,7 +602,7 @@ function altoDeLinea(cs: CSSStyleDeclaration): number {
  * tenía abajo (JST-175).
  * `data-px`: los pies de quien lo dijo (su cola apunta ahí).
  */
-function GloboFrase({ linea, clase, lado, piesX, quien, voz = false }: { linea: Linea; clase: "is-prev" | "is-cur" | "is-piensa"; lado: "izq" | "der" | null; piesX: number; quien: string; voz?: boolean }) {
+export function GloboFrase({ linea, clase, lado, piesX, quien, voz = false }: { linea: Linea; clase: "is-prev" | "is-cur" | "is-piensa"; lado: "izq" | "der" | null; piesX: number; quien: string; voz?: boolean }) {
   const tkRef = useRef<HTMLSpanElement>(null);
   const ntRef = useRef<HTMLSpanElement>(null);
   const nombre = tituloDe(linea);
@@ -831,7 +831,7 @@ function agenteDe(el: EventTarget | null): string | null {
  * seguir 26–98 s más (JST-238): mientras no sale su «✓ listo», va en el globo
  * que tiene a la vista, el de su tarea, como la mano.
  */
-function vozDelGlobo(m: MarcaVoz | null, agente: AgenteVista): boolean {
+export function vozDelGlobo(m: MarcaVoz | null, agente: AgenteVista): boolean {
   if (!m || m.clave !== agente.id) return false;
   if (m.tipo === "mano") return agente.need;
   return m.tipo === "listo" || m.tipo === "hora";
@@ -1233,6 +1233,8 @@ export interface PropsPiso {
    * un TV van siempre con las frases de siempre.
    */
   ia?: boolean;
+  /** La vida de este piso, para quien la quiera leer: la vista 3D dibuja a cada uno donde esta vida dice. */
+  onVida?: ((vida: Vida | null) => void) | null;
 }
 
 /** La vida de este piso: una por piso dibujado, al día con lo que se dibuja en cada pasada. */
@@ -1348,7 +1350,7 @@ function RotuloPiso({ vida, ancho }: { vida: Vida; ancho: number }) {
   return <Rotulo clave={ROTULO_PISO} v={v} vida={vida} piso etiqueta="Qué se hace en la oficina" style={{ width: ancho }} />;
 }
 
-export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReintentar, sync = null, charlas = true, pausado = false, mascotasTocables = true, tv = false, onEscritorio = null, voz: conVoz = false, ia: conIa = false }: PropsPiso) {
+export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReintentar, sync = null, charlas = true, pausado = false, mascotasTocables = true, tv = false, onEscritorio = null, voz: conVoz = false, ia: conIa = false, onVida = null }: PropsPiso) {
   const porPrefijo = new Map(empresas.map((e) => [e.prefijo, e]));
   // 0.5.0 (JST-163 §9): la hora estimada de quien trabaja, con sus últimos runs; se vuelve a calcular cada minuto.
   // JST-192: cada uno en su instante del minuto, para que ningún globo la cambie a la vez que otro ni que un rótulo (§8).
@@ -1360,6 +1362,11 @@ export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReinten
   const ahoraDe = (a: AgenteVista) => (conHora(a) ? reloj.ahoraDe(a.id, a.run!.desde) : reloj.ahora);
   const horaDe = (a: AgenteVista) => (conHora(a) ? (horas?.estimacion(a.id, a.run!.desde, ahoraDe(a)) ?? null) : null);
   const { vida, revisores, voz, cargando } = useVida(plano, empresas, agentes, o, sync, charlas, pausado, filtro, tv, horaDe, ahoraDe, conVoz, conIa);
+  useEffect(() => {
+    if (!onVida) return;
+    onVida(vida);
+    return () => onVida(null);
+  }, [vida, onVida]);
   // 0.6.0 (JST-225 §4): la hora estimada en voz alta, una vez por tarea, cuando aparece en su globo. Las que ya estaban
   // cuando empezó a sonar la oficina (al abrir, o al prender las voces) no se dicen.
   useEffect(() => {

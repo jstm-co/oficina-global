@@ -2,11 +2,42 @@
 // `document.body` para que ningún contenedor del host las recorte; el
 // envoltorio `.of-layer` les da los tokens del plugin. En el modo TV van
 // dentro de la vista TV, porque en pantalla completa solo se ve ese elemento.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export function Capa({ children, dentro }: { children: ReactNode; dentro?: HTMLElement | null }) {
   return createPortal(<div className="of-layer">{children}</div>, dentro ?? document.body);
+}
+
+// ---------------------------------------------------------------------------
+// La vista 3D tapa la ventana entera: lo que tiene que seguir a la vista encima
+// de ella (el reproductor del Resumen, lo monte quien lo monte) lo sabe por aquí.
+// ---------------------------------------------------------------------------
+
+let vistas3d = 0;
+const oyentes3d = new Set<() => void>();
+
+/** Mientras está montado, la vista 3D cuenta como abierta. */
+export function useMarcarVista3d(): void {
+  useEffect(() => {
+    vistas3d++;
+    for (const o of oyentes3d) o();
+    return () => {
+      vistas3d--;
+      for (const o of oyentes3d) o();
+    };
+  }, []);
+}
+
+/** Si la vista 3D está abierta. */
+export function useVista3dAbierta(): boolean {
+  return useSyncExternalStore(
+    (o) => {
+      oyentes3d.add(o);
+      return () => oyentes3d.delete(o);
+    },
+    () => vistas3d > 0,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -19,7 +50,8 @@ const pilaEsc: Array<{ fn: () => void }> = [];
 let escuchandoEsc = false;
 
 function alEsc(e: KeyboardEvent): void {
-  if (e.key !== "Escape") return;
+  // Lo que ya atendió su Esc (el reproductor del Resumen, con el foco) no cierra además otra capa.
+  if (e.key !== "Escape" || e.defaultPrevented) return;
   const arriba = pilaEsc.at(-1);
   if (!arriba) return;
   e.preventDefault();

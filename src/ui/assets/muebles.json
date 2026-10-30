@@ -436,5 +436,62 @@
    "h": 16
   }
  },
- "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje."
+ "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje.",
+ "pliegues": {
+  "escritorio": [
+   9,
+   14
+  ],
+  "sofa": [
+   7,
+   10
+  ],
+  "sofa-calido": [
+   7,
+   10
+  ],
+  "cafetera": [
+   12,
+   15
+  ],
+  "mesita": [
+   5
+  ],
+  "puff": [
+   6
+  ],
+  "puff-2": [
+   6
+  ],
+  "pingpong": [
+   16
+  ],
+  "alfombra-sala": [
+   30
+  ],
+  "alfombra-sala-2": [
+   30
+  ],
+  "silla-bet": [
+   8,
+   11
+  ],
+  "silla-elm": [
+   8,
+   11
+  ],
+  "silla-jst": [
+   8,
+   11
+  ],
+  "silla-mig": [
+   8,
+   11
+  ]
+ },
+ "giran": [
+  "planta",
+  "planta-grande",
+  "lampara"
+ ]
 }

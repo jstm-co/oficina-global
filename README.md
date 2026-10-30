@@ -19,6 +19,7 @@ A [Paperclip](https://github.com/paperclipai/paperclip) plugin that draws the ag
 - **Room sign.** Under each room, a sign tells what each issue is about, one at a time.
 - **Summary.** The «Resumen» (summary) button reads out loud what got done, what is waiting for you, what is being worked on and what is queued.
 - **Read context.** In the top bar of each issue, a «Leer contexto» (read context) button reads out loud what the issue is about and what you are being asked.
+- **3D view** (0.12.0). On a computer, the «Vista 3D» (3D view) button lets you walk through the same office in first person, starting at your desk: look around with the mouse and walk with W A S D. Each room has its walls, doors to the hallway and a ceiling with lamps; monitors can be read up close, an arrow points to whoever needs you and clicking someone opens their card, as in 2D. Agents' chats and handoffs show over their heads, and the light follows the viewer's clock: the sky through the windows, the sun reaching the floor and, at night, a dimmer office.
 - **TV mode.** Full screen at 1920×1080, plus a link to open it on a TV with a session.
 - **Phone.** The whole floor and, when you tap a room, that room zoomed in.
 
@@ -140,6 +141,7 @@ The code is in `src/` (the logic, without React or the DOM, kept apart from `src
 - The operating system notification needs `https://`; over `http://`, Paperclip shows the notice inside the page.
 - Sound and voices start with your first click on the tab after opening it.
 - iPhone has no full screen for web pages: TV mode explains how to add it to the home screen. It was not tested in Safari or on a real iPhone.
+- The 3D view needs WebGL 2 and is for computers only (not on phones or in TV mode).
 - Edge TTS is an unofficial service: if Microsoft changes it, the Lorenzo and Catalina voices stop generating until `edge-tts` is updated.
 
 ## Contributing and releases

@@ -23,6 +23,7 @@ import { nombreCorto } from "../avisos.js";
 import { idInstalacion } from "../fuentes.js";
 import { abreVentana } from "../lista.js";
 import { anchoCelular, anchoComputador, armarPiso, armarPisoComputador, armarSalaAcercada } from "../plano.js";
+import type { Vida } from "../vida.js";
 import { PLUGIN_KEY } from "../shared.js";
 import { contarVista, type AgenteVista } from "../vista.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
@@ -42,6 +43,7 @@ import { todosLibres, useAhora, useAnchoVentana, useCelular, useMovimientoReduci
 import { VentanaResponder } from "./ventana.js";
 import { useVigia } from "./vigia.js";
 import { VistaTv } from "./vistaTv.js";
+import { Vista3D } from "./vista3d.js";
 
 /** Evento con el que el botón de la barra de arriba (celular) abre el modo TV de la página. */
 export const EVENTO_TV = "jstm-oficina-pixel:tv";
@@ -233,6 +235,9 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   const [sel, setSel] = useState<string | null>(null);
   const [sala, setSala] = useState<string | null>(() => new URLSearchParams(location.search).get("sala")?.toUpperCase() ?? null);
   const [tv, setTv] = useState(false);
+  // La vista 3D (en el computador): la misma oficina en primera persona, con la vida del piso de la página.
+  const [en3d, setEn3d] = useState(false);
+  const [vidaPiso, setVidaPiso] = useState<Vida | null>(null);
   /** La ficha abierta desde una fila de la lista se ancla a la fila (el personaje puede estar fuera de la vista). */
   const [anclaFila, setAnclaFila] = useState<HTMLElement | null>(null);
   const { tip, handlers, ocultar } = useTooltip(!celular);
@@ -385,6 +390,18 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     resumen.cerrar();
     setTv(true);
   };
+  const abrir3d = () => {
+    setSel(null);
+    setEscritorio(null);
+    setEn3d(true);
+  };
+  // Al salir, se cierra también lo que se abrió desde ella (la ficha y tu fila iban pegadas a su ancla).
+  const cerrar3d = useCallback(() => {
+    setEn3d(false);
+    setSel(null);
+    setAnclaFila(null);
+    setEscritorio(null);
+  }, []);
   // Clic en tu escritorio: su ventanita (otra vez, la cierra); cierra la ficha.
   const tocarEscritorio = useCallback(
     (prefijo: string, el: HTMLElement) => {
@@ -522,7 +539,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             <EstadoVivo oficina={oficina} />
             <span className="of-sp" />
             {rm ? <ChipAnimacionReducida /> : null}
-            <BotonResumen />
+            {/* Con la vista 3D abierta, va en su barra (el menú abierto es uno para los dos botones). */}
+            {en3d ? null : <BotonResumen />}
             <BotonesAvisos celular={false} agentes={oficina.agentes} rm={rm} />
             <BotonMascotas celular={false} />
             <BotonConversaciones celular={false} />
@@ -534,6 +552,12 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           <div className="of-hdr">
             <Contadores modo="pagina" {...pCont} />
             <FiltroEmpresas oficina={oficina} filtro={filtro} onFiltro={setFiltro} celular={false} />
+            {/* En esta fila, que tiene espacio: en la de arriba haría saltar los botones a otra línea y le quitaría alto al piso. */}
+            <span className="of-sp" />
+            <button type="button" className="of-btn is-sm" title="Camina por la oficina en primera persona, desde tu escritorio" onClick={abrir3d} disabled={!vidaPiso}>
+              <Icono nombre="box" tam={14} />
+              Vista 3D
+            </button>
           </div>
         </div>
         <div className="of-msgs">
@@ -552,6 +576,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             onEscritorio={tocarEscritorio}
             voz
             ia
+            onVida={setVidaPiso}
           />
           <Leyenda celular={false} />
           {listaDe(null)}
@@ -570,7 +595,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           {celular ? (
             <FichaHoja onCerrar={cerrarFicha}>{ficha}</FichaHoja>
           ) : (
-            <FichaFlotante ancla={ancla} onCerrar={cerrarFicha} ancho={agente ? anchoFicha(agente) : undefined}>
+            <FichaFlotante ancla={ancla} onCerrar={cerrarFicha} ancho={agente ? anchoFicha(agente) : undefined} seguir={en3d}>
               {ficha}
             </FichaFlotante>
           )}
@@ -578,7 +603,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
       ) : null}
       {escritorio && !tv && !celular ? (
         <Capa>
-          <FichaFlotante ancla={escritorio.el} onCerrar={cerrarEscritorio} ancho={380}>
+          <FichaFlotante ancla={escritorio.el} onCerrar={cerrarEscritorio} ancho={380} seguir={en3d}>
             <VentanitaEscritorio
               prefijo={escritorio.prefijo}
               empresa={oficina.empresas.find((e) => e.prefijo === escritorio.prefijo)?.nombre ?? escritorio.prefijo}
@@ -616,6 +641,22 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
       {!tv ? <SubtituloVoz agentes={oficina.agentes} rm={rm} /> : null}
       {!tv ? <ReproductorResumen /> : null}
       <Avisos avisos={avisos} />
+      {en3d && vidaPiso && !tv && !celular ? (
+        <Capa>
+          <Vista3D
+            plano={plano}
+            agentes={oficina.agentes}
+            empresas={oficina.empresas}
+            vida={vidaPiso}
+            oscuro={oscuro}
+            rm={rm}
+            onCerrar={cerrar3d}
+            onAgente={abrirDesdeFila}
+            onEscritorio={tocarEscritorio}
+            abierto={!!agente || !!escritorio || !!vr.agente}
+          />
+        </Capa>
+      ) : null}
       {tv ? (
         <Capa>
           <VistaTv

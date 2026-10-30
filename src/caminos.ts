@@ -33,7 +33,7 @@ export interface Punto {
 export type Direccion = "der" | "izq" | "arriba" | "abajo";
 
 /** Caja en pixeles de arte, [x0, y0, x1, y1). */
-type Caja = readonly [number, number, number, number];
+export type Caja = readonly [number, number, number, number];
 
 export interface Rejilla {
   ancho: number;
@@ -95,10 +95,8 @@ function huellaEscritorio(p: Punto): Caja {
   return [p.x, p.y + 8, p.x + 28, p.y + 28];
 }
 
-export function rejillaDe(sala: SalaPlano): Rejilla {
-  const ancho = Math.ceil(sala.w / CELDA);
-  const alto = Math.ceil(sala.h / CELDA);
-  const ocupada = new Uint8Array(ancho * alto);
+/** Lo que no se pisa en una sala (relativo a ella): los escritorios, el tuyo, la base de los muebles sólidos y el rótulo. */
+export function cajasDe(sala: SalaPlano): Caja[] {
   const solidos = sala.muebles.filter((m) => MUEBLES_SOLIDOS.has(m.nombre) && PIEZAS[m.nombre]);
   const cajas: Caja[] = [...sala.puestos.map(huellaEscritorio), ...solidos.map((m) => huella(m.nombre, m.x, m.y))];
   // Tu escritorio (0.5.0) choca como el de un agente; tu fila, delante, se pisa.
@@ -106,6 +104,15 @@ export function rejillaDe(sala: SalaPlano): Rejilla {
   // El rótulo de la sala es un mueble más (JST-138 §3.1): su caja, con 1 de aire, no se pisa.
   const r = sala.rotulo;
   if (r) cajas.push([r.x - 1, r.y - 1, r.x + r.w + 1, r.y + r.h + 2]);
+  return cajas;
+}
+
+export function rejillaDe(sala: SalaPlano): Rejilla {
+  const ancho = Math.ceil(sala.w / CELDA);
+  const alto = Math.ceil(sala.h / CELDA);
+  const ocupada = new Uint8Array(ancho * alto);
+  const solidos = sala.muebles.filter((m) => MUEBLES_SOLIDOS.has(m.nombre) && PIEZAS[m.nombre]);
+  const cajas = cajasDe(sala);
   for (let cy = 0; cy < alto; cy++) {
     for (let cx = 0; cx < ancho; cx++) {
       const x = cx * CELDA + CELDA / 2;

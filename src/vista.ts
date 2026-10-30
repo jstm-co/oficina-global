@@ -168,3 +168,31 @@ export function motivoPausa(motivo: string): string {
 export function runCorto(id: string): string {
   return id.slice(0, 4);
 }
+
+/** Lo que se lee en un monitor de la vista 3D al acercarte: un tono (el color del estado), el código, qué pasa y de qué se trata. */
+export interface Pantalla {
+  tono: Dibujo;
+  codigo: string | null;
+  estado: string;
+  texto: string | null;
+}
+
+/**
+ * El monitor de un agente: lo que te espera (va primero, como en su globo), en
+ * qué trabaja (o qué tiene en cola), su error o su pausa. Libre, nada: la
+ * pantalla queda como se dibuja.
+ */
+export function pantallaDe(a: Pick<AgenteVista, "st" | "need" | "teNecesita" | "run" | "motivo">): Pantalla | null {
+  const e = a.need ? a.teNecesita[0] : undefined;
+  if (e) return { tono: "toca", codigo: e.identifier, estado: "te espera", texto: e.titulo ?? e.tituloTarea };
+  if (a.st === "trabaja") return { tono: "trabaja", codigo: a.run?.identifier ?? null, estado: a.run?.enCola ? "en cola" : "trabajando", texto: a.run?.titulo ?? null };
+  if (a.st === "error") return { tono: "error", codigo: a.run?.identifier ?? null, estado: "con error", texto: a.motivo };
+  if (a.st === "pausa") return { tono: "pausa", codigo: null, estado: "en pausa", texto: a.motivo ? motivoPausa(a.motivo) : null };
+  return null;
+}
+
+/** Tu monitor: cuántos te esperan en esa sala (o que estás al día). */
+export function pantallaTuya(esperan: number): Pantalla {
+  if (esperan === 0) return { tono: "libre", codigo: null, estado: "al día", texto: "Nadie te espera aquí." };
+  return { tono: "toca", codigo: null, estado: esperan === 1 ? "1 te espera" : `${esperan} te esperan`, texto: "Haz clic para ver la fila y responder." };
+}

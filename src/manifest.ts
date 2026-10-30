@@ -66,10 +66,14 @@ import { PAGE_ROUTE, PLUGIN_KEY } from "./shared.js";
 // La 0.11.0 (JST-325) tampoco: elegir las voces usa acciones del worker
 // (`voz-elegir`, `voz-reiniciar`, `voz-calentar`) y deja lo elegido en
 // `voces/eleccion.json`, junto a los audios.
+//
+// La 0.12.0 tampoco: la vista 3D muestra lo que la página ya lee, y su visor
+// (three.js) va en su propio archivo, `dist/ui/oficina3d.js`, que la página
+// carga solo al abrirla.
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_KEY,
   apiVersion: 1,
-  version: "0.11.0",
+  version: "0.12.0",
   displayName: "Oficina global",
   description: "Oficina pixel con los agentes de todas las empresas: quién trabaja, quién te necesita (hace fila frente a tu escritorio), con error, en pausa o libre. Responde tarjetas sin salir, con avisos y 9 voces. Caminan, se entregan las tareas en la mesa, conversan en el descanso (en Chrome, la IA de Chrome escribe cómo terminan) y las mascotas responden al clic. Un rótulo dice de qué se trata cada tarea. «Resumen» te lee lo que se hizo, lo que te toca, en qué trabajan y lo que está en cola.",
   author: "JSTM",

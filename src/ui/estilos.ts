@@ -9,6 +9,7 @@
 //   escala entera (1, 2 o 3), con `image-rendering: pixelated`.
 // - Los personajes y efectos se animan con `transform: translateX` y
 //   `steps(n)` sobre una tira de cuadros (lo hace el compositor, JST-66 §3).
+import { CSS_3D } from "./estilos3d.js";
 import { CSS_AVISOS } from "./estilosAvisos.js";
 import { CSS_LISTA } from "./estilosLista.js";
 import { CSS_RESUMEN } from "./estilosResumen.js";
@@ -504,7 +505,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 `;
 
 /** La hoja entera: la de la 0.1.x, las piezas de la 0.2.0 (JST-95), la vida de la 0.3.0 (JST-96) y el Resumen de la 0.9.0 (JST-246), cada una en su archivo. */
-const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES;
+const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES + CSS_3D;
 
 const STYLE_ID = "jstm-oficina-pixel-estilos";
 

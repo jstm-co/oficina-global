@@ -27,4 +27,4 @@ El generador no trae los motores ni sus modelos: los baja `uv` al correrlo. Cada
 
 ## Dependencias de npm
 
-`@paperclipai/plugin-sdk`, React, esbuild, TypeScript y vitest, todas con licencia MIT (TypeScript, Apache 2.0). Solo se usan para armar y probar el plugin; el SDK y React van dentro de `dist/`.
+`@paperclipai/plugin-sdk`, React, [three.js](https://github.com/mrdoob/three.js), esbuild, TypeScript y vitest, todas con licencia MIT (TypeScript, Apache 2.0). Solo se usan para armar y probar el plugin; el SDK y React van dentro de `dist/`, y three.js, en el visor de la vista 3D (`dist/ui/oficina3d.js`).

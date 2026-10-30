@@ -394,6 +394,36 @@ def ladrillo(t):
     return p.im
 
 
+# ---------------------------------------------------------------- vista 3D
+def pliegues():
+    """Dónde se dobla cada mueble, como un papel, para pararlo en el suelo de la vista 3D.
+
+    Filas del dibujo donde cambia de cara, de arriba abajo. Desde abajo, la primera franja va de pie
+    (el frente), la siguiente acostada (la tapa) y así, alternando. Sin pliegues, el mueble va entero
+    de pie; con su alto como único pliegue, entero acostado (una alfombra). Visto desde arriba en
+    diagonal, el mueble doblado se ve igual que el dibujo.
+    """
+    p = {
+        "escritorio": [9, 14],  # monitor | tablero | frente
+        "sofa": [7, 10],  # respaldo | cojines | frente
+        "sofa-calido": [7, 10],
+        "cafetera": [12, 15],  # máquina | cubierta | mueble
+        "mesita": [5],  # tapa | patas
+        "puff": [6],
+        "puff-2": [6],
+        "pingpong": [16],  # mesa | patas
+        "alfombra-sala": [30],
+        "alfombra-sala-2": [30],
+    }
+    for k in CO:
+        p[f"silla-{k}"] = [8, 11]  # respaldo | asiento | pata
+    return p
+
+
+# Los que giran para mirarte en la vista 3D, como los personajes: una planta o una lámpara se ven igual desde todos lados.
+GIRAN = ["planta", "planta-grande", "lampara"]
+
+
 def build(OUT):
     items = {}
     items["escritorio"] = escritorio()
@@ -454,6 +484,7 @@ def build(OUT):
         sheet.paste(items[k], (ax, ay))
     sheet.save(OUT / "muebles.png")
     meta = {"imagen": "muebles.png", "ancho": W, "alto": y + rowh, "piezas": {k: {"x": a[0], "y": a[1], "w": a[2], "h": a[3]} for k, a in atlas.items()},
-            "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje."}
+            "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje.",
+            "pliegues": pliegues(), "giran": GIRAN}
     (OUT / "muebles.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
     return sheet, meta

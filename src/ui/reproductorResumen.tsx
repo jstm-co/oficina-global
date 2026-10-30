@@ -11,7 +11,7 @@ import { useHostLocation, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import { duracionFrase, mmss, NOMBRE_SECCION, type FraseResumen, type Seccion } from "../resumen/frases.js";
 import type { Lector } from "../resumen/lector.js";
 import { periodoTexto } from "../resumen/tiempo.js";
-import { Capa } from "./capas.js";
+import { Capa, useVista3dAbierta } from "./capas.js";
 import { cx, EtiquetaEmpresa, Icono } from "./piso.js";
 import { resumen, useResumen } from "./resumen.js";
 import { useCelular, useMovimientoReducido } from "./useOficina.js";
@@ -345,6 +345,8 @@ export function ReproductorResumen() {
   const celular = useCelular();
   const rm = useMovimientoReducido();
   const area = useArea(visible);
+  // Con la vista 3D abierta, va sobre ella y al medio de la ventana (la vista la tapa entera).
+  const en3d = useVista3dAbierta();
   const caja = useRef<HTMLDivElement>(null);
   useHuecoAbajo(caja, visible && !!area, !!area?.piso);
   const play = useRef<HTMLButtonElement>(null);
@@ -381,10 +383,10 @@ export function ReproductorResumen() {
       else r.cerrar();
     }
   };
-  const estilo: CSSProperties | undefined = !celular && area ? { left: area.left, width: area.width } : !celular ? { left: 0, right: 0 } : undefined;
+  const estilo: CSSProperties | undefined = !celular && area && !en3d ? { left: area.left, width: area.width } : !celular ? { left: 0, right: 0 } : undefined;
   return (
     <Capa>
-      <div ref={caja} className={cx("of-rs-a", celular && "is-m", area?.piso && "is-piso", rm && "of-rm")} style={estilo} onKeyDown={teclas}>
+      <div ref={caja} className={cx("of-rs-a", celular && "is-m", area?.piso && "is-piso", en3d && "is-3d", rm && "of-rm")} style={estilo} onKeyDown={teclas}>
         <div className="of-rsa-dock">
           {r.texto ? <PanelTexto l={l} /> : null}
           {r.voz?.sinVoces && !fin ? (
