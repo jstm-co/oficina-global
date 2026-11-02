@@ -39,6 +39,7 @@ import { anchoFicha, Ficha, FichaFlotante, FichaHoja, type Enlazar } from "./fic
 import { filaDelPlano, VentanitaEscritorio } from "./escritorio.js";
 import { ListaAgentes } from "./listaAgentes.js";
 import { BotonesAvisos, SubtituloVoz } from "./paneles.js";
+import { PieVersion } from "./pieVersion.js";
 import { cx, EtiquetaEmpresa, Icono, Piso } from "./piso.js";
 import { todosLibres, useAhora, useAnchoVentana, useCelular, useMovimientoReducido, useOficina, usePestanaOculta, useSalasPrevias, useTemaOscuro, type Oficina } from "./useOficina.js";
 import { VentanaResponder } from "./ventana.js";
@@ -490,6 +491,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           <p className="of-hint">Toca a alguien para ver su ficha.</p>
           <Leyenda celular />
           {listaDe(salaAcercada.prefijo)}
+          <PieVersion />
         </div>
       </>
     );
@@ -531,6 +533,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           </p>
           <Leyenda celular />
           {listaDe(null)}
+          <PieVersion />
         </div>
       </>
     );
@@ -585,6 +588,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           />
           <Leyenda celular={false} />
           {listaDe(null)}
+          <PieVersion />
         </div>
       </>
     );

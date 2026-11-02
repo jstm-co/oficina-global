@@ -1,5 +1,6 @@
 import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
 import { PAGE_ROUTE, PLUGIN_KEY } from "./shared.js";
+import { VERSION_PLUGIN } from "./version.js";
 
 // La UI lee todo con la sesión del usuario (API nativa y canal en vivo de cada
 // empresa, ver JST-66), así que el plugin no pide capacidades de datos: solo
@@ -78,7 +79,7 @@ import { PAGE_ROUTE, PLUGIN_KEY } from "./shared.js";
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_KEY,
   apiVersion: 1,
-  version: "0.13.0",
+  version: VERSION_PLUGIN,
   displayName: "Oficina global",
   description: "Oficina pixel con los agentes de todas las empresas: quién trabaja, quién te necesita (hace fila frente a tu escritorio), con error, en pausa o libre. Responde tarjetas sin salir, con avisos y 9 voces. Caminan, se entregan las tareas en la mesa y conversan en el descanso (en Chrome, la IA escribe aperturas, finales, sueltas, bromas y mascotas, sin repetir). Un rótulo dice de qué se trata cada tarea. «Resumen» te lee lo que se hizo, lo que te toca, en qué trabajan y lo que está en cola.",
   author: "JSTM",
