@@ -1,4 +1,4 @@
-// Las 9 voces de la Oficina (JST-124), sin React, navegador ni Node: las usan
+// Las voces de la Oficina (JST-124; 9 hasta la 0.12, 19 desde la 0.13.0), sin React, navegador ni Node: las usan
 // el generador (`generador/`, que hace los audios una vez en la Mac) y la
 // página (que solo los reproduce).
 //
@@ -6,6 +6,9 @@
 // - Alex, Dora y Santa: Kokoro-82M.
 // - 4 clones de un hombre y una mujer chilenos (Google Crowdsourced Chilean
 //   Spanish, OpenSLR 71, CC BY-SA 4.0): 2 con Chatterbox y 2 con Qwen3-TTS.
+//
+// - 0.13.0 (issue #9): 10 voces de Supertonic 3 (5 de mujer y 5 de hombre), que
+//   corren en Node con sherpa-onnx, sin Python ni ffmpeg. Sus audios son WAV.
 //
 // Qué voz tiene cada agente lo decide el generador (repartidas para que se usen
 // todas) y queda en `indice.json`, junto a los audios.
@@ -16,8 +19,11 @@
 // la voz y el texto (`archivoVivo`): la página lo calcula igual y lo pide; si no
 // está, dice la frase de siempre.
 
-export type VozId = "lorenzo" | "catalina" | "alex" | "dora" | "santa" | "chatterbox-hombre" | "chatterbox-mujer" | "qwen3-hombre" | "qwen3-mujer";
-export type Motor = "edge" | "kokoro" | "chatterbox" | "qwen3";
+import { duracionWav } from "./audio.js";
+
+export type VozSupertonic = `supertonic-${"f" | "m"}${1 | 2 | 3 | 4 | 5}`;
+export type VozId = "lorenzo" | "catalina" | "alex" | "dora" | "santa" | "chatterbox-hombre" | "chatterbox-mujer" | "qwen3-hombre" | "qwen3-mujer" | VozSupertonic;
+export type Motor = "edge" | "kokoro" | "chatterbox" | "qwen3" | "supertonic";
 
 export interface Voz {
   id: VozId;
@@ -25,9 +31,23 @@ export interface Voz {
   nombre: string;
   detalle: string;
   motor: Motor;
-  /** La voz en su motor, o el audio de referencia que se clona. */
+  /** La voz en su motor, o el audio de referencia que se clona (en Supertonic, su número: «0» a «9»). */
   clave: string;
 }
+
+/**
+ * 0.13.0: F1 a F5 son las voces 0 a 4 del modelo y M1 a M5, de la 5 a la 9
+ * (medido: ~155–195 Hz las primeras y ~85–120 Hz las otras).
+ */
+const SUPERTONIC: readonly Voz[] = (["f", "m"] as const).flatMap((g, i) =>
+  ([1, 2, 3, 4, 5] as const).map((n) => ({
+    id: `supertonic-${g}${n}` as const,
+    nombre: `Supertonic ${g.toUpperCase()}${n}`,
+    detalle: `${g === "f" ? "mujer" : "hombre"} · Supertonic`,
+    motor: "supertonic" as const,
+    clave: String(i * 5 + n - 1),
+  })),
+);
 
 export const VOCES: readonly Voz[] = [
   { id: "lorenzo", nombre: "Lorenzo", detalle: "hombre, chileno · Edge", motor: "edge", clave: "es-CL-LorenzoNeural" },
@@ -39,6 +59,7 @@ export const VOCES: readonly Voz[] = [
   { id: "chatterbox-mujer", nombre: "Clon chilena (Chatterbox)", detalle: "clon de una mujer chilena · Chatterbox", motor: "chatterbox", clave: "ref_mujer_cl" },
   { id: "qwen3-hombre", nombre: "Clon chileno (Qwen3)", detalle: "clon del mismo hombre chileno · Qwen3", motor: "qwen3", clave: "ref_hombre_cl" },
   { id: "qwen3-mujer", nombre: "Clon chilena (Qwen3)", detalle: "clon de la misma mujer chilena · Qwen3", motor: "qwen3", clave: "ref_mujer_cl" },
+  ...SUPERTONIC,
 ];
 
 /** La voz de los resúmenes («3 agentes terminaron»): rápida de generar y clara. */
@@ -110,9 +131,14 @@ export function hash53(texto: string, semilla = 0): number {
   return 4294967296 * (2097151 & h2) + (h1 >>> 0);
 }
 
-/** El audio de una frase preparada al momento: `vivo/<voz>-<hash>.mp3`, el mismo para el worker y la página. */
+/** 0.13.0: los audios de Supertonic son WAV (salen sin ffmpeg); los demás, MP3. Las mascotas son de Edge. */
+export function extensionDe(voz: VozId | string): "wav" | "mp3" {
+  return vozPorId(voz)?.motor === "supertonic" ? "wav" : "mp3";
+}
+
+/** El audio de una frase preparada al momento: `vivo/<voz>-<hash>.mp3` (o `.wav`), el mismo para el worker y la página. */
 export function archivoVivo(voz: VozId | string, texto: string): string {
-  return `${CARPETA_VIVO}/${voz}-${hash53(`v${VERSION_VIVO}|${claveAudio(voz, texto)}`).toString(36)}.mp3`;
+  return `${CARPETA_VIVO}/${voz}-${hash53(`v${VERSION_VIVO}|${claveAudio(voz, texto)}`).toString(36)}.${extensionDe(voz)}`;
 }
 
 const BITRATES: Readonly<Record<"1" | "2", readonly number[]>> = {
@@ -179,4 +205,9 @@ export function duracionMp3(b: Uint8Array): number | null {
     i += Math.max(1, largo);
   }
   return cuadros > 0 && muestreo > 0 ? Math.round((muestras * 1000) / muestreo) : null;
+}
+
+/** 0.13.0: cuánto dura un audio de las voces (ms), sea WAV (Supertonic) o MP3; `null` si no es ninguno. */
+export function duracionAudio(b: Uint8Array): number | null {
+  return duracionWav(b) ?? duracionMp3(b);
 }
