@@ -11,7 +11,7 @@ import { usePluginToast } from "@paperclipai/plugin-sdk/ui";
 import type { EstadoIa } from "../ia/escritor.js";
 import { cambiarAjustes, puntoIa, useAjustes } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
-import { bajarIa, escritorIa, useEstadoIa } from "./ia.js";
+import { bajarIa, escritorIa, IA_CHROME, NOMBRE_IA, useEstadoIa } from "./ia.js";
 import { abrirMenu, Interruptor, Popover, useMenuAbierto } from "./paneles.js";
 import { cx, Icono } from "./piso.js";
 
@@ -24,7 +24,7 @@ const noDisponible = (e: EstadoIa) => e.k === "sin";
 /** La barra de avance (§4): 6 px, sin brillo ni animación propia; con «reducir movimiento», salta. */
 function Barra({ p }: { p: number }) {
   return (
-    <span className="of-ia-bar" role="progressbar" aria-label="Bajando la IA de Chrome" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
+    <span className="of-ia-bar" role="progressbar" aria-label={`Bajando la ${NOMBRE_IA}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
       <i style={{ width: `${p}%` }} />
     </span>
   );
@@ -58,7 +58,7 @@ function EstadoTarjeta({ e }: { e: EstadoIa }): ReactNode {
             <b>Bajando</b>
             {p === null ? null : <span className="of-ia-num">{p}&nbsp;%</span>}
           </span>
-          {p === null ? <span>Chrome sigue aunque cierres la pestaña.</span> : <Barra p={p} />}
+          {p === null ? <span>{IA_CHROME ? "Chrome sigue aunque cierres la pestaña." : "Sigue aunque cierres la Oficina."}</span> : <Barra p={p} />}
           <span>Puedes seguir usando la Oficina. Mientras, van las frases de siempre.</span>
         </div>
       );
@@ -98,7 +98,7 @@ function EstadoTarjeta({ e }: { e: EstadoIa }): ReactNode {
       return (
         <div className="of-iaa-st">
           <Icono nombre="ban" tam={14} />
-          <span>{e.por === "insegura" ? "Falta permitir esta dirección en Chrome." : e.por === "otro" || e.por === "celular" ? "Solo funciona en Chrome del computador." : "Este Chrome no la trae."}</span>
+          <span>{e.por === "insegura" ? "Falta permitir esta dirección en Chrome." : e.por === "otro" || e.por === "celular" ? "Solo funciona en Chrome del computador." : IA_CHROME ? "Este Chrome no la trae." : "Este computador no la tiene."}</span>
         </div>
       );
   }
@@ -153,7 +153,7 @@ function PanelConversaciones({ e, celular }: { e: EstadoIa; celular: boolean }) 
             <span className="of-iaa-tx">
               <b>
                 <Icono nombre="sparkles" tam={14} />
-                La IA de Chrome
+                La {NOMBRE_IA}
               </b>
               <em>Con lo que pasa en la oficina, cambia cada 15&nbsp;min.</em>
               <span className="of-iaa-ej">«¡Bien hecho! ¿Otro café?»</span>
@@ -196,10 +196,10 @@ function estadoBoton(charlas: boolean, fuente: "ia" | "hoy", e: EstadoIa): { ext
   if (fuente === "hoy") return { extra: null, linea: null, tip: "Conversaciones · frases de siempre" };
   switch (e.k) {
     case "lista":
-      return { extra: <Icono nombre="sparkles" tam={12} className="of-iaa-sp" />, linea: null, tip: "Conversaciones · las escribe la IA de Chrome" };
+      return { extra: <Icono nombre="sparkles" tam={12} className="of-iaa-sp" />, linea: null, tip: `Conversaciones · las escribe la ${NOMBRE_IA}` };
     case "bajando": {
       const p = pct(e.avance);
-      if (p === null) return { extra: null, linea: null, tip: "Conversaciones · IA de Chrome: bajando" };
+      if (p === null) return { extra: null, linea: null, tip: `Conversaciones · ${NOMBRE_IA}: bajando` };
       return {
         extra: <span className="of-iaa-pc of-ia-num">{p}&nbsp;%</span>,
         linea: (
@@ -207,17 +207,17 @@ function estadoBoton(charlas: boolean, fuente: "ia" | "hoy", e: EstadoIa): { ext
             <i style={{ width: `${p}%` }} />
           </i>
         ),
-        tip: `Conversaciones · IA de Chrome: bajando · ${p} %`,
+        tip: `Conversaciones · ${NOMBRE_IA}: bajando · ${p} %`,
       };
     }
     case "pausa":
-      return { extra: <Icono nombre="circle-pause" tam={12} className="of-iaa-sp is-mut" />, linea: null, tip: "Conversaciones · IA de Chrome: en pausa" };
+      return { extra: <Icono nombre="circle-pause" tam={12} className="of-iaa-sp is-mut" />, linea: null, tip: `Conversaciones · ${NOMBRE_IA}: en pausa` };
     case "fallo":
-      return { extra: <Icono nombre="triangle-alert" tam={12} className="of-iaa-sp of-ia-warn" />, linea: null, tip: "Conversaciones · IA de Chrome: no se pudo bajar" };
+      return { extra: <Icono nombre="triangle-alert" tam={12} className="of-iaa-sp of-ia-warn" />, linea: null, tip: `Conversaciones · ${NOMBRE_IA}: no se pudo bajar` };
     case "bajar":
-      return { extra: null, linea: null, tip: "Conversaciones · IA de Chrome: falta bajarla" };
+      return { extra: null, linea: null, tip: `Conversaciones · ${NOMBRE_IA}: falta bajarla` };
     case "sin":
-      return { extra: null, linea: null, tip: "Conversaciones · IA de Chrome: no disponible" };
+      return { extra: null, linea: null, tip: `Conversaciones · ${NOMBRE_IA}: no disponible` };
     case "revisando":
       return { extra: null, linea: null, tip: "Conversaciones" };
   }
@@ -243,7 +243,7 @@ export function BotonConversaciones({ celular }: { celular: boolean }) {
   useEffect(() => {
     if (celular) return;
     return escritorIa().alLista(() =>
-      toast({ id: "oficina:ia-lista", title: "✦ La IA de Chrome está lista.", body: "Desde ahora escribe las conversaciones.", tone: "success", ttlMs: 8_000 }),
+      toast({ id: "oficina:ia-lista", title: `✦ La ${NOMBRE_IA} está lista.`, body: "Desde ahora escribe las conversaciones.", tone: "success", ttlMs: 8_000 }),
     );
   }, [celular, toast]);
   useEsc(abierto, () => {

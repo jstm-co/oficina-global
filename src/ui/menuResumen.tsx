@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type Touc
 import { NOMBRE_SECCION, alternarEmpresa, alternarParte, type Largo, type Parte } from "../resumen/frases.js";
 import { DESDES, type Desde } from "../resumen/tiempo.js";
 import { Capa, useEsc } from "./capas.js";
+import { IA_CHROME, NOMBRE_IA } from "./ia.js";
 import { abrirMenu, Popover, useMenuAbierto } from "./paneles.js";
 import { cx, EtiquetaEmpresa, Icono } from "./piso.js";
 import { empresasDe, resumen, useResumen } from "./resumen.js";
@@ -197,12 +198,12 @@ export function PanelResumen({ celular }: { celular: boolean }) {
         {ia === "lista" ? (
           <>
             <Icono nombre="sparkles" tam={12} />
-            <span>Lo escribe la IA de Chrome con los datos de Paperclip. Si cambia un número, esa parte va con frases armadas.</span>
+            <span>Lo escribe la {NOMBRE_IA} con los datos de Paperclip. Si cambia un número, esa parte va con frases armadas.</span>
           </>
         ) : (
           <>
             <Icono nombre="info" tam={12} />
-            <span>{ia === "celular" ? "Frases armadas con los datos: la IA de Chrome es solo del computador." : "Frases armadas con los datos: la IA de Chrome no está lista (se baja en «Conversaciones»)."}</span>
+            <span>{ia === "celular" ? "Frases armadas con los datos: la IA de Chrome es solo del computador." : `Frases armadas con los datos: la ${NOMBRE_IA} no está lista (${IA_CHROME ? "se baja" : "mira"} en «Conversaciones»).`}</span>
           </>
         )}
       </div>
