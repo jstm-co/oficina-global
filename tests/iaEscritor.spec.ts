@@ -16,7 +16,7 @@ const MUESTRAS: MuestraFinal[] = [
 function respuesta(texto: string): string {
   const cs = [...texto.matchAll(/- (c\d+) ·/g)].map((m) => m[1]!);
   const ss = [...texto.matchAll(/- (s\d+)$/gm)].map((m) => m[1]!);
-  const SUELTAS = ["Este café me salva.", "Un respiro y sigo.", "Qué rico el sofá.", "A estirar las piernas.", "Mmm, café de grano."];
+  const SUELTAS = ["Linda la ventana.", "Un sorbo y sigo.", "Qué rico el sofá.", "A estirar las piernas.", "Mmm, café de grano."];
   return JSON.stringify({ charlas: cs.map((id) => ({ id, frases: [{ texto: "Uf, qué mal momento." }] })), sueltas: ss.map((id, i) => ({ id, texto: SUELTAS[i % SUELTAS.length] })) });
 }
 

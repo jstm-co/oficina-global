@@ -133,6 +133,10 @@ describe("el final entero", () => {
     expect(revisarFinal(["Uf, qué lata.", "uf, qué lata"], [{ texto: "Hola." }])).toContain("repite una frase");
   });
 
+  it("ninguna frase de siempre (un modelo chico copia la de otra conversación)", () => {
+    expect(revisarFinal(["Ahí vamos, de a poco."], [{ texto: "¿Cómo va el código?" }])).toEqual(["es una de siempre"]);
+  });
+
   it("una frase mala bota el final entero (va la plantilla)", () => {
     expect(revisarFinal(["¡Qué paciencia!", "Ya casi la terminan."], [{ texto: "Esta espera a que termine otra." }]).length).toBeGreaterThan(0);
   });

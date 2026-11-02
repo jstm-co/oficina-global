@@ -60,7 +60,7 @@ const VA_A = palabras("(voy|vamos|vas|va|van|iba|ibas|íbamos)\\s+a");
 const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche");
 
 /** Lo que es «la misma frase»: sin mayúsculas, signos ni espacios de más. */
-const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
+export const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
 
 export interface OpcionesRevision {
   /** Hasta cuántas letras. */
@@ -118,10 +118,14 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   return [...new Set(mal)];
 }
 
+/** Las frases de siempre de una conversación, como `plano`: un final de la IA no puede ser una de ellas. */
+const FIJAS_PLANAS: ReadonlySet<string> = new Set([...FRASES_FIJAS].map(plano));
+
 /**
  * Por qué no sirve el final que escribió la IA para estas frases fijas (vacío:
  * sirve): de 1 a 2 frases, hasta 4 en total, cada una sin datos y del largo de
- * las de hoy, sin repetir una fija ni repetirse.
+ * las de hoy, sin repetir una fija ni repetirse, y ninguna de las de siempre (un
+ * modelo chico copia «Ahí vamos, de a poco.» de otra conversación).
  */
 export function revisarFinal(frases: readonly string[], fijas: readonly Pick<Linea, "texto">[], nombres: readonly string[] = []): string[] {
   const mal: string[] = [];
@@ -131,6 +135,7 @@ export function revisarFinal(frases: readonly string[], fijas: readonly Pick<Lin
     mal.push(...revisarTexto(f, { letras: LETRAS_FINAL, px: MAX_FINAL_PX, nombres }));
     const p = plano(f);
     if (vistas.has(p)) mal.push("repite una frase");
+    else if (FIJAS_PLANAS.has(p)) mal.push("es una de siempre");
     vistas.add(p);
   }
   return [...new Set(mal)];
