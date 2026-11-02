@@ -33,7 +33,7 @@
 // puntero se suelta para usarla, y al cerrarla vuelve solo: con el clic que la
 // cerró o, si fue con Esc, al soltar la tecla (el navegador deja volver a
 // capturarlo sin otro gesto porque lo soltó la página). Esc lo suelta; otro Esc sale.
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { hash } from "../aspecto.js";
 import { escenaDePiso, piesFuera, piesSentado, type Punto3d } from "../escena3d.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
@@ -615,6 +615,17 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
   const pasarRef = useRef(pasar);
   pasarRef.current = pasar;
 
+  // El puntero se captura con el clic que abre la vista, antes de que cargue el visor: la página la abre dentro de ese
+  // clic (`flushSync`) y esto corre ahí mismo. Safari solo deja capturarlo dentro del clic; Chrome, también un rato
+  // después. El visor lo encuentra capturado en su contenedor y mira con él.
+  useLayoutEffect(() => {
+    try {
+      (lienzo.current?.requestPointerLock() as Promise<void> | undefined)?.catch(() => {});
+    } catch {
+      // Un navegador viejo, sin promesa.
+    }
+  }, []);
+
   // El visor: se arma al abrir y de nuevo si cambia el plano o el tema (donde estabas, se queda).
   useEffect(() => {
     let vivo = true;
@@ -650,7 +661,8 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
           setCapturado(si);
         });
         setEstado("lista");
-        // Con el gesto del clic que abrió la vista, si todavía vale; si no, con un clic en la oficina.
+        // Si no se capturó al abrir, con el gesto del clic que abrió la vista si todavía vale (Chrome); si no, con un
+        // clic en la oficina.
         montado.capturar();
       })
       .catch(() => vivo && setEstado(conWebgl() ? "error" : "sinWebgl"));

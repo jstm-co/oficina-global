@@ -17,8 +17,11 @@
 // Controles, como en un juego en primera persona (eres la cámara):
 // - el mouse o un dedo en el trackpad miran alrededor, sin clic ni arrastre,
 //   con el puntero capturado (Pointer Lock) y la aceleración del sistema, como
-//   el cursor de siempre. Capturarlo pide un gesto tuyo (un clic en la oficina,
-//   o una tecla para caminar) y Esc lo suelta; eso lo manda el navegador;
+//   el cursor de siempre. Capturarlo pide un gesto tuyo (el clic que abre la
+//   vista, un clic en la oficina o una tecla para caminar) y Esc lo suelta; eso
+//   lo manda el navegador. Se captura en el contenedor, que ya está en el clic
+//   que abre la vista (Safari solo deja capturarlo dentro de ese clic) y que
+//   sigue ahí si el visor se vuelve a armar;
 // - con el puntero capturado se apunta con una mira al centro, y el clic toca
 //   lo que está en ella; suelto, se toca lo que está bajo el puntero (qué pasa
 //   al tocarlo lo decide la página, como en la 2D);
@@ -218,7 +221,7 @@ export interface Visor {
   capturaConTeclas(si: boolean): void;
   /** Suelta el puntero (para usar una ficha o una ventana). */
   soltar(): void;
-  /** Cada vez que el puntero se captura o se suelta. */
+  /** Cada vez que el puntero se captura o se suelta, y al registrarla, si ya está capturado. */
   alCapturar(fn: ((si: boolean) => void) | null): void;
   /** El Esc de ahora fue el que soltó el puntero (lo hace el navegador), no uno para salir. */
   escDeSoltar(): boolean;
@@ -500,6 +503,11 @@ function pixelDe(alto: number): number {
   return Math.max(2, Math.round(alto / 450));
 }
 
+/**
+ * Arma el visor en `contenedor`, que es también donde se captura el puntero: si
+ * ya está capturado ahí (la página lo pidió con el clic que abrió la vista), se
+ * empieza mirando con él.
+ */
 export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promise<Visor> {
   const tema = datos.oscuro ? "oscuro" : "claro";
   const [imgMuebles, imgPersonajes] = await Promise.all([imagen(datos.hojas.muebles), imagen(datos.hojas.personajes)]);
@@ -838,7 +846,7 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
   let alCambiarCaptura: ((si: boolean) => void) | null = null;
   let conTeclas = true;
   const alCambiarBloqueo = () => {
-    const ahora = document.pointerLockElement === lienzo;
+    const ahora = document.pointerLockElement === contenedor;
     if (ahora === capturado) return;
     capturado = ahora;
     recienCapturado = ahora;
@@ -849,14 +857,14 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
     alCambiarCaptura?.(ahora);
   };
   const capturar = () => {
-    if (capturado || !lienzo.isConnected) return;
+    if (capturado || !contenedor.isConnected) return;
     if (escApretado) {
       capturaPendiente = true;
       return;
     }
     // Sin un gesto tuyo reciente (ni haberlo soltado desde aquí), el navegador dice que no: queda suelto hasta el próximo clic o tecla.
     try {
-      (lienzo.requestPointerLock() as Promise<void> | undefined)?.catch(() => {});
+      (contenedor.requestPointerLock() as Promise<void> | undefined)?.catch(() => {});
     } catch {
       // Un navegador viejo, sin promesa.
     }
@@ -867,7 +875,7 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
   };
   const alApretar = (e: PointerEvent) => {
     if (e.button !== 0) return;
-    if (!capturado) lienzo.setPointerCapture(e.pointerId);
+    if (!capturado) contenedor.setPointerCapture(e.pointerId);
     arrastre = { id: e.pointerId, x: e.clientX, y: e.clientY, movido: 0 };
   };
   const alMover = (e: PointerEvent) => {
@@ -961,15 +969,17 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
     if (s > 0) yo.fov = Math.max(FOV.min, Math.min(FOV.max, yo.fov * (escalaGesto / s)));
     escalaGesto = s;
   };
-  lienzo.addEventListener("pointerdown", alApretar);
-  lienzo.addEventListener("pointermove", alMover);
-  lienzo.addEventListener("pointerup", alSoltar);
-  lienzo.addEventListener("pointercancel", alSoltar);
-  lienzo.addEventListener("pointerleave", alSalirPuntero);
-  lienzo.addEventListener("wheel", alRueda, { passive: false });
-  lienzo.addEventListener("gesturestart", alEmpezarGesto);
-  lienzo.addEventListener("gesturechange", alCambiarGesto);
+  contenedor.addEventListener("pointerdown", alApretar);
+  contenedor.addEventListener("pointermove", alMover);
+  contenedor.addEventListener("pointerup", alSoltar);
+  contenedor.addEventListener("pointercancel", alSoltar);
+  contenedor.addEventListener("pointerleave", alSalirPuntero);
+  contenedor.addEventListener("wheel", alRueda, { passive: false });
+  contenedor.addEventListener("gesturestart", alEmpezarGesto);
+  contenedor.addEventListener("gesturechange", alCambiarGesto);
   document.addEventListener("pointerlockchange", alCambiarBloqueo);
+  // Capturado desde antes: con el clic que abrió la vista, o en el visor anterior (otro plano, otro tema).
+  alCambiarBloqueo();
 
   // ---- Moverse --------------------------------------------------------------
   /** Da un paso (dx, dz): si choca, se desliza por el lado que se pueda. Si ya estás encima de algo (al empezar, en tu silla), sales. */
@@ -1206,26 +1216,28 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
     },
     alCapturar(fn) {
       alCambiarCaptura = fn;
+      if (capturado) fn?.(true);
     },
     escDeSoltar: () => capturado || performance.now() - soltadoEn < ESC_DE_SOLTAR,
     destruir() {
       observador.disconnect();
       document.removeEventListener("pointerlockchange", alCambiarBloqueo);
-      if (capturado) document.exitPointerLock();
+      // El puntero queda capturado en el contenedor: si la vista se vuelve a armar, el visor nuevo sigue mirando con él;
+      // si se cierra, el navegador lo suelta al quitar el contenedor.
       clearTimeout(trasEsc);
       window.removeEventListener("keydown", alBajarEsc, true);
       window.removeEventListener("keyup", alSubirEsc, true);
       window.removeEventListener("keydown", alBajar);
       window.removeEventListener("keyup", alSubir);
       window.removeEventListener("blur", alSalir);
-      lienzo.removeEventListener("pointerdown", alApretar);
-      lienzo.removeEventListener("pointermove", alMover);
-      lienzo.removeEventListener("pointerup", alSoltar);
-      lienzo.removeEventListener("pointercancel", alSoltar);
-      lienzo.removeEventListener("pointerleave", alSalirPuntero);
-      lienzo.removeEventListener("wheel", alRueda);
-      lienzo.removeEventListener("gesturestart", alEmpezarGesto);
-      lienzo.removeEventListener("gesturechange", alCambiarGesto);
+      contenedor.removeEventListener("pointerdown", alApretar);
+      contenedor.removeEventListener("pointermove", alMover);
+      contenedor.removeEventListener("pointerup", alSoltar);
+      contenedor.removeEventListener("pointercancel", alSoltar);
+      contenedor.removeEventListener("pointerleave", alSalirPuntero);
+      contenedor.removeEventListener("wheel", alRueda);
+      contenedor.removeEventListener("gesturestart", alEmpezarGesto);
+      contenedor.removeEventListener("gesturechange", alCambiarGesto);
       for (const pj of personajes.values()) pj.malla.geometry.dispose();
       for (const m of manchas) m.malla.geometry.dispose();
       for (const d of desechables) d.dispose();
