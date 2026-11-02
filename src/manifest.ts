@@ -71,8 +71,10 @@ import { PAGE_ROUTE, PLUGIN_KEY } from "./shared.js";
 // (three.js) va en su propio archivo, `dist/ui/oficina3d.js`, que la página
 // carga solo al abrirla.
 //
-// La 0.12.1 tampoco: la vista 3D captura el puntero con el clic que la abre, y
-// fuera de Chrome los menús llaman «IA del computador» a la IA de la página.
+// La 0.12.1 tampoco: la vista 3D captura el puntero con el clic que la abre;
+// fuera de Chrome los menús llaman «IA del computador» a la IA de la página y
+// se le piden menos finales por pedido; la revisión bota lo que copia el
+// ejemplo, y el panel «Voces» avisa si en ese Paperclip faltan los audios.
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_KEY,
   apiVersion: 1,
