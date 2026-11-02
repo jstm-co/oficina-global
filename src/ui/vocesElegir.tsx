@@ -6,11 +6,12 @@
 // sus frases en la Mac; mientras tanto sigue con la de antes.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { nombreCorto, textoVoz } from "../avisos.js";
-import { esAlMomento, nombreEnLista, NUMERO_VOZ, porqueNoAlcanza, tardaGrabar, VOCES_AL_MOMENTO, type GrabandoVoz, type VozLectura } from "../eleccionVoces.js";
+import { esAlMomento, grupoDe, nombreEnLista, NUMERO_VOZ, porqueNoAlcanza, tardaGrabar, VOCES_AL_MOMENTO, type GrabandoVoz, type VozLectura } from "../eleccionVoces.js";
 import { claveAudio, VOCES, vozPorId, type IndiceVoces, type VozId } from "../voces.js";
 import type { AgenteVista } from "../vista.js";
 import { cargarIndice, useIndiceVoces } from "./audiosVoces.js";
-import { descartarError, elegirLectura, elegirVozAgente, reiniciarVoces, reintentar, useEleccion, useErrorVoz, useGrabando, useHayCambios } from "./eleccion.js";
+import { descartarError, elegirLectura, elegirVozAgente, reiniciarVoces, reintentar, useEleccion, useErrorVoz, useEstadoMotores, useGrabando, useHayCambios } from "./eleccion.js";
+import { motivoNoDisponible } from "./prepararVoces.js";
 import { detenerMuestra, tocarMuestra, useMuestra } from "./muestraVoz.js";
 import { cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
 
@@ -40,7 +41,7 @@ export function opcionesDe(lugar: Lugar, hoyResumen: string, edgeAviso = false):
     const porque = lugar === "agente" ? null : porqueNoAlcanza(id);
     const microsoft = edgeAviso && v.motor === "edge" ? " · manda el texto a Microsoft" : "";
     const graba = lugar === "agente" ? ` · graba sus frases en ${tardaGrabar(id)}` : "";
-    return { valor: id, nombre: nombreEnLista(id), numero: esAlMomento(id) ? NUMERO_VOZ[id] : null, detalle: `${mayuscula(v.detalle)}${microsoft}${graba}`, porque, grupo: lugar === "agente" ? null : porque ? "no" : "momento" };
+    return { valor: id, nombre: nombreEnLista(id), numero: esAlMomento(id) ? (NUMERO_VOZ[id] ?? null) : null, detalle: `${mayuscula(v.detalle)}${microsoft}${graba}`, porque, grupo: lugar === "agente" ? null : porque ? "no" : "momento" };
   };
   if (lugar === "agente") return VOCES.map((v) => de(v.id));
   const lista: Opcion[] = [];
@@ -331,7 +332,14 @@ function FilaAgente({ a, indice, grabando, companyId, sinMac }: { a: AgenteVista
     setAbierta(false);
     void elegirVozAgente(companyId, { id: a.id, corto: nombreCorto(a.nombre), empresa: a.empresa }, v as VozId);
   };
-  const noDisponible = (o: Opcion) => (sinMac && o.valor !== actual && !tieneGrabada(indice, a, o.valor as VozId) ? "No disponible en esta Mac: falta uv o ffmpeg" : null);
+  // 0.13.0: por motor (Supertonic puede estar sin uv ni ffmpeg, y a Supertonic y Kokoro les puede faltar el modelo).
+  const est = useEstadoMotores();
+  const noDisponible = (o: Opcion) => {
+    if (o.valor === actual || tieneGrabada(indice, a, o.valor as VozId)) return null;
+    const v = vozPorId(o.valor as VozId);
+    const motivo = est && v ? motivoNoDisponible(est, grupoDe(v.motor)) : sinMac ? "falta uv o ffmpeg" : null;
+    return motivo ? `No disponible en este computador: ${motivo}` : null;
+  };
   return (
     <>
       <div className="vz-ag">
@@ -347,7 +355,7 @@ function FilaAgente({ a, indice, grabando, companyId, sinMac }: { a: AgenteVista
           girando={!!grabando && !grabando.error}
           deshabilitada={!cargando && !actual}
           etiqueta={`Voz de ${a.nombre}`}
-          titulo={!cargando && !actual ? "Todavía no tiene voz: se reparte al correr «npm run voces»" : undefined}
+          titulo={!cargando && !actual ? "Todavía no tiene voz: se reparte con «Preparar voces», en el panel «Voces»" : undefined}
           onClick={() => setAbierta(!abierta)}
         />
         {actual ? <Reproducir voz={actual} nombre={nombreEnLista(actual)} xs /> : <span className="vz-play-x" />}

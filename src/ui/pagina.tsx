@@ -33,6 +33,7 @@ import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
 import { ReproductorResumen } from "./reproductorResumen.js";
+import { useVocesAlDia } from "./prepararVoces.js";
 import { resumen, useResumenAbierto } from "./resumen.js";
 import { asegurarEstilos } from "./estilos.js";
 import { anchoFicha, Ficha, FichaFlotante, FichaHoja, type Enlazar } from "./ficha.js";
@@ -230,6 +231,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     [],
   );
   const conResumen = useResumenAbierto();
+  // 0.13.0 (issue #9): con las voces al día, el worker graba solo lo de los agentes nuevos o con otro nombre.
+  useVocesAlDia(oficina.agentes);
 
   const [filtro, setFiltro] = useState<string[]>([]);
   const [hl, setHl] = useState<Resaltado>(null);
