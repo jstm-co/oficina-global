@@ -16,10 +16,11 @@ Filtro de Bloom con las 100.000 palabras más frecuentes de la lista de frecuenc
 
 ## Motores de voz
 
-El generador no trae los motores ni sus modelos: los baja `uv` al correrlo. Cada uno tiene su licencia:
+El plugin no trae los modelos: se bajan al elegir el motor en «Preparar voces» (o al correr `npm run voces`). Supertonic corre con `sherpa-onnx-node`, una dependencia opcional del plugin; los demás motores los baja `uv`. Cada uno tiene su licencia:
 
 | Motor | Paquete | Licencia |
 |---|---|---|
+| Supertonic 3 (int8) | `sherpa-onnx-node`; el modelo, de Hugging Face (`csukuangfj2/sherpa-onnx-supertonic-3-tts-int8-2026-05-11`) | Apache 2.0 (`sherpa-onnx`); OpenRAIL-M (el modelo, de Supertone) |
 | Edge TTS (Microsoft) | `edge-tts` | LGPL-3.0 (la biblioteca); usa un servicio de Microsoft no oficial |
 | Kokoro-82M | `kokoro-onnx` | MIT (la biblioteca); Apache 2.0 (el modelo) |
 | Chatterbox Multilingual | `chatterbox-tts` | MIT |
