@@ -173,6 +173,16 @@ describe("las ráfagas", () => {
     expect(f.copias).toBe(6);
   });
 
+  it("con un modelo más chico, paquetes más chicos y más, para pedir lo mismo", async () => {
+    const f = falso();
+    const { e } = armar(f, { finalesPorPaquete: 4 });
+    await e.tic();
+    // 4 paquetes de 8 finales y 5 sueltas = 8 de 4 y 3.
+    expect(f.copias).toBe(8);
+    expect(f.pedidos.every((p) => [...p.matchAll(/^- s\d+$/gm)].length === 3)).toBe(true);
+    expect(f.pedidos[0]).toContain("c2 ·");
+  });
+
   it("pide primero lo que tiene menos finales, sin repetir una clave en la ráfaga", async () => {
     const f = falso();
     const { e } = armar(f);

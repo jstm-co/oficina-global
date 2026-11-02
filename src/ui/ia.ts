@@ -14,6 +14,7 @@ import { useSyncExternalStore } from "react";
 import type { FuenteIa, MuestraFinal } from "../charlas.js";
 import { accionPlugin } from "../fuentes.js";
 import { Escritor, usaReserva, type EstadoIa, type ModeloIa, type SinApi } from "../ia/escritor.js";
+import { FINALES_POR_PAQUETE, FINALES_POR_PAQUETE_CHICO } from "../ia/prompt.js";
 import { CLAVE_RESERVA, fuenteDe, leerReserva, reservaVacia, type DatosReserva } from "../ia/reserva.js";
 import { ajustes, alCambiarAjustes, type Ajustes } from "./ajustes.js";
 import { instalacion } from "./audiosVoces.js";
@@ -127,6 +128,8 @@ export function escritorIa(): Escritor {
     // Al día con lo que escribió otra pestaña (el evento `storage` ya la dejó en `reserva`).
     leer: () => structuredClone(reserva),
     guardar: guardarReserva,
+    // Fuera de Chrome, la IA de la página es más chica que Gemini Nano (la de Apple en Paperclip Dispatch).
+    finalesPorPaquete: IA_CHROME ? FINALES_POR_PAQUETE : FINALES_POR_PAQUETE_CHICO,
   });
   escritor.suscribir(avisar);
   if (typeof window !== "undefined") {

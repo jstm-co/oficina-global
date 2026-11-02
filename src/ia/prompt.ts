@@ -19,6 +19,12 @@ export const VERSION_PROMPT = "v4.2";
 /** Por paquete: 8 finales y 5 sueltas (punto 10 del spike). */
 export const FINALES_POR_PAQUETE = 8;
 export const SUELTAS_POR_PAQUETE = 5;
+/**
+ * Los finales por paquete con un modelo más chico que Gemini Nano (fuera de Chrome: el de Apple en Paperclip
+ * Dispatch). Con 8, el de Apple copia las frases del pedido y pasan 45 finales de 192; con 4, 75 (las mismas
+ * conversaciones, con esta revisión). Las sueltas y los paquetes de la ráfaga van en proporción.
+ */
+export const FINALES_POR_PAQUETE_CHICO = 4;
 
 export const SISTEMA = `Escribes lo que dicen los agentes de una oficina pixel. Son agentes de IA que trabajan en tareas de software. Cuando están libres van al descanso a tomar café y conversan de a dos. Escribe en español de Chile, cercano y con humor suave, como compañeros de pega: frases cortas y naturales («bacán», «harta pega», «¡buena!», «uf»), sin groserías.
 

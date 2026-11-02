@@ -9,7 +9,8 @@
 //   vista, el candado `oficina-ia` (una sola pestaña escribe) y el permiso del
 //   worker (la Mac no está cargada ni hay un clon generando). Cada ráfaga abre
 //   la sesión, escribe 2 paquetes (4 la primera vez) y la suelta. Cada pedido
-//   tiene un tope de 30 s y de 1.500 letras.
+//   tiene un tope de 30 s y de 1.500 letras. Con un modelo más chico, los
+//   paquetes son más chicos y van más, para pedir lo mismo.
 // - **«En pausa»** (0.8.1, JST-249; punto 5 del spike): una ráfaga que toca y
 //   no tiene permiso espera; se vuelve a preguntar en cada tic hasta que la Mac
 //   se libera. Solo se salta la ráfaga: lo que la IA ya escribió se sigue
@@ -103,6 +104,8 @@ export interface DepsEscritor {
   /** La reserva de ahora (la guardada, al día con las otras pestañas) y guardarla. */
   leer: () => DatosReserva;
   guardar: (r: DatosReserva) => void;
+  /** Hasta cuántos finales por paquete (de 1 a 8): menos con un modelo más chico que Gemini Nano. */
+  finalesPorPaquete?: number;
   azar?: () => number;
 }
 
@@ -336,7 +339,7 @@ export class Escritor {
           return true;
         }
         const r = this.d.leer();
-        const paquetes = vacia(r) ? 4 : 2;
+        const paquetes = Math.ceil(((vacia(r) ? 4 : 2) * FINALES_POR_PAQUETE) / this.finalesPorPaquete());
         r.rafaga = this.d.ahora();
         this.d.guardar(r);
         this.anotar({ t: this.d.ahora(), tipo: "rafaga", paquetes });
@@ -384,13 +387,17 @@ export class Escritor {
     }
   }
 
+  private finalesPorPaquete(): number {
+    return Math.min(FINALES_POR_PAQUETE, Math.max(1, Math.round(this.d.finalesPorPaquete ?? FINALES_POR_PAQUETE)));
+  }
+
   /** Los finales que se piden en un paquete: las claves que se pueden decir ahora con menos finales en la reserva, sin repetir en la ráfaga. */
   private elegir(muestras: readonly MuestraFinal[], pedidas: Set<string>, r: DatosReserva): MuestraFinal[] {
     const unicas = new Map<string, MuestraFinal>();
     for (const m of muestras) if (!pedidas.has(m.clave) && !unicas.has(m.clave)) unicas.set(m.clave, m);
     const lista = [...unicas.values()].map((m) => ({ m, n: cuantos(r, m.clave), z: this.azar() }));
     lista.sort((a, b) => a.n - b.n || a.z - b.z);
-    return lista.slice(0, FINALES_POR_PAQUETE).map((x) => x.m);
+    return lista.slice(0, this.finalesPorPaquete()).map((x) => x.m);
   }
 
   /** Un paquete: una copia de la sesión, el pedido con su esquema (30 s y 1.500 letras como mucho), la revisión y a la reserva. */
@@ -398,7 +405,7 @@ export class Escritor {
     const { muestras, nombres } = this.d.pedidos();
     const elegidas = this.elegir(muestras, pedidas, this.d.leer());
     for (const m of elegidas) pedidas.add(m.clave);
-    const p = armarPaquete(elegidas, SUELTAS_POR_PAQUETE);
+    const p = armarPaquete(elegidas, Math.ceil((SUELTAS_POR_PAQUETE * this.finalesPorPaquete()) / FINALES_POR_PAQUETE));
     const t0 = this.d.ahora();
     const corte = new AbortController();
     let por: "tope" | "largo" | null = null;
