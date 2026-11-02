@@ -17,7 +17,7 @@ import { hace, type AgenteVista } from "../vista.js";
 import { cambiarAjustes, conDetalle, puntoVoces, useAjustes, type TipoLeer } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
 import { CajaPersonaje, cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
-import { cargarIndice, useIndiceVoces } from "./audiosVoces.js";
+import { cargarIndice, useIndiceVoces, useVocesSinGenerar } from "./audiosVoces.js";
 import { desbloquearAudio, probarVoz, probarVozDetalle, tocarCampana, useHayVoces, useSubtitulo } from "./sonido.js";
 import { abrirPanelVoces } from "./eleccion.js";
 import { useEstadoVozViva } from "./vozViva.js";
@@ -340,6 +340,7 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
   const frase = conDet ? textoVoz(corto, empresa, fraseEj, aj.presentacion, detalleEj) : base;
   // Qué voz tiene el del ejemplo: del índice de los audios, que se lee solo con las voces encendidas.
   const indice = useIndiceVoces();
+  const sinGenerar = useVocesSinGenerar();
   useEffect(() => {
     if (aj.voces) void cargarIndice();
   }, [aj.voces]);
@@ -364,6 +365,15 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
       <p>
         Cada agente lo dice en voz alta, con su propia voz. Por ejemplo{voz ? ` (${voz.nombre})` : ""}: <b>«{frase}»</b>
       </p>
+      {/* Sin el generador, el panel no tiene qué voz le toca a cada uno y las listas quedan cargando. */}
+      {aj.voces && sinGenerar ? (
+        <div className="of-avp-note is-box">
+          <Icono nombre="info" tam={12} />
+          <span>
+            Todavía no hay audios en este Paperclip: se graban una vez, en el computador donde corre, con <b>npm run voces</b> en la carpeta del plugin (ver «Voces» en el README). Mientras, {hayVoces ? "habla la voz del navegador" : "solo se ve el subtítulo"}.
+          </span>
+        </div>
+      ) : null}
       <QuienHabla agentes={agentes} companyId={companyId} onAgentes={() => setPagina("agentes")} />
       <div className="of-vz-cab" aria-hidden="true">
         <span>Avisos</span>
