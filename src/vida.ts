@@ -103,7 +103,6 @@ import {
   PRIMERA_MS,
   SALA_MS,
   SUELTA_MS,
-  fraseSuelta,
   nombreDeCharla,
   type AgenteCharla,
   type ContextoCharla,
@@ -1846,7 +1845,7 @@ export class Vida {
     a.charla = ch;
     b.charla = ch;
     this.charlas.push(ch);
-    if (g.ia) this.fuenteIa?.usado?.("final", g.lineas, g.variante, ch.prefijo);
+    this.fuenteIa?.usado?.("final", g.lineas, g.variante, ch.prefijo, g.ia);
     // 0.6.0: el turno de la voz, desde que salen a juntarse hasta la última frase.
     if (ch.voz) {
       const camino = caminos ? Math.max(...caminos.map((c) => recorrido(c!).largo)) / VELOCIDAD * 1000 : 0;
@@ -2141,7 +2140,7 @@ export class Vida {
         const linea = this.guionista.suelta(a.id, this.temas?.guardado(a.id) ?? null, this.azar, (codigo) => this.titulos?.titulo(codigo) ?? null);
         const su: Suelta = { id: this.sigId++, prefijo: pre, quien: a.id, linea, t0: ahora, dur: duracionFrase(linea, true) };
         this.sueltas.push(su);
-        if (this.fuenteIa && !fraseSuelta(linea.texto)) this.fuenteIa.usado?.("suelta", [linea], null, pre);
+        this.fuenteIa?.usado?.("suelta", [linea], null, pre);
         // 0.6.0: la voz ve si le toca (solo en un hueco y una por minuto).
         if (this.voz?.lee("sueltas")) this.voz.hecho({ tipo: "suelta", id: su.id, quien: a.id, companyId: a.companyId, linea, ms: su.dur });
         this.tocar(pre);
@@ -2225,7 +2224,9 @@ export class Vida {
 
   private hablarMascota(m: Mascota, ahora: number): void {
     for (const q of this.mascotasVivas) q.dice = null;
-    m.dice = { texto: this.guionista.mascota(m.id), hasta: ahora + MASCOTA_DICE_MS };
+    const texto = this.guionista.mascota(m.id, this.azar);
+    m.dice = { texto, hasta: ahora + MASCOTA_DICE_MS };
+    this.fuenteIa?.usado?.("mascota", [{ quien: m.id, texto, codigo: null, titulo: null }], m.id, "pasillo");
   }
 
   /**

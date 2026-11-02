@@ -17,7 +17,6 @@ Plugin para [Paperclip](https://github.com/paperclipai/paperclip) que dibuja a l
 - **Rótulo de la sala.** Bajo cada sala, un rótulo cuenta de qué se trata cada tarea, una a la vez.
 - **Resumen.** El botón «Resumen» te lee en voz alta qué se hizo, qué te toca, en qué se trabaja y qué está en cola.
 - **Leer contexto.** En la barra de arriba de cada tarea, un botón lee en voz alta de qué se trata y qué te preguntan.
-- **Vista 3D** (0.12.0). En el computador, el botón «Vista 3D» te deja caminar por la misma oficina en primera persona, desde tu escritorio: con el mouse miras y con W A S D caminas. Cada sala tiene sus paredes, sus puertas al pasillo y su techo con lámparas; los monitores se leen de cerca, una flecha te lleva a quien te necesita y un clic en alguien abre su ficha, como en la 2D. Sobre los agentes se ven sus conversaciones y entregas, y la luz sigue la hora de quien mira: el cielo por las ventanas, el sol que entra hasta el piso y, de noche, la oficina más apagada.
 - **Modo TV.** Pantalla completa en 1920×1080, y un enlace para abrirla en un TV con sesión.
 - **Celular.** El piso entero y, al tocar una sala, esa sala acercada.
 
@@ -115,8 +114,6 @@ En Chrome de escritorio, Gemini Nano (gratis y local) puede escribir el final de
 
 La IA de Chrome solo existe en páginas seguras: si abres Paperclip con `http://`, agrega su dirección en `chrome://flags/#unsafely-treat-insecure-origin-as-secure` y relanza Chrome.
 
-Fuera de Chrome, el plugin usa el `LanguageModel` que tenga la página, si hay uno (la misma API), y los menús lo llaman «IA del computador». Por ejemplo, [Paperclip Dispatch](https://github.com/Javiervinus/paperclip-dispatch), la app de Mac para Paperclip, lo atiende con Apple Intelligence.
-
 ## Adaptarla a tu instancia
 
 Para esto hay que instalarla desde el código.
@@ -141,7 +138,6 @@ El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`)
 - El aviso del sistema operativo necesita `https://`; con `http://` avisa Paperclip dentro de la página.
 - El sonido y las voces empiezan con tu primer clic en la pestaña después de abrirla.
 - En iPhone no hay pantalla completa para una página: el modo TV explica cómo agregarla a la pantalla de inicio. No se probó en Safari ni en un iPhone real.
-- La vista 3D necesita WebGL 2 y es solo para el computador (no en el celular ni en el modo TV).
 - Edge TTS es un servicio no oficial: si Microsoft lo cambia, las voces de Lorenzo y Catalina dejan de generarse hasta actualizar `edge-tts`.
 
 ## Contribuir y versiones

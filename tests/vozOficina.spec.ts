@@ -111,6 +111,15 @@ describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del
     expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "Bacán." })).not.toHaveProperty("ia");
   });
 
+  it("una apertura de la IA solo lleva los datos de sus huecos y una mascota generada pasa la misma revisión", () => {
+    const apertura = { plantilla: "¡Qué lata por {agente}!", datos: { agente: "CEO" } };
+    expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "¡Qué lata por CEO!", apertura })).toEqual({ clase: "charla", agenteId: "a", texto: "¡Qué lata por CEO!", tarea: null, apertura, ia: true });
+    expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "¡Qué lata por Ana!", apertura })).toBeNull();
+    expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "¡Qué lata por CEO!", apertura: { plantilla: "Son 4 con {agente}.", datos: { agente: "CEO" } } })).toBeNull();
+    expect(validarPedidoOficina({ clase: "mascota", agenteId: null, mascota: "gato", texto: "Qué rico el sol." })).toMatchObject({ ia: true, mascota: "gato" });
+    expect(validarPedidoOficina({ clase: "mascota", agenteId: null, mascota: "gato", texto: "Somos 4." })).toBeNull();
+  });
+
   it("valida cada clase: la suelta es una de las suyas, la mascota dice lo suyo, la entrega lleva un nombre acotado y la hora números de verdad", () => {
     expect(validarPedidoOficina({ clase: "suelta", agenteId: "a", texto: "Pausa para el café." })).toMatchObject({ clase: "suelta", texto: "Pausa para el café." });
     // Sin letras no hay nada que decir; una suelta sin tarea en la línea de abajo no la lleva.

@@ -2,7 +2,7 @@
 // (nombres, cargos, empresas, números, códigos, estados, cuándo, «voy a…») y el largo de las frases de hoy. Desde la
 // 0.8.1 (JST-251), tampoco palabras que no existen.
 import { describe, expect, it } from "vitest";
-import { fraseIaParaVoz, LETRAS_FINAL, LETRAS_SUELTA, MAX_FINAL_PX, revisarFinal, revisarSuelta, revisarTexto } from "../src/ia/revision.js";
+import { casiIgual, fraseIaParaVoz, LETRAS_FINAL, LETRAS_SUELTA, MAX_FINAL_PX, revisarApertura, revisarBroma, revisarFinal, revisarMascota, revisarSuelta, revisarTexto } from "../src/ia/revision.js";
 import { anchoTexto } from "../src/hilo.js";
 
 const fijas = [{ texto: "A CEO le falló el run." }, { texto: "¿Qué le pasó?" }, { texto: "Se quedó sin cupo, parece." }];
@@ -139,6 +139,40 @@ describe("el final entero", () => {
 
   it("una frase mala bota el final entero (va la plantilla)", () => {
     expect(revisarFinal(["¡Qué paciencia!", "Ya casi la terminan."], [{ texto: "Esta espera a que termine otra." }]).length).toBeGreaterThan(0);
+  });
+});
+
+describe("aperturas, bromas, mascotas y casi repeticiones (0.13.0)", () => {
+  it("la apertura conserva exactamente los huecos y no admite datos fuera de ellos", () => {
+    const plantilla = "A {agente} le falló el run.";
+    expect(revisarApertura("¡Qué lata por {agente}!", plantilla)).toEqual([]);
+    expect(revisarApertura("¡Qué lata!", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("¡Qué lata por {agente} y {otro}!", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("¡Qué lata por {agente} y Catalina!", plantilla)).toContain("un nombre");
+    expect(revisarApertura("¡Son 4 con {agente}!", plantilla)).toContain("número");
+    expect(revisarApertura(plantilla, plantilla)).toContain("es una de siempre");
+    expect(revisarApertura("Dijo «listo» {agente}.", plantilla)).toContain("signos, comillas o emojis");
+    expect(revisarApertura("Espero que {agente} se solven.", plantilla)).toContain("palabra que no existe («solven»)");
+    expect(revisarApertura("¿Cómo va el {rol}?", "¿Cómo va {rol}?")).toContain("artículo de más antes de {rol}");
+    expect(revisarApertura("¿Qué tal {rol}?", "¿Cómo va {rol}?")).toEqual([]);
+    expect(revisarApertura("Ya lleva {n} con esta.", "{agente} lleva {n} con {tarea}.")).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n} días.", "{agente} lleva {n} con {tarea}.")).toContain("unidad de tiempo fuera de {n}");
+    expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n}.", "{agente} lleva {n} con {tarea}.")).toEqual([]);
+  });
+
+  it("las bromas tienen dos frases y las mascotas no reutilizan el respaldo fijo", () => {
+    expect(revisarBroma(["¿Café o té?", "Café, por favor."])).toEqual([]);
+    expect(revisarBroma(["Solo una."])).toContain("una broma tiene 2 frases");
+    expect(revisarBroma(["¿Quién rompió el build?", "Café, por favor."])).toContain("es una de siempre");
+    expect(revisarMascota("gato", "Qué rico el sol.")).toEqual([]);
+    expect(revisarMascota("gato", "¡Miau!")).toContain("es una de siempre");
+    expect(revisarMascota("perro", "Somos 4.")).toContain("número");
+  });
+
+  it("detecta igualdad normalizada y coincidencia de palabras muy alta", () => {
+    expect(casiIgual("¡Qué lata por el café!", "qué lata por el café")).toBe(true);
+    expect(casiIgual("Este café me salva.", "Este café me salva, sí.")).toBe(true);
+    expect(casiIgual("Este café me salva.", "El sofá está muy rico.")).toBe(false);
   });
 });
 

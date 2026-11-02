@@ -9,11 +9,10 @@
 // línea de abajo del globo (§1.4). Las frases de relleno son opiniones, nunca
 // datos inventados.
 //
-// 0.7.0 (JST-232, spike de JST-230): con la IA de Chrome lista y elegida, las
-// frases con el dato siguen siendo estas (`fijasDe`) y el final de la
-// conversación sale de la reserva que escribe la IA (`FuenteIa`, por
-// `claveDeFinal`), igual que la mitad de las frases sueltas. Las bromas y lo que
-// dicen las mascotas quedan como están.
+// 0.13.0 (JST-345): con la IA de Chrome lista y elegida, también reescribe la
+// apertura con huecos (`{tarea}`, `{agente}`, `{n}`…), las sueltas, las bromas y
+// las mascotas. El código rellena los huecos con los datos actuales; las frases
+// fijas quedan de respaldo cuando la IA no está disponible o no tiene variantes.
 import type { TipoEspera } from "./estado.js";
 import { cortarNombre } from "./rotulo.js";
 import type { EstadoCola, Temas } from "./temas.js";
@@ -62,6 +61,8 @@ export interface Linea {
   codigo: string | null;
   /** El nombre de esa tarea, si se conoce (sin cortar). */
   titulo: string | null;
+  /** Si la apertura la escribió la IA: su plantilla y los datos con que se rellenó (para validar también su audio). */
+  aperturaIa?: AperturaRellena;
 }
 
 /** Lo que una conversación necesita de cada agente del piso. */
@@ -715,6 +716,69 @@ export const PLANTILLAS: readonly RegExp[] = [
   `${NUM} trabajando\\.`,
 ].map((p) => new RegExp(`^${p}$`, "u"));
 
+/** Los datos que reemplazan los huecos de una apertura generada por la IA. */
+export interface AperturaRellena {
+  plantilla: string;
+  datos: Readonly<Record<string, string>>;
+}
+
+export const huecosDe = (plantilla: string): string[] => [...plantilla.matchAll(/\{([a-z]+)\}/g)].map((m) => m[1]!);
+
+/** La apertura de hoy como plantilla y los valores actuales de sus huecos. */
+export function aperturaDe(l: Pick<Linea, "texto" | "codigo">): AperturaRellena {
+  let plantilla = l.texto;
+  const datos: Record<string, string> = {};
+  const poner = (nombre: string, valor: string) => {
+    datos[nombre] = valor;
+    plantilla = plantilla.replace(valor, `{${nombre}}`);
+  };
+  if (l.codigo) {
+    const tarea = l.texto.match(/\besta\b/i)?.[0];
+    if (tarea) poner("tarea", tarea);
+  }
+  const i = PLANTILLAS.findIndex((re) => re.test(l.texto));
+  const m = (re: RegExp) => l.texto.match(re);
+  let x: RegExpMatchArray | null = null;
+  if (i === 0 && (x = m(/^(.+?) está esperando /))) poner("agente", x[1]!);
+  else if (i === 1 && (x = m(/^(.+?) lleva (.+?) esperando\.$/))) {
+    poner("agente", x[1]!);
+    poner("n", x[2]!);
+  } else if ((i === 2 || i === 5 || i === 7 || i === 8 || i === 9 || i === 16) && (x = m(/\d+/))) poner("n", x[0]);
+  else if (i === 3 && (x = m(/^A (.+?) le falló /))) poner("agente", x[1]!);
+  else if (i === 4 && (x = m(/^¿Viste que (.+?) tiene /))) poner("agente", x[1]!);
+  else if (i === 6 && (x = m(/^(.+?) sigue /))) poner("agente", x[1]!);
+  else if (i === 10 && (x = m(/^(.+?) lleva (.+?) con esta\.$/))) {
+    poner("agente", x[1]!);
+    poner("n", x[2]!);
+  } else if (i === 11 && (x = m(/^(.+?) recién /))) poner("agente", x[1]!);
+  else if (i === 12 && (x = m(/^(.+?) está /))) poner("agente", x[1]!);
+  else if (i === 13 && (x = m(/^¿En qué anda (.+?)\?$/))) poner("agente", x[1]!);
+  else if (i === 14 && (x = m(/^¿Cómo están en (.+?)\?$/))) poner("empresa", x[1]!);
+  else if (i === 15 && (x = m(/^(\d+) trabajando y (\d+) /))) {
+    poner("n", x[1]!);
+    poner("esperando", x[2]!);
+  } else if (i < 0 && (x = m(/^¿Cómo va (.+)\?$/)) && ROLES.includes(x[1]!)) poner("rol", x[1]!);
+  return { plantilla, datos };
+}
+
+export function rellenarHuecos(plantilla: string, datos: Readonly<Record<string, string>>): string | null {
+  let texto = plantilla;
+  for (const h of new Set(huecosDe(plantilla))) {
+    if (typeof datos[h] !== "string") return null;
+    texto = texto.replaceAll(`{${h}}`, datos[h]);
+  }
+  return huecosDe(texto).length ? null : texto;
+}
+
+/** Rellena una apertura revisada con los datos de la conversación de ahora. */
+export function rellenarApertura(plantilla: string, l: Pick<Linea, "texto" | "codigo">): { texto: string; apertura: AperturaRellena } | null {
+  const actual = aperturaDe(l);
+  const orden = (xs: readonly string[]) => [...new Set(xs)].sort().join(",");
+  if (orden(huecosDe(plantilla)) !== orden(huecosDe(actual.plantilla))) return null;
+  const texto = rellenarHuecos(plantilla, actual.datos);
+  return texto === null ? null : { texto, apertura: { plantilla, datos: actual.datos } };
+}
+
 /** Una frase de conversación que el plugin pudo haber armado: fija o de una plantilla. Lo demás, el worker lo rechaza. */
 export function fraseDeCharla(texto: string): boolean {
   return FRASES_FIJAS.has(texto) || PLANTILLAS.some((re) => re.test(texto));
@@ -790,31 +854,37 @@ export function claveDeFinal(variante: string, fijas: readonly Pick<Linea, "text
 
 /** Lo que el Guionista necesita de la IA (la reserva de `src/ia/reserva.ts`): sin la IA, `null`. */
 export interface FuenteIa {
+  /** Una apertura con los mismos huecos de la variante, o `null`. */
+  apertura(variante: string, azar: () => number): string | null;
   /** Un final escrito para esa clave (1 o 2 frases), que no sea `evitar`, o `null`. */
   final(clave: string, azar: () => number, evitar: string | null): readonly string[] | null;
   /** Una frase suelta escrita por la IA que no esté en `recientes`, o `null`. */
   suelta(azar: () => number, recientes: readonly string[]): string | null;
-  /** Lo que la vida mostró con algo de la IA (para la QA: `window.__oficinaIa()`): la conversación entera o la suelta. */
-  usado?(tipo: "final" | "suelta", lineas: readonly Linea[], variante: string | null, sala: string): void;
+  /** Una broma completa (2 frases), o `null`. */
+  broma(azar: () => number): readonly string[] | null;
+  /** Algo nuevo que dice esa mascota, o `null`. */
+  mascota(id: IdMascota, azar: () => number): string | null;
+  /** Lo que la vida mostró; `ia` identifica las frases generadas para no repetirlas en una hora y calcular el contador. */
+  usado?(tipo: "final" | "suelta" | "mascota", lineas: readonly Linea[], variante: string | null, sala: string, ia?: FinalIa): void;
 }
 
-/** El final de la IA que lleva una conversación (para volver a armarla igual antes de leerla con voz). */
+/** Lo que la IA escribió en una conversación (para volver a armarla igual antes de leerla con voz). */
 export interface FinalIa {
-  clave: string;
-  /** Cuántas frases de hoy quedaron fijas. */
+  clave: string | null;
+  /** Cuántas frases de hoy quedaron fijas, incluida la apertura reemplazada. */
   fijas: number;
   frases: readonly string[];
+  apertura?: string;
+  broma?: boolean;
 }
 
-/** Lo que se le muestra a la IA para que escriba un final: la clave y las frases fijas (quién dice cada una). */
+/** Lo que se le muestra a la IA: la apertura con huecos y las frases fijas que siguen. */
 export interface MuestraFinal {
   clave: string;
   variante: string;
+  apertura: string;
   fijas: readonly Linea[];
 }
-
-/** 1 de cada 2 frases sueltas sin dato sale de la reserva de la IA, si tiene (punto 10 del spike). */
-export const SUELTA_IA = 1 / 2;
 
 /** Las frases fijas y, después, las del final de la IA: quién dice cada una lo pone el código (se turnan desde la última fija). */
 export function unirFinal(fijas: readonly Linea[], frases: readonly string[], a: string, b: string): Linea[] {
@@ -993,28 +1063,37 @@ export class Guionista {
     return { tema: x.tema, variante: x.id, lineas, ...(d.sujeto !== undefined ? { sujeto: d.sujeto } : {}), ...(ia ? { ia } : {}) };
   }
 
-  /**
-   * 0.7.0: con la IA, el final de su reserva en vez del de hoy (las frases con
-   * el dato quedan tal cual). Si no hay final para esa clave, o no cabe (más de
-   * 4 frases), la conversación de hoy.
-   */
+  /** Apertura con huecos y final de la reserva; lo que no tenga variante queda como hoy. */
   private conFinal(x: Variante, lineas: Linea[], c: Ctx): { lineas: Linea[]; ia?: FinalIa } {
-    if (!this.ia || x.tema === "broma") return { lineas };
+    if (!this.ia) return { lineas };
+    if (x.tema === "broma") {
+      const broma = this.ia.broma(c.azar);
+      if (!broma || broma.length === 0) return { lineas };
+      let q = c.b.id;
+      const generadas = broma.map((texto): Linea => {
+        q = q === c.a.id ? c.b.id : c.a.id;
+        return { quien: q, texto, codigo: null, titulo: null };
+      });
+      return { lineas: generadas, ia: { clave: null, fijas: 0, frases: [...broma], broma: true } };
+    }
     const n = fijasDe(lineas);
-    if (n === 0 || n >= MAX_FRASES_IA) return { lineas };
-    const clave = claveDeFinal(x.id, lineas.slice(0, n));
-    if (!clave) return { lineas };
-    const frases = this.ia.final(clave, c.azar, this.ultimoFinal.get(clave) ?? null);
-    if (!frases || frases.length === 0 || n + frases.length > MAX_FRASES_IA) return { lineas };
-    this.ultimoFinal.set(clave, frases.join(" "));
-    return { lineas: unirFinal(lineas.slice(0, n), frases, c.a.id, c.b.id), ia: { clave, fijas: n, frases: [...frases] } };
+    if (n === 0) return { lineas };
+    const apertura = this.ia.apertura(x.id, c.azar);
+    const rellena = apertura ? rellenarApertura(apertura, lineas[0]!) : null;
+    const clave = n < MAX_FRASES_IA ? claveDeFinal(x.id, lineas.slice(0, n)) : null;
+    const pedido = clave ? this.ia.final(clave, c.azar, this.ultimoFinal.get(clave) ?? null) : null;
+    const frases = pedido && n + pedido.length <= MAX_FRASES_IA ? pedido : [];
+    if (!rellena && frases.length === 0) return { lineas };
+    const fijas = lineas.slice(0, n);
+    if (rellena) fijas[0] = { ...fijas[0]!, texto: rellena.texto, aperturaIa: rellena.apertura };
+    if (clave && frases.length) this.ultimoFinal.set(clave, frases.join(" "));
+    return {
+      lineas: unirFinal(fijas, frases, c.a.id, c.b.id),
+      ia: { clave, fijas: n, frases: [...frases], ...(rellena ? { apertura: apertura! } : {}) },
+    };
   }
 
-  /**
-   * 0.7.0: lo que se le puede pedir a la IA con `a` y `b` ahora, sin recordar
-   * nada: por cada variante con datos que se puede decir, sus frases fijas y su
-   * clave. La pestaña que escribe arma así sus pedidos (punto 10 del spike).
-   */
+  /** Una muestra por variante que se puede decir: su apertura con huecos, las fijas y la clave del final. */
   muestras(ctx: ContextoCharla): MuestraFinal[] {
     const c = this.preparar(ctx, "termino");
     const out: MuestraFinal[] = [];
@@ -1024,9 +1103,9 @@ export class Guionista {
       if (!d) continue;
       const lineas = this.lineasDe(x, d, c);
       const n = fijasDe(lineas);
-      if (lineas.length < 2 || n === 0 || n >= MAX_FRASES_IA) continue;
+      if (lineas.length < 2 || n === 0) continue;
       const clave = claveDeFinal(x.id, lineas.slice(0, n));
-      if (clave) out.push({ clave, variante: x.id, fijas: lineas.slice(0, n) });
+      if (clave) out.push({ clave, variante: x.id, apertura: aperturaDe(lineas[0]!).plantilla, fijas: lineas.slice(0, n) });
     }
     return out;
   }
@@ -1067,11 +1146,18 @@ export class Guionista {
     if (lineas.length < 2) return null;
     const sujeto = d.sujeto !== undefined ? { sujeto: d.sujeto } : {};
     if (!g.ia) return { tema: x.tema, variante: x.id, lineas, ...sujeto };
-    // 0.7.0: el mismo final de la IA sobre las mismas frases fijas. Sin la IA (se eligieron las frases de siempre o
-    // quedó en pausa), se descarta: la que sigue ya es de siempre.
-    const { clave, fijas, frases } = g.ia;
-    if (!this.ia || fijasDe(lineas) !== fijas || claveDeFinal(x.id, lineas.slice(0, fijas)) !== clave) return null;
-    return { tema: x.tema, variante: x.id, lineas: unirFinal(lineas.slice(0, fijas), frases, c.a.id, c.b.id), ...sujeto, ia: g.ia };
+    // La misma broma, apertura y final de la IA; sin la IA elegida, se descarta.
+    if (!this.ia) return null;
+    if (g.ia.broma) return { tema: x.tema, variante: x.id, lineas: g.lineas.map((l) => ({ ...l })), ...sujeto, ia: g.ia };
+    const { clave, fijas, frases, apertura } = g.ia;
+    if (fijasDe(lineas) !== fijas || (clave !== null && claveDeFinal(x.id, lineas.slice(0, fijas)) !== clave)) return null;
+    const fijasAhora = lineas.slice(0, fijas);
+    if (apertura) {
+      const rellena = rellenarApertura(apertura, lineas[0]!);
+      if (!rellena) return null;
+      fijasAhora[0] = { ...fijasAhora[0]!, texto: rellena.texto, aperturaIa: rellena.apertura };
+    }
+    return { tema: x.tema, variante: x.id, lineas: unirFinal(fijasAhora, frases, c.a.id, c.b.id), ...sujeto, ia: g.ia };
   }
 
   /** El nombre de una tarea: el de los temas guardados (que lo traen) o el que la página ya conoce. */
@@ -1089,6 +1175,15 @@ export class Guionista {
    * repite ninguna de las 5 últimas.
    */
   suelta(quien: string, temas: Temas | null, azar: () => number, titulo: (codigo: string) => string | null = () => null): Linea {
+    // Con la IA elegida, siempre sale de su reserva; las fijas quedan de respaldo.
+    if (this.ia) {
+      const t = this.ia.suelta(azar, this.sueltasDichas.slice(-NO_SUELTA));
+      if (t) {
+        this.sueltasDichas.push(t);
+        if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
+        return { quien, texto: t, codigo: null, titulo: null };
+      }
+    }
     if (azar() < SUELTA_CON_DATO) {
       const conDato: Array<[string, string | null | undefined, string | null | undefined]> = [
         ["Después viene esta.", temas?.sigue?.estado === "todo" ? temas.sigue.codigo : null, temas?.sigue?.titulo],
@@ -1099,15 +1194,6 @@ export class Guionista {
         if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave)) continue;
         this.sueltasDichas.push(clave);
         return { quien, texto, codigo, titulo: nombre ?? titulo(codigo) };
-      }
-    }
-    // 0.7.0: con la IA, 1 de cada 2 de las que no traen dato sale de su reserva (sin repetir las 5 últimas).
-    if (this.ia && azar() < SUELTA_IA) {
-      const t = this.ia.suelta(azar, this.sueltasDichas.slice(-NO_SUELTA));
-      if (t) {
-        this.sueltasDichas.push(t);
-        if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
-        return { quien, texto: t, codigo: null, titulo: null };
       }
     }
     for (let k = 0; k < SUELTAS.length * 3; k++) {
@@ -1121,8 +1207,10 @@ export class Guionista {
     return { quien, texto: "☕", codigo: null, titulo: null };
   }
 
-  /** Lo que dice una mascota: en su orden, rotando; nunca lo mismo 2 veces seguidas (§3). */
-  mascota(id: IdMascota): string {
+  /** Lo que dice una mascota: de la reserva de la IA; sin variantes, rota las fijas. */
+  mascota(id: IdMascota, azar: () => number = Math.random): string {
+    const generada = this.ia?.mascota(id, azar);
+    if (generada) return generada;
     const l = DICEN[id];
     const i = ((this.mascotas.get(id) ?? -1) + 1) % l.length;
     this.mascotas.set(id, i);

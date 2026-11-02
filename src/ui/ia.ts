@@ -11,11 +11,11 @@
 // el Guionista: con la IA lista o en pausa (0.8.1, JST-249: la pausa solo salta
 // las ráfagas); si no, las frases de siempre.
 import { useSyncExternalStore } from "react";
-import type { FuenteIa, MuestraFinal } from "../charlas.js";
+import { DICEN, fraseSuelta, type FuenteIa, type IdMascota, type MuestraFinal } from "../charlas.js";
 import { accionPlugin } from "../fuentes.js";
 import { Escritor, usaReserva, type EstadoIa, type ModeloIa, type SinApi } from "../ia/escritor.js";
 import { FINALES_POR_PAQUETE, FINALES_POR_PAQUETE_CHICO } from "../ia/prompt.js";
-import { CLAVE_RESERVA, fuenteDe, leerReserva, reservaVacia, type DatosReserva } from "../ia/reserva.js";
+import { anotarUso, CLAVE_RESERVA, conteoIa, fuenteDe, leerReserva, reservaVacia, type DatosReserva } from "../ia/reserva.js";
 import { ajustes, alCambiarAjustes, type Ajustes } from "./ajustes.js";
 import { instalacion } from "./audiosVoces.js";
 
@@ -198,17 +198,28 @@ function alVolver(): void {
 // ---------------------------------------------------------------------------
 
 const oyentes = new Set<() => void>();
-let foto: { estado: EstadoIa; finales: number; sueltas: number } | null = null;
+export interface ContadorIa {
+  escritas: number;
+  dichas: number;
+  deIa: number;
+}
+let foto: { estado: EstadoIa; finales: number; sueltas: number; contador: ContadorIa } | null = null;
 
 function avisar(): void {
   foto = null;
   for (const o of oyentes) o();
 }
 
-function fotoIa(): { estado: EstadoIa; finales: number; sueltas: number } {
+function fotoIa() {
   if (!foto) {
     const e = escritorIa();
-    foto = { estado: e.estado(), finales: Object.values(reserva.finales).reduce((n, l) => n + l.length, 0), sueltas: reserva.sueltas.length };
+    const otras = Object.values(reserva.aperturas).flat().length + reserva.bromas.length + Object.values(reserva.mascotas).flat().length;
+    foto = {
+      estado: e.estado(),
+      finales: Object.values(reserva.finales).reduce((n, l) => n + l.length, otras),
+      sueltas: reserva.sueltas.length,
+      contador: conteoIa(reserva, Date.now()),
+    };
   }
   return foto;
 }
@@ -220,21 +231,17 @@ const suscribir = (o: () => void) => {
 
 const SIN_IA: EstadoIa = { k: "sin", por: "celular" };
 
-/**
- * El estado de la IA, al día con la bajada, la pausa y las otras pestañas.
- * `activo = false` (el celular, el widget, el enlace para un TV): no pregunta
- * nada a Chrome y queda «solo en Chrome del computador».
- */
 export function useEstadoIa(activo = true): EstadoIa {
   return useSyncExternalStore(suscribir, () => (activo ? fotoIa().estado : SIN_IA));
 }
 
-/**
- * Se usa lo que la IA escribió: está lista o en pausa (0.8.1, JST-249). Lo que mira el piso. No cambia con el avance
- * de la bajada ni al pasar de lista a pausa (el piso no se vuelve a dibujar por eso).
- */
 export function useIaActiva(activo = true): boolean {
   return useSyncExternalStore(suscribir, () => activo && usaReserva(fotoIa().estado));
+}
+
+const CONTADOR_SIN: ContadorIa = { escritas: 0, dichas: 0, deIa: 0 };
+export function useContadorIa(activo = true): ContadorIa {
+  return useSyncExternalStore(suscribir, () => (activo ? fotoIa().contador : CONTADOR_SIN));
 }
 
 /** Hay frases de la IA en la reserva (si no, aunque esté lista, van las de siempre hasta la primera ráfaga). */
@@ -242,20 +249,26 @@ export function hayReserva(): boolean {
   return fotoIa().finales + fotoIa().sueltas > 0;
 }
 
-/** Lo último que se mostró en el piso con algo de la IA (para la QA): la conversación entera con sus tareas, o la suelta. */
+/** Lo último que se mostró con algo de la IA, incluida la plantilla para revisar las aperturas ya rellenadas. */
 interface Usada {
   t: number;
-  tipo: "final" | "suelta";
+  tipo: "final" | "suelta" | "mascota";
   sala: string;
   variante: string | null;
   lineas: Array<{ texto: string; codigo: string | null }>;
+  ia?: import("../charlas.js").FinalIa;
 }
 let usadas: Usada[] = [];
 
 const fuente: FuenteIa = {
   ...fuenteDe(() => reserva),
-  usado(tipo, lineas, variante, sala) {
-    usadas = [...usadas, { t: Date.now(), tipo, sala, variante, lineas: lineas.map((l) => ({ texto: l.texto, codigo: l.codigo })) }].slice(-60);
+  usado(tipo, lineas, variante, sala, ia) {
+    const ahora = Date.now();
+    const generada = tipo === "suelta" ? !fraseSuelta(lineas[0]?.texto ?? "") : tipo === "mascota" ? !DICEN[variante as IdMascota]?.includes(lineas[0]?.texto ?? "") : false;
+    const r = structuredClone(reserva);
+    const n = anotarUso(r, lineas, ia, generada, ahora);
+    guardarReserva(r);
+    if (n > 0) usadas = [...usadas, { t: ahora, tipo, sala, variante, lineas: lineas.map((l) => ({ texto: l.texto, codigo: l.codigo })), ...(ia ? { ia } : {}) }].slice(-60);
   },
 };
 

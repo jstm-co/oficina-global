@@ -3,15 +3,11 @@
 // navegador ni Node: la usan la página (antes de guardar o usar una frase) y el
 // worker (antes de hacer su audio).
 //
-// La IA escribe solo el final de cada conversación y las frases sueltas, y la
-// frase con el dato es la de hoy. Por eso aquí la regla es simple y estricta:
-// lo que escribe no puede traer **ningún** dato: ni un nombre, cargo, empresa,
-// número, código de tarea, estado ni cuándo. Tampoco lo que alguien va a hacer
-// («voy a…»), ni nada que no quepa en el globo. Tampoco una palabra que no está
-// en la lista de palabras en español (0.8.1, JST-251: «Espero que se solven.»).
-// Lo que no pasa se bota y queda la frase de siempre. Lo que la revisión no ve es
-// el sentido: eso lo lee la QA.
-import { FRASES_FIJAS, SUELTAS, SUELTAS_CON_DATO, type Linea } from "../charlas.js";
+// Los finales, sueltas, bromas y mascotas no traen datos. Las aperturas solo
+// pueden traer los huecos de su plantilla: el código los rellena con datos reales
+// después de revisar el texto estático. Tampoco se aceptan palabras inexistentes,
+// acciones futuras, textos que no caben ni variantes casi repetidas.
+import { DICEN, FRASES_FIJAS, huecosDe, SUELTAS, SUELTAS_CON_DATO, type IdMascota, type Linea } from "../charlas.js";
 import { anchoTexto } from "../hilo.js";
 import { palabrasRaras } from "./palabras.js";
 
@@ -61,6 +57,19 @@ const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche");
 
 /** Lo que es «la misma frase»: sin mayúsculas, signos ni espacios de más. */
 export const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
+export const normalizarFrase = plano;
+
+/** Igual o con una coincidencia de palabras muy alta (Jaccard ≥ 0,8). */
+export function casiIgual(a: string, b: string): boolean {
+  const pa = plano(a);
+  const pb = plano(b);
+  if (pa === pb) return true;
+  const wa = new Set(pa.split(" ").filter(Boolean));
+  const wb = new Set(pb.split(" ").filter(Boolean));
+  if (wa.size < 3 || wb.size < 3) return false;
+  const comunes = [...wa].filter((w) => wb.has(w)).length;
+  return comunes / new Set([...wa, ...wb]).size >= 0.8;
+}
 
 export interface OpcionesRevision {
   /** Hasta cuántas letras. */
@@ -145,6 +154,40 @@ export function revisarFinal(frases: readonly string[], fijas: readonly Pick<Lin
 export function revisarSuelta(texto: string, nombres: readonly string[] = []): string[] {
   const mal = revisarTexto(texto, { letras: LETRAS_SUELTA, px: MAX_SUELTA_PX, nombres });
   if (SUELTAS.includes(texto.trim())) mal.push("es una de siempre");
+  return mal;
+}
+
+/** Revisa el texto estático de una plantilla, tapando sus huecos con una palabra inocua. */
+export function revisarPlantillaApertura(texto: string, nombres: readonly string[] = []): string[] {
+  const estatico = texto.replace(/\{[a-z]+\}/g, "cosa");
+  return revisarTexto(estatico, { letras: 70, nombres });
+}
+
+/** Una apertura con exactamente los huecos de la plantilla original y ningún dato fuera de ellos. */
+export function revisarApertura(texto: string, plantilla: string, nombres: readonly string[] = []): string[] {
+  const esperados = huecosDe(plantilla).sort();
+  const dados = huecosDe(texto).sort();
+  const mal: string[] = [];
+  if (esperados.join(",") !== dados.join(",")) mal.push("huecos distintos de la plantilla");
+  if (normalizarFrase(texto) === normalizarFrase(plantilla)) mal.push("es una de siempre");
+  if (/\b(?:el|la|los|las)\s+\{rol\}/i.test(texto)) mal.push("artículo de más antes de {rol}");
+  if (texto.includes("{n}") && /\b(?:minutos?|horas?|días?|semanas?|meses?|años?)\b/i.test(texto)) mal.push("unidad de tiempo fuera de {n}");
+  mal.push(...revisarPlantillaApertura(texto, nombres));
+  return [...new Set(mal)];
+}
+
+/** Una broma completa de dos frases, sin reutilizar las fijas. */
+export function revisarBroma(frases: readonly string[], nombres: readonly string[] = []): string[] {
+  const mal = revisarFinal(frases, [], nombres);
+  if (frases.length !== 2) mal.push("una broma tiene 2 frases");
+  if (frases.some((f) => FRASES_FIJAS.has(f.trim()))) mal.push("es una de siempre");
+  return [...new Set(mal)];
+}
+
+/** Lo que dice una mascota, sin números, nombres ni las frases fijas de respaldo. */
+export function revisarMascota(id: IdMascota, texto: string, nombres: readonly string[] = []): string[] {
+  const mal = revisarTexto(texto, { letras: LETRAS_SUELTA, px: MAX_SUELTA_PX, nombres });
+  if (Object.values(DICEN).some((frases) => frases.includes(texto.trim()))) mal.push("es una de siempre");
   return mal;
 }
 
