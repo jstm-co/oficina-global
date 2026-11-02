@@ -12,11 +12,28 @@
 // voz rápida (Edge o Kokoro) o la del navegador: un clon tarda 14 a 28 s por la
 // primera frase (spike JST-323). Dónde queda lo elegido: `voces/eleccion.json`,
 // en el servidor, para que el celular, el computador y el TV suenen igual.
+//
+// 0.13.0 (issue #9): las 10 de Supertonic también leen al momento (~0,6 s por
+// frase). Y se elige con qué motores se graban las voces desde la oficina
+// («Preparar voces»): Supertonic (lo que viene listo), Kokoro, Edge y los clones.
 import { FRASES } from "./avisos.js";
-import { vozPorId, type VozId } from "./voces.js";
+import { VOCES, vozPorId, type Motor, type Voz, type VozId } from "./voces.js";
 
 /** Las que alcanzan a leer al momento. */
-export const VOCES_AL_MOMENTO: readonly VozId[] = ["lorenzo", "catalina", "alex", "dora", "santa"];
+export const VOCES_AL_MOMENTO: readonly VozId[] = ["lorenzo", "catalina", "alex", "dora", "santa", ...VOCES.filter((v) => v.motor === "supertonic").map((v) => v.id)];
+
+/** 0.13.0: los motores como se eligen en «Preparar voces» (Qwen3 y Chatterbox van juntos, como «los clones»). */
+export type GrupoMotor = "supertonic" | "kokoro" | "edge" | "clones";
+export const GRUPOS_MOTOR: readonly GrupoMotor[] = ["supertonic", "kokoro", "edge", "clones"];
+
+export function grupoDe(m: Motor): GrupoMotor {
+  return m === "qwen3" || m === "chatterbox" ? "clones" : m;
+}
+
+/** Las voces de esos motores, en el orden de siempre. */
+export function vocesDe(grupos: readonly GrupoMotor[]): readonly Voz[] {
+  return VOCES.filter((v) => grupos.includes(grupoDe(v.motor)));
+}
 
 /** Quién lee el Resumen o «Leer contexto»: una voz de la lista o la del navegador. */
 export type VozLectura = VozId | "navegador";
@@ -31,14 +48,34 @@ export interface EleccionVoces {
   originales: Record<string, { voz: VozId; corto: string; empresa: string }>;
   /** Los agentes a los que se les está grabando otra voz (si se apaga el worker, sigue al volver a abrir). */
   pendientes: Record<string, { voz: VozId; corto: string; empresa: string }>;
+  /** 0.13.0: con qué motores se graban las voces desde la oficina; `null` si todavía no se eligió (se preparan con `npm run voces`). */
+  motores: GrupoMotor[] | null;
+  /** 0.13.0: se prepararon desde la oficina, y las de los agentes nuevos (o con otro nombre) se graban solas. */
+  alDia: boolean;
 }
 
 /** Lo que queda al instalar (la elección del usuario en JST-324): Alex lee el Resumen y Dora, «Leer contexto». */
 export const RESUMEN_INICIAL: VozId = "alex";
 export const CONTEXTO_INICIAL: VozId = "dora";
+/** 0.13.0: con Supertonic y sin Kokoro, lo leen M1 y F1. */
+export const RESUMEN_SUPERTONIC: VozId = "supertonic-m1";
+export const CONTEXTO_SUPERTONIC: VozId = "supertonic-f1";
+
+/** Quién lee el Resumen y «Leer contexto» al instalar, según los motores elegidos (sin elegir, Alex y Dora, como hasta la 0.12). */
+export function inicialesPara(motores: readonly GrupoMotor[] | null): { resumen: VozId; contexto: VozId } {
+  if (motores && !motores.includes("kokoro") && motores.includes("supertonic")) return { resumen: RESUMEN_SUPERTONIC, contexto: CONTEXTO_SUPERTONIC };
+  return { resumen: RESUMEN_INICIAL, contexto: CONTEXTO_INICIAL };
+}
 
 export function eleccionInicial(): EleccionVoces {
-  return { version: 1, resumen: RESUMEN_INICIAL, contexto: CONTEXTO_INICIAL, originales: {}, pendientes: {} };
+  return { version: 1, resumen: RESUMEN_INICIAL, contexto: CONTEXTO_INICIAL, originales: {}, pendientes: {}, motores: null, alDia: false };
+}
+
+/** Los motores elegidos con la forma esperada (sin repetir, en el orden de siempre), o `null`. */
+export function leerMotores(x: unknown): GrupoMotor[] | null {
+  if (!Array.isArray(x)) return null;
+  const lista = GRUPOS_MOTOR.filter((g) => x.includes(g));
+  return lista.length > 0 ? lista : null;
 }
 
 /** La voz es una de las que leen al momento. */
@@ -66,6 +103,8 @@ export function leerEleccion(datos: unknown): EleccionVoces {
       if (texto(id, 80) && x && vozPorId(x.voz) && texto(x.corto, 200) && texto(x.empresa, 200)) e[campo][id] = { voz: x.voz as VozId, corto: x.corto as string, empresa: x.empresa as string };
     }
   }
+  e.motores = leerMotores(d.motores);
+  e.alDia = d.alDia === true && e.motores !== null;
   return e;
 }
 
@@ -76,13 +115,14 @@ export function vozDeContexto(e: EleccionVoces): VozLectura {
 
 /** Cambió algo respecto de lo que queda al instalar o de lo que tenía algún agente: aparece «Volver a como estaba». */
 export function hayCambios(e: EleccionVoces, agentes: Readonly<Record<string, VozId>> | null): boolean {
-  if (e.resumen !== RESUMEN_INICIAL || e.contexto !== CONTEXTO_INICIAL) return true;
+  const inicial = inicialesPara(e.motores);
+  if (e.resumen !== inicial.resumen || e.contexto !== inicial.contexto) return true;
   if (Object.keys(e.pendientes).length > 0) return true;
   return Object.entries(e.originales).some(([id, o]) => (agentes?.[id] ?? o.voz) !== o.voz);
 }
 
-/** El número de la página donde el usuario comparó las voces (JST-324): «Alex #20». */
-export const NUMERO_VOZ: Readonly<Record<VozId, number>> = {
+/** El número de la página donde el usuario comparó las voces (JST-324): «Alex #20». Las de Supertonic (0.13.0) no estaban. */
+export const NUMERO_VOZ: Readonly<Partial<Record<VozId, number>>> = {
   lorenzo: 1,
   catalina: 2,
   alex: 20,
@@ -111,7 +151,7 @@ export function porqueNoAlcanza(id: VozId): string | null {
 export function tardaGrabar(id: VozId): string {
   const v = vozPorId(id);
   if (!v) return "";
-  return v.motor === "chatterbox" || v.motor === "qwen3" ? "~10 min" : "~1 min";
+  return v.motor === "chatterbox" || v.motor === "qwen3" ? "~10 min" : v.motor === "supertonic" ? "~15 s" : "~1 min";
 }
 
 /**

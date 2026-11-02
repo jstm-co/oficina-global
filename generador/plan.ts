@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { FRASES, MOTIVOS_ERROR, MUESTRA_PREGUNTA, nombreCorto, TEXTO_MUESTRA, textoVoz, type Frase, type Presentacion } from "../src/avisos.js";
 import { textosAvisosJuntos } from "../src/eleccionVoces.js";
-import { claveAudio, VOCES, VOZ_RESUMEN, vozPorId, type Voz, type VozId } from "../src/voces.js";
+import { claveAudio, extensionDe, VOCES, VOZ_RESUMEN, vozPorId, type Voz, type VozId } from "../src/voces.js";
 import { VERSION_PRONUNCIACION } from "./pronunciar.js";
 
 export interface AgentePlan {
@@ -21,20 +21,24 @@ const sha1 = (t: string) => createHash("sha1").update(t).digest("hex");
  * del más antiguo al más nuevo, recibe una de las menos usadas, y entre esas
  * una al azar pero fija (por su id). Así se usan todas y, con los mismos
  * agentes, sale el mismo reparto en la copia y en la real.
+ *
+ * 0.13.0 (issue #9): los nuevos reciben solo voces de `entre` (las de los
+ * motores elegidos); quien ya tiene una de otro motor se queda con ella.
  */
-export function asignarVoces(previas: Readonly<Record<string, VozId>>, agentes: readonly AgentePlan[]): Record<string, VozId> {
+export function asignarVoces(previas: Readonly<Record<string, VozId>>, agentes: readonly AgentePlan[], entre: readonly Voz[] = VOCES): Record<string, VozId> {
   const asignadas: Record<string, VozId> = {};
-  const cuenta = new Map<VozId, number>(VOCES.map((v) => [v.id, 0]));
+  const cuenta = new Map<VozId, number>(entre.map((v) => [v.id, 0]));
   const vivos = new Set(agentes.map((a) => a.id));
   for (const [id, voz] of Object.entries(previas)) {
     if (!vivos.has(id) || !vozPorId(voz)) continue;
     asignadas[id] = voz;
-    cuenta.set(voz, cuenta.get(voz)! + 1);
+    if (cuenta.has(voz)) cuenta.set(voz, cuenta.get(voz)! + 1);
   }
   const nuevos = agentes.filter((a) => !asignadas[a.id]).sort((a, b) => a.creado.localeCompare(b.creado) || a.id.localeCompare(b.id));
+  if (cuenta.size === 0) return asignadas;
   for (const a of nuevos) {
     const menos = Math.min(...cuenta.values());
-    const candidatas = VOCES.filter((v) => cuenta.get(v.id) === menos).sort((x, y) => sha1(`${a.id}|${x.id}`).localeCompare(sha1(`${a.id}|${y.id}`)));
+    const candidatas = entre.filter((v) => cuenta.get(v.id) === menos).sort((x, y) => sha1(`${a.id}|${x.id}`).localeCompare(sha1(`${a.id}|${y.id}`)));
     const voz = candidatas[0]!.id;
     asignadas[a.id] = voz;
     cuenta.set(voz, menos + 1);
@@ -53,9 +57,9 @@ const ORDEN_FRASES: readonly Frase[] = ["toca", "error", "fin", "emp"];
 /** Las que se dicen con nombre; «Solo la frase» va aparte, una por voz. */
 const PRESENTACIONES: readonly Presentacion[] = ["nombre-empresa", "nombre"];
 
-/** El MP3 de una frase: cambia si cambia la voz, el texto o cómo se pronuncia. */
+/** El audio de una frase: cambia si cambia la voz, el texto o cómo se pronuncia. MP3, o WAV con Supertonic (0.13.0). */
 export function archivoDe(voz: VozId, texto: string): string {
-  return `${sha1(`v${VERSION_PRONUNCIACION}|${claveAudio(voz, texto)}`).slice(0, 20)}.mp3`;
+  return `${sha1(`v${VERSION_PRONUNCIACION}|${claveAudio(voz, texto)}`).slice(0, 20)}.${extensionDe(voz)}`;
 }
 
 /**
@@ -69,8 +73,11 @@ export function archivoDe(voz: VozId, texto: string): string {
  * 0.8.0 (JST-241): también la pregunta de «▶ Probar» con «Te necesito»
  * («¿Instalo la versión nueva ahora?»). Las frases con el nombre de una tarea
  * o con una pregunta de verdad no van aquí: las prepara el worker.
+ * 0.13.0 (issue #9): las sueltas, solo de las voces de `sueltas` (las de los
+ * motores elegidos), y los resúmenes hasta `totalAgentes` (el worker no recibe
+ * siempre a todos los agentes: solo los que ve quien abre la oficina).
  */
-export function plan(agentes: readonly AgentePlan[], voces: Readonly<Record<string, VozId>>, vozResumen: VozId = VOZ_RESUMEN): Trabajo[] {
+export function plan(agentes: readonly AgentePlan[], voces: Readonly<Record<string, VozId>>, vozResumen: VozId = VOZ_RESUMEN, sueltas: readonly Voz[] = VOCES, totalAgentes = agentes.length): Trabajo[] {
   const lista: Trabajo[] = [];
   const vistas = new Set<string>();
   const poner = (voz: Voz, texto: string) => {
@@ -85,12 +92,12 @@ export function plan(agentes: readonly AgentePlan[], voces: Readonly<Record<stri
     for (const f of ORDEN_FRASES) for (const p of PRESENTACIONES) poner(voz, textoVoz(nombreCorto(a.nombre), a.empresa, f, p));
     for (const motivo of MOTIVOS_ERROR) for (const p of PRESENTACIONES) poner(voz, textoVoz(nombreCorto(a.nombre), a.empresa, "error", p, { motivo }));
   }
-  for (const voz of VOCES) for (const f of ORDEN_FRASES) poner(voz, textoVoz("", "", f, "frase"));
-  for (const voz of VOCES) for (const motivo of MOTIVOS_ERROR) poner(voz, textoVoz("", "", "error", "frase", { motivo }));
-  for (const voz of VOCES) poner(voz, TEXTO_MUESTRA);
-  for (const voz of VOCES) poner(voz, MUESTRA_PREGUNTA);
+  for (const voz of sueltas) for (const f of ORDEN_FRASES) poner(voz, textoVoz("", "", f, "frase"));
+  for (const voz of sueltas) for (const motivo of MOTIVOS_ERROR) poner(voz, textoVoz("", "", "error", "frase", { motivo }));
+  for (const voz of sueltas) poner(voz, TEXTO_MUESTRA);
+  for (const voz of sueltas) poner(voz, MUESTRA_PREGUNTA);
   const resumen = vozPorId(vozResumen)!;
-  for (const f of ORDEN_FRASES) for (let n = 2; n <= Math.max(2, agentes.length); n++) poner(resumen, `${FRASES[f].resumen(n)}.`);
+  for (const f of ORDEN_FRASES) for (let n = 2; n <= Math.max(2, totalAgentes); n++) poner(resumen, `${FRASES[f].resumen(n)}.`);
   return lista;
 }
 

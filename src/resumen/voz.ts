@@ -81,10 +81,10 @@ export interface PedidoResumen {
   frases: string[];
 }
 
-/** La voz del resumen es una rápida (Edge o Kokoro); si no, `null`. */
+/** La voz del resumen es una rápida (Edge, Kokoro o, desde la 0.13.0, Supertonic); si no, `null`. */
 export function vozParaResumen(id: unknown): VozId | null {
   const v = vozPorId(id);
-  return v && (v.motor === "edge" || v.motor === "kokoro") ? v.id : null;
+  return v && (v.motor === "edge" || v.motor === "kokoro" || v.motor === "supertonic") ? v.id : null;
 }
 
 /** El pedido como llega a la acción, revisado (`null`: no se entiende). Las frases que no sirven quedan, para responder «no» en su lugar. */
