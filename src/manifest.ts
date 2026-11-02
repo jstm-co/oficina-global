@@ -75,12 +75,17 @@ import { PAGE_ROUTE, PLUGIN_KEY } from "./shared.js";
 // fuera de Chrome los menús llaman «IA del computador» a la IA de la página y
 // se le piden menos finales por pedido; la revisión bota lo que copia el
 // ejemplo, y el panel «Voces» avisa si en ese Paperclip faltan los audios.
+//
+// La 0.13.0 (issue #9) tampoco: «Preparar voces» y las voces al día usan otra
+// acción del worker (`voz-al-dia`); los audios quedan en una carpeta de datos
+// del usuario, fuera del plugin, y se publican en `dist/ui/voces/`; Supertonic
+// corre en el worker con `sherpa-onnx-node` (dependencia opcional).
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_KEY,
   apiVersion: 1,
-  version: "0.12.1",
+  version: "0.13.0",
   displayName: "Oficina global",
-  description: "Oficina pixel con los agentes de todas las empresas: quién trabaja, quién te necesita (hace fila frente a tu escritorio), con error, en pausa o libre. Responde tarjetas sin salir, con avisos y 9 voces. Caminan, se entregan las tareas en la mesa, conversan en el descanso (en Chrome, la IA de Chrome escribe cómo terminan) y las mascotas responden al clic. Un rótulo dice de qué se trata cada tarea. «Resumen» te lee lo que se hizo, lo que te toca, en qué trabajan y lo que está en cola.",
+  description: "Oficina pixel con los agentes de todas las empresas: quién trabaja, quién te necesita (hace fila frente a tu escritorio), con error, en pausa o libre. Responde tarjetas sin salir, con avisos y voces. Caminan, se entregan las tareas en la mesa, conversan en el descanso (en Chrome, la IA de Chrome escribe cómo terminan) y las mascotas responden al clic. Un rótulo dice de qué se trata cada tarea. «Resumen» te lee lo que se hizo, lo que te toca, en qué trabajan y lo que está en cola.",
   author: "JSTM",
   categories: ["ui"],
   capabilities: ["ui.page.register", "ui.sidebar.register", "ui.dashboardWidget.register", "ui.action.register"],
