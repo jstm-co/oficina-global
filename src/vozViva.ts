@@ -50,6 +50,17 @@
 //   clon espera a que la Mac esté libre, sin fallar. Y `calentar` abre el motor
 //   de la voz elegida antes de leer (el Resumen y «Leer contexto» esperan menos).
 //
+// - 0.13.0 (issue #9): «Preparar voces» desde la oficina, sin `npm run voces`
+//   (`alDia`). La página manda los agentes que ve; el worker baja los modelos
+//   que falten (Supertonic y Kokoro, una vez), le da voz a los nuevos (de los
+//   motores elegidos) y graba lo que falta en segundo plano, después de todo lo
+//   demás de su fila. Desde ahí, cada vez que la página ve un agente nuevo o con
+//   otro nombre, se graba solo. Supertonic tiene su propia fila y corre con el
+//   mismo Node (sin `uv` ni ffmpeg): cada motor se mira por separado.
+// - 0.13.0: los audios viven fuera de la carpeta del plugin (`almacen`, ver
+//   `src/almacenVoces.ts`) y se publican en `dist/ui/voces/`, de donde los sirve
+//   Paperclip: una actualización desde npm ya no se los lleva.
+//
 // No lee ni escribe nada en Paperclip.
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -57,11 +68,12 @@ import { cpus, homedir, loadavg, setPriority, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { LETRAS_PIDE, MAX_MAS, TIPOS_PIDE, tareaParaVoz, textoVoz, type Frase, type PideVoz, type Presentacion } from "./avisos.js";
-import { comando, convertir, datosDeVoz, hayModeloKokoro, maximoAudioMs, problemaCon, PRUEBA_FFMPEG } from "../generador/motores.js";
-import { trabajosAvisosJuntos, trabajosDeAgente } from "../generador/plan.js";
+import { bajarModelo, comandoMotor, datosDeVoz, dejarListo, hayModelo, maximoAudioMs, MODELO_KOKORO, MODELO_SUPERTONIC, motorSupertonic, pesoModelo, problemaCon, PRUEBA_FFMPEG, type Modelo } from "../generador/motores.js";
+import { asignarVoces, plan as planVoces, trabajosAvisosJuntos, trabajosDeAgente, type AgentePlan } from "../generador/plan.js";
 import { paraDecir } from "../generador/pronunciar.js";
-import { esAlMomento, esVozLectura, hayCambios, leerEleccion, RESUMEN_INICIAL, type EleccionVoces, type GrabandoVoz } from "./eleccionVoces.js";
-import { archivoVivo, CARPETA_VIVO, claveAudio, duracionMp3, leerIndice, vozPorId, type IndiceVoces, type Motor, type VozId } from "./voces.js";
+import { despublicar as sacarPublico, prepararAlmacen, publicar as ponerPublico } from "./almacenVoces.js";
+import { esAlMomento, esVozLectura, GRUPOS_MOTOR, grupoDe, hayCambios, inicialesPara, leerEleccion, leerMotores, vocesDe, type EleccionVoces, type GrabandoVoz, type GrupoMotor } from "./eleccionVoces.js";
+import { archivoVivo, CARPETA_VIVO, claveAudio, duracionAudio, leerIndice, motorDe, vozPorId, type IndiceVoces, type Motor, type VozId } from "./voces.js";
 import { textoOficina, validarPedidoOficina, VOCES_MASCOTA } from "./vozOficina.js";
 import { CupoResumen, fraseResumenValida, leerPedidoResumen } from "./resumen/voz.js";
 
@@ -90,7 +102,7 @@ export const PAUSA_CLONES_MS = 5 * 60_000;
  * Un motor sin trabajo se cierra a los 10 min (JST-325, punto 3 del spike de JST-323: con el motor ya abierto la primera
  * frase del Resumen baja de 3–5 s a 2–3,5 s; antes se cerraba a los 2 min y casi cada lectura empezaba en frío).
  */
-const INACTIVO_MS: Record<Fila, number> = { edge: 10 * 60_000, kokoro: 10 * 60_000, clon: 10 * 60_000 };
+const INACTIVO_MS: Record<Fila, number> = { edge: 10 * 60_000, kokoro: 10 * 60_000, clon: 10 * 60_000, supertonic: 10 * 60_000 };
 /** Si falla una frase de las que se graban al cambiar una voz, se vuelve a probar a los 30 s (hasta 3 veces); un clon que espera a la Mac, a los 60 s. */
 const REINTENTO_MS = 30_000;
 const REINTENTO_CLON_MS = 60_000;
@@ -148,8 +160,27 @@ export function textoPedido(p: PedidoVoz): string | null {
   return tareaParaVoz(p.tarea) ? textoVoz(p.corto, p.empresa, p.frase, p.presentacion, { tarea: p.tarea }) : null;
 }
 
-export type Fila = "edge" | "kokoro" | "clon";
-export const filaDe = (m: Motor): Fila => (m === "edge" || m === "kokoro" ? m : "clon");
+export type Fila = "edge" | "kokoro" | "clon" | "supertonic";
+export const FILAS: readonly Fila[] = ["edge", "kokoro", "clon", "supertonic"];
+export const filaDe = (m: Motor): Fila => (m === "edge" || m === "kokoro" || m === "supertonic" ? m : "clon");
+
+/** 0.13.0: como mucho, los agentes que la página manda para preparar sus voces. */
+export const MAX_AGENTES = 500;
+
+/** 0.13.0: los agentes que manda la página (los que ve quien abre la oficina) con la forma esperada y dentro de los topes, o `null`. */
+export function validarAgentes(x: unknown): AgentePlan[] | null {
+  if (!Array.isArray(x) || x.length > MAX_AGENTES) return null;
+  const lista: AgentePlan[] = [];
+  const vistos = new Set<string>();
+  for (const a of x as Array<Partial<Record<"id" | "nombre" | "empresa", unknown>> | null>) {
+    if (!a || typeof a !== "object" || !corto(a.id, 80) || !corto(a.nombre, LETRAS_NOMBRE) || !corto(a.empresa, LETRAS_NOMBRE)) return null;
+    if (vistos.has(a.id as string)) continue;
+    vistos.add(a.id as string);
+    // Sin fecha: los nuevos eligen por su id (el reparto sigue siendo el mismo con los mismos agentes).
+    lista.push({ id: a.id as string, nombre: a.nombre as string, empresa: a.empresa as string, creado: "" });
+  }
+  return lista;
+}
 
 /** La voz de un trabajo: una de las 9, o la de una mascota (0.6.0), que es una de Edge más aguda. */
 export interface VozTrabajo {
@@ -169,6 +200,8 @@ export interface TrabajoVoz {
   delante?: boolean;
   /** 0.11.0: el grupo de frases de una voz nueva al que pertenece (van en la carpeta de las voces, no en `vivo/`). */
   grupo?: string;
+  /** 0.13.0: de «Preparar voces» (va en la carpeta de las voces, con su clave del índice): después de todo lo demás de su fila. */
+  preparar?: string;
 }
 
 /**
@@ -179,17 +212,53 @@ export interface TrabajoVoz {
 export type Generar = (t: TrabajoVoz, destino: string, cortar: AbortSignal) => Promise<void>;
 
 export interface EstadoVoz {
+  /** Se pueden preparar frases al momento (con algún motor). */
   disponible: boolean;
   /** Por qué no: «falta uv (no está en el PATH)», «ffmpeg no funciona: dyld…». */
   motivo: string | null;
 }
 
+/** 0.13.0: cómo va «Preparar voces». */
+export interface EstadoPreparar {
+  fase: "nada" | "bajando" | "grabando" | "listo" | "error";
+  /** Bajando: qué modelo y cuánto lleva (bytes). */
+  modelo: string | null;
+  bajado: number;
+  pesa: number;
+  /** Grabando: las frases que faltaban al empezar, cuántas ya están y cuántas fallaron. */
+  hechas: number;
+  total: number;
+  fallas: number;
+  /** Frases de agentes con una voz de un motor que no se eligió o no se puede usar aquí (se dicen con la del navegador). */
+  sinMotor: number;
+  motivo: string | null;
+}
+
+/** 0.13.0: lo que el panel «Voces» necesita para «Preparar voces». */
+export interface EstadoMotores {
+  /** Por qué no se puede usar cada motor en este computador (`null`: se puede; a Supertonic y Kokoro les puede faltar bajar el modelo). */
+  motores: Record<GrupoMotor, string | null>;
+  /** Lo que pesa el modelo que falta bajar (bytes), o 0 si ya está. */
+  porBajar: Record<"supertonic" | "kokoro", number>;
+  preparar: EstadoPreparar;
+}
+
 export interface OpcionesPreparador {
   /** La carpeta del plugin (la de `package.json`). */
   raiz: string;
+  /**
+   * 0.13.0: dónde se guardan los audios (fuera del plugin, `carpetaAlmacen`); se publican en `dist/ui/voces/`.
+   * Sin esto, se guardan directo en `dist/ui/voces/` (como hasta la 0.12, y en las pruebas).
+   */
+  almacen?: string;
   generar?: Generar;
   /** Revisa `uv` y `ffmpeg` (`null` si arrancan). */
   revisar?: () => string | null;
+  /** 0.13.0: revisa que el motor de Supertonic arranque (`null` si arranca). */
+  revisarSupertonic?: () => string | null;
+  /** 0.13.0: si un modelo está bajado, y cómo se baja (en las pruebas, de mentira). */
+  hayModelo?: (m: Modelo) => boolean;
+  bajar?: (m: Modelo, alAvanzar: (bytes: number, total: number) => void) => Promise<void>;
   /** Se puede empezar un clon ahora (swap y carga de la Mac). */
   clonesOk?: () => boolean;
   /** 0.11.0: abre el motor de una voz para que la primera frase no tenga que esperarlo (las pruebas no abren ninguno). */
@@ -251,14 +320,29 @@ export interface ResultadoElegir {
 export type EstadoFrase = "lista" | "fila" | "no";
 
 export class PreparadorVoces {
+  /** Donde se guardan los audios (0.13.0: fuera del plugin) y donde los sirve Paperclip (`dist/ui/voces/`). */
   private readonly dirVoces: string;
-  private readonly filas: Record<Fila, TrabajoVoz[]> = { edge: [], kokoro: [], clon: [] };
-  private readonly corriendo: Record<Fila, boolean> = { edge: false, kokoro: false, clon: false };
+  private readonly publico: string;
+  private readonly filas: Record<Fila, TrabajoVoz[]> = { edge: [], kokoro: [], clon: [], supertonic: [] };
+  private readonly corriendo: Record<Fila, boolean> = { edge: false, kokoro: false, clon: false, supertonic: false };
   /** Pedidos o en la fila: cada voz y texto, una vez. */
   private readonly enCurso = new Set<string>();
   private problema: { motivo: string | null; en: number } | null = null;
+  private problemaSt: { motivo: string | null; en: number } | null = null;
   private readonly generar: Generar;
   private readonly revisarProgramas: () => string | null;
+  private readonly revisarSupertonic: () => string | null;
+  private readonly hayModelo: (m: Modelo) => boolean;
+  private readonly bajar: (m: Modelo, alAvanzar: (bytes: number, total: number) => void) => Promise<void>;
+  /** 0.13.0: «Preparar voces»: cómo va, los agentes que mandó la página y lo grabado que falta anotar en el índice. */
+  private prep: EstadoPreparar = { fase: "nada", modelo: null, bajado: 0, pesa: 0, hechas: 0, total: 0, fallas: 0, sinMotor: 0, motivo: null };
+  private agentesVistos = new Map<string, AgentePlan>();
+  private preparando: Promise<void> | null = null;
+  private otraVez = false;
+  private porAnotar = new Map<string, string>();
+  /** Lo de «Preparar voces» que todavía no termina (está en una fila o se está grabando). */
+  private pendientesPrep = new Set<string>();
+  private anotarLuego: ReturnType<typeof setTimeout> | null = null;
   private readonly clonesOk: () => boolean;
   private readonly clonSigue: () => boolean;
   /** Hasta cuándo no se empiezan clones (después de cortar uno por la carga). */
@@ -279,12 +363,24 @@ export class PreparadorVoces {
   saltados = 0;
 
   constructor(o: OpcionesPreparador) {
-    this.dirVoces = join(o.raiz, "dist", "ui", "voces");
+    this.publico = join(o.raiz, "dist", "ui", "voces");
+    this.dirVoces = o.almacen ?? this.publico;
     this.ahora = o.ahora ?? Date.now;
     this.log = o.log ?? (() => undefined);
+    if (this.dirVoces !== this.publico) {
+      try {
+        const r = prepararAlmacen(this.dirVoces, this.publico);
+        this.log("voces: audios publicados", { almacen: this.dirVoces, ...r });
+      } catch (e) {
+        this.log("voces: no se pudieron publicar los audios", { error: (e as Error).message.slice(0, 300) });
+      }
+    }
     this.motores = new Motores(o.raiz, this.log);
     this.generar = o.generar ?? ((t, destino, cortar) => this.motores.generar(t, destino, cortar));
     this.revisarProgramas = o.revisar ?? (() => problemaCon("uv", ["--version"], entorno()) ?? problemaCon("ffmpeg", PRUEBA_FFMPEG, entorno()));
+    this.revisarSupertonic = o.revisarSupertonic ?? (() => problemaSupertonic(o.raiz));
+    this.hayModelo = o.hayModelo ?? hayModelo;
+    this.bajar = o.bajar ?? ((m, alAvanzar) => bajarModelo(m, alAvanzar));
     this.clonesOk = o.clonesOk ?? (() => clonesSeguros());
     this.clonSigue = o.clonSigue ?? (() => clonSigue(loadavg()[0]!, nucleosDelMotor(this.motores.pid("clon")), cpus().length, swapLibreMb()));
     this.cupoResumen = new CupoResumen(this.ahora);
@@ -296,15 +392,40 @@ export class PreparadorVoces {
     }
   }
 
-  /** Si hay `uv` y `ffmpeg` (se mira al empezar y, si faltan, de nuevo cada 5 min). */
-  estado(): EstadoVoz {
+  /** Si hay `uv` y `ffmpeg` (se mira al empezar y, si faltan, de nuevo cada 5 min): Edge, Kokoro y los clones. */
+  private problemaPython(): string | null {
     const t = this.ahora();
     if (!this.problema || (this.problema.motivo && t - this.problema.en >= REVISAR_MS)) {
       const motivo = this.revisarProgramas();
       this.problema = { motivo, en: t };
       if (motivo) this.log("voces: no disponible", { motivo });
     }
-    return { disponible: !this.problema.motivo, motivo: this.problema.motivo };
+    return this.problema.motivo;
+  }
+
+  /** 0.13.0: si el motor de Supertonic arranca (sherpa-onnx-node para este sistema); se mira igual que `uv`. */
+  private problemaSupertonic(): string | null {
+    const t = this.ahora();
+    if (!this.problemaSt || (this.problemaSt.motivo && t - this.problemaSt.en >= REVISAR_MS)) {
+      const motivo = this.revisarSupertonic();
+      this.problemaSt = { motivo, en: t };
+      if (motivo) this.log("voces: Supertonic no disponible", { motivo });
+    }
+    return this.problemaSt.motivo;
+  }
+
+  /** 0.13.0: ese motor puede grabar ahora (con su modelo bajado, si lleva uno). */
+  motorListo(m: Motor): boolean {
+    if (m === "supertonic") return !this.problemaSupertonic() && this.hayModelo(MODELO_SUPERTONIC);
+    if (this.problemaPython()) return false;
+    return m !== "kokoro" || this.hayModelo(MODELO_KOKORO);
+  }
+
+  /** Si se pueden preparar frases al momento con algún motor (con `uv` y `ffmpeg`, o con Supertonic ya bajado). */
+  estado(): EstadoVoz {
+    const python = this.problemaPython();
+    if (!python) return { disponible: true, motivo: null };
+    return this.motorListo("supertonic") ? { disponible: true, motivo: null } : { disponible: false, motivo: python };
   }
 
   private indice(): IndiceVoces | null {
@@ -343,20 +464,24 @@ export class PreparadorVoces {
     }
     // Antes se descartaban sin dejar rastro (JST-195).
     if (raros > 0) this.log("voces: pedidos que no se entienden (forma o topes)", { raros });
-    for (const f of ["edge", "kokoro", "clon"] as const) void this.correr(f);
+    for (const f of FILAS) void this.correr(f);
     return r;
   }
 
-  /** Pone una frase en su fila si falta (cada voz y texto, una vez). `delante`: antes de lo que no va delante. */
-  private encolar(voz: VozTrabajo, texto: string, delante: boolean, destino?: { archivo: string; grupo: string }): EstadoFrase {
+  /**
+   * Pone una frase en su fila si falta (cada voz y texto, una vez). `delante`: antes de lo que no va delante. Lo de
+   * «Preparar voces» (0.13.0) va al final, después de todo lo demás: las frases al momento no lo esperan.
+   */
+  private encolar(voz: VozTrabajo, texto: string, delante: boolean, destino?: { archivo: string; grupo?: string; preparar?: string }): EstadoFrase {
     const archivo = destino?.archivo ?? archivoVivo(voz.id, texto);
     if (existsSync(join(this.dirVoces, archivo))) return "lista";
     if (this.enCurso.has(archivo)) return "fila";
-    if (voz.motor === "kokoro" && !hayModeloKokoro()) return "no";
+    if (!this.motorListo(voz.motor)) return "no";
     this.enCurso.add(archivo);
     const fila = this.filas[filaDe(voz.motor)];
-    const i = delante ? fila.findIndex((t) => !t.delante) : -1;
-    fila.splice(i < 0 ? fila.length : i, 0, { voz, texto, archivo, delante, ...(destino ? { grupo: destino.grupo } : {}) });
+    const preparar = destino?.preparar;
+    const i = delante ? fila.findIndex((t) => !t.delante) : preparar ? -1 : fila.findIndex((t) => !!t.preparar);
+    fila.splice(i < 0 ? fila.length : i, 0, { voz, texto, archivo, delante, ...(destino?.grupo ? { grupo: destino.grupo } : {}), ...(preparar ? { preparar } : {}) });
     return "fila";
   }
 
@@ -435,7 +560,7 @@ export class PreparadorVoces {
       return this.encolar(t.voz, t.texto, false);
     });
     if (raros > 0) this.log("voces: frases de la oficina que no son del plugin", { raros });
-    for (const f of ["edge", "kokoro", "clon"] as const) void this.correr(f);
+    for (const f of FILAS) void this.correr(f);
     return r;
   }
 
@@ -490,7 +615,7 @@ export class PreparadorVoces {
     });
     const malas = archivos.filter((a) => !a).length;
     if (malas > 0) this.log("voces: frases del resumen que no pasan sus reglas", { malas });
-    for (const f of ["edge", "kokoro"] as const) void this.correr(f);
+    for (const f of ["edge", "kokoro", "supertonic"] as const) void this.correr(f);
     const mirar = (): EstadoFrase[] => archivos.map((a) => (!a ? "no" : existsSync(join(this.dirVoces, a)) ? "lista" : this.enCurso.has(a) ? "fila" : "no"));
     const fin = Date.now() + Math.min(ms, ESPERA_OFICINA_MAX_MS);
     while (Date.now() < fin && estados[0] === "fila") {
@@ -511,6 +636,7 @@ export class PreparadorVoces {
           this.log("voces: sin clones ahora (poco swap o mucha carga)", { voz: t.voz.id });
           this.enCurso.delete(t.archivo);
           this.trabajoTerminado(t, "sin-mac");
+          if (t.preparar) this.preparada(t, false);
           continue;
         }
         const control = new AbortController();
@@ -524,8 +650,10 @@ export class PreparadorVoces {
           const ms = this.duracion(t.archivo);
           if (this.botarSiLargo(t.archivo, t.voz.motor, t.texto, ms)) this.saltados += 1;
           else {
-            // Las frases de una voz nueva (0.11.0) no son de `vivo/`: no entran a `vivo.json` ni se borran a los 7 días.
-            if (!t.grupo) this.anotar(t, ms);
+            this.publicar(t.archivo);
+            // Las frases de una voz nueva (0.11.0) y las de «Preparar voces» (0.13.0) no son de `vivo/`: no entran a
+            // `vivo.json` ni se borran a los 7 días.
+            if (!t.grupo && !t.preparar) this.anotar(t, ms);
             this.hechos += 1;
             resultado = "ok";
           }
@@ -541,6 +669,7 @@ export class PreparadorVoces {
           this.enCurso.delete(t.archivo);
         }
         this.trabajoTerminado(t, resultado);
+        if (t.preparar) this.preparada(t, resultado === "ok");
       }
     } finally {
       this.corriendo[fila] = false;
@@ -567,12 +696,34 @@ export class PreparadorVoces {
     const ruta = join(this.dirVoces, "eleccion.json");
     writeFileSync(`${ruta}.parcial`, JSON.stringify(e));
     renameSync(`${ruta}.parcial`, ruta);
+    this.publicar("eleccion.json");
   }
 
   private guardarIndice(i: IndiceVoces): void {
+    mkdirSync(this.dirVoces, { recursive: true });
     const ruta = join(this.dirVoces, "indice.json");
     writeFileSync(`${ruta}.parcial`, JSON.stringify({ ...i, generado: new Date(this.ahora()).toISOString() }));
     renameSync(`${ruta}.parcial`, ruta);
+    this.publicar("indice.json");
+  }
+
+  /** 0.13.0: lo que se escribió en el almacén queda donde lo sirve Paperclip (si son la misma carpeta, no hace nada). */
+  private publicar(rel: string): void {
+    if (this.dirVoces === this.publico) return;
+    try {
+      ponerPublico(this.dirVoces, this.publico, rel);
+    } catch (e) {
+      this.log("voces: no se pudo publicar un audio", { archivo: rel, error: (e as Error).message.slice(0, 300) });
+    }
+  }
+
+  private despublicar(rel: string): void {
+    if (this.dirVoces === this.publico) return;
+    try {
+      sacarPublico(this.publico, rel);
+    } catch {
+      // Ya no estaba.
+    }
   }
 
   /**
@@ -614,8 +765,8 @@ export class PreparadorVoces {
     if (ya && ya.voz === voz && !ya.error) return { ok: true, eleccion: e };
     const agente = { id: agenteId, nombre: p.corto as string, empresa: p.empresa as string };
     const trabajos = trabajosDeAgente(agente, voz).map((t) => ({ voz: t.voz as VozTrabajo, texto: t.texto, archivo: t.archivo }));
-    // Sin `uv` o `ffmpeg` solo se pueden elegir las voces que ese agente ya tiene grabadas.
-    if (!this.estado().disponible && trabajos.some((t) => !existsSync(join(this.dirVoces, t.archivo)))) return mal("sin-mac");
+    // Si su motor no se puede usar aquí (sin `uv` o `ffmpeg`, o Supertonic sin bajar), solo las que ya tiene grabadas.
+    if (!this.motorListo(motorDe(voz)) && trabajos.some((t) => !existsSync(join(this.dirVoces, t.archivo)))) return mal("sin-mac");
     if (ya) this.quitarGrupo(ya);
     if (!e.originales[agenteId]) e.originales[agenteId] = { voz: actual, corto: p.corto as string, empresa: p.empresa as string };
     e.pendientes[agenteId] = { voz, corto: p.corto as string, empresa: p.empresa as string };
@@ -628,7 +779,8 @@ export class PreparadorVoces {
   /** «Volver a como estaba»: Alex, Dora y cada agente con la voz que tenía. */
   reiniciar(): ResultadoElegir {
     const antes = this.eleccion();
-    const e = { ...antes, resumen: RESUMEN_INICIAL as EleccionVoces["resumen"], contexto: "dora" as EleccionVoces["contexto"] };
+    const inicial = inicialesPara(antes.motores);
+    const e: EleccionVoces = { ...antes, resumen: inicial.resumen, contexto: inicial.contexto };
     this.guardarEleccion(e);
     this.alinearResumen();
     let ok = true;
@@ -670,7 +822,7 @@ export class PreparadorVoces {
     }
     if (ya && ya.voz === e.resumen && !ya.error) return;
     if (ya) this.quitarGrupo(ya);
-    if (!this.estado().disponible) return;
+    if (!this.motorListo(motorDe(e.resumen))) return;
     const trabajos = trabajosAvisosJuntos(Object.keys(indice.agentes).length, e.resumen).map((t) => ({ voz: t.voz as VozTrabajo, texto: t.texto, archivo: t.archivo }));
     this.grupos.push({ id: "resumen", quien: "resumen", agenteId: null, voz: e.resumen, anterior: indice.resumen, trabajos, nuevos: this.faltan(trabajos), intentos: new Map(), error: false, esperaMac: false, arrancado: false });
     this.avanzar();
@@ -684,7 +836,7 @@ export class PreparadorVoces {
   /** Saca un grupo (se canceló): lo que no empezó sale de las filas. */
   private quitarGrupo(g: GrupoVoz): void {
     this.grupos = this.grupos.filter((x) => x !== g);
-    for (const f of ["edge", "kokoro", "clon"] as const) {
+    for (const f of FILAS) {
       this.filas[f] = this.filas[f].filter((t) => {
         if (t.grupo !== g.id) return true;
         this.enCurso.delete(t.archivo);
@@ -712,7 +864,7 @@ export class PreparadorVoces {
           }
         }
         if (g.error) continue;
-        for (const f of ["edge", "kokoro", "clon"] as const) void this.correr(f);
+        for (const f of FILAS) void this.correr(f);
       }
       if (!g.trabajos.every((t) => existsSync(join(this.dirVoces, t.archivo)))) return;
       this.confirmar(g);
@@ -765,9 +917,170 @@ export class PreparadorVoces {
       if (!g) return;
       g.esperaMac = false;
       for (const t of g.trabajos) if ((g.intentos.get(t.archivo) ?? 0) < INTENTOS_GRUPO) this.encolar(t.voz, t.texto, false, { archivo: t.archivo, grupo: g.id });
-      for (const f of ["edge", "kokoro", "clon"] as const) void this.correr(f);
+      for (const f of FILAS) void this.correr(f);
     }, ms);
     this.reintento.unref?.();
+  }
+
+  // -------------------------------------------------------------------------
+  // «Preparar voces» desde la oficina (0.13.0, issue #9)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Lo que manda la página: con `empezar` (el botón «Preparar voces»), los
+   * motores elegidos, que quedan en `eleccion.json` junto con «al día»; y
+   * siempre, los agentes que ve. Si las voces están al día, baja lo que falte y
+   * graba en segundo plano lo de los agentes nuevos o con otro nombre. Responde
+   * al tiro, con cómo va (el panel lo vuelve a preguntar con `voz-estado`).
+   */
+  alDia(x: unknown): { ok: boolean; motivo?: "pedido"; eleccion: EleccionVoces } & EstadoMotores {
+    const p = (x && typeof x === "object" ? x : {}) as { agentes?: unknown; motores?: unknown; empezar?: unknown };
+    const e = this.eleccion();
+    const lista = validarAgentes(p.agentes ?? []);
+    const motores = p.empezar === true ? leerMotores(p.motores) : null;
+    if (!lista || (p.empezar === true && !motores)) {
+      if (!lista) this.log("voces: agentes que no se entienden (forma o topes)", {});
+      return { ok: false, motivo: "pedido", eleccion: e, ...this.estadoMotores() };
+    }
+    if (motores) {
+      e.motores = motores;
+      e.alDia = true;
+      // Quien lee el Resumen o «Leer contexto» con un motor que no se eligió pasa a uno de los elegidos.
+      const inicial = inicialesPara(motores);
+      if (e.resumen !== "navegador" && !motores.includes(grupoDe(motorDe(e.resumen)))) e.resumen = inicial.resumen;
+      if (e.contexto !== "navegador" && e.contexto !== "igual" && !motores.includes(grupoDe(motorDe(e.contexto)))) e.contexto = inicial.contexto;
+      this.guardarEleccion(e);
+      if (this.prep.fase === "error" || this.prep.fase === "listo") this.prep = { ...this.prep, fase: "nada", motivo: null };
+    }
+    for (const a of lista) this.agentesVistos.set(a.id, a);
+    if (e.alDia && e.motores) void this.prepararTodo();
+    return { ok: true, eleccion: e, ...this.estadoMotores() };
+  }
+
+  /** Una pasada a la vez: si llega otro pedido mientras tanto, se hace otra al terminar. */
+  private prepararTodo(): Promise<void> {
+    if (this.preparando) {
+      this.otraVez = true;
+      return this.preparando;
+    }
+    this.preparando = this.unaPasada()
+      .catch((err: unknown) => {
+        this.prep = { ...this.prep, fase: "error", motivo: (err as Error).message.slice(0, 300) };
+        this.log("voces: no se pudieron preparar", { error: (err as Error).message.slice(0, 300) });
+      })
+      .finally(() => {
+        this.preparando = null;
+        if (this.otraVez) {
+          this.otraVez = false;
+          void this.prepararTodo();
+        }
+      });
+    return this.preparando;
+  }
+
+  private async unaPasada(): Promise<void> {
+    const e = this.eleccion();
+    const elegidos = e.motores;
+    if (!e.alDia || !elegidos) return;
+    // 1. Los modelos que falten (una vez): Supertonic (145 MB) y Kokoro (354 MB).
+    for (const [grupo, modelo] of [["supertonic", MODELO_SUPERTONIC], ["kokoro", MODELO_KOKORO]] as const) {
+      if (!elegidos.includes(grupo) || this.hayModelo(modelo)) continue;
+      // Sin con qué correrlo, no se baja.
+      if (grupo === "supertonic" ? this.problemaSupertonic() : this.problemaPython()) continue;
+      this.prep = { ...this.prep, fase: "bajando", modelo: modelo.nombre, bajado: 0, pesa: pesoModelo(modelo), motivo: null };
+      this.log("voces: bajando un modelo", { modelo: modelo.nombre, mb: Math.round(pesoModelo(modelo) / 1e6) });
+      try {
+        await this.bajar(modelo, (bajado, pesa) => (this.prep = { ...this.prep, bajado, pesa }));
+      } catch (err) {
+        this.prep = { ...this.prep, fase: "error", motivo: `No se pudo bajar ${modelo.nombre}: ${(err as Error).message.slice(0, 200)}` };
+        this.log("voces: no se pudo bajar un modelo", { modelo: modelo.nombre, error: (err as Error).message.slice(0, 300) });
+        return;
+      }
+    }
+    // 2. A los nuevos, una voz de los motores elegidos que se pueden usar aquí; quien ya tiene una se queda con ella.
+    const listos = elegidos.filter((g) => vocesDe([g]).some((v) => this.motorListo(v.motor)));
+    if (listos.length === 0) {
+      this.prep = { ...this.prep, fase: "error", motivo: GRUPOS_MOTOR.filter((g) => elegidos.includes(g)).map((g) => this.porQueNo(g)).filter(Boolean)[0] ?? "Ningún motor elegido se puede usar en este computador" };
+      return;
+    }
+    const candidatas = vocesDe(listos);
+    const previo = this.indice();
+    const indice: IndiceVoces = previo ?? { version: 1, generado: "", resumen: candidatas.some((v) => v.id === e.resumen) ? (e.resumen as VozId) : inicialesPara(listos).resumen, agentes: {}, audios: {} };
+    const agentes = [...this.agentesVistos.values()];
+    const nuevas = asignarVoces(indice.agentes, agentes, candidatas);
+    let cambio = !previo || Object.entries(nuevas).some(([id, v]) => indice.agentes[id] !== v);
+    indice.agentes = { ...indice.agentes, ...nuevas };
+    // 3. Las frases de los agentes que se ven, las sueltas de esas voces y los resúmenes. Lo que ya está entra al índice.
+    const trabajos = planVoces(agentes, indice.agentes, indice.resumen, candidatas, Object.keys(indice.agentes).length);
+    const faltan: typeof trabajos = [];
+    let sinMotor = 0;
+    for (const t of trabajos) {
+      const k = claveAudio(t.voz.id, t.texto);
+      if (existsSync(join(this.dirVoces, t.archivo))) {
+        if (indice.audios[k] !== t.archivo) {
+          indice.audios[k] = t.archivo;
+          cambio = true;
+        }
+      } else if (!elegidos.includes(grupoDe(t.voz.motor)) || !this.motorListo(t.voz.motor)) sinMotor += 1;
+      else faltan.push(t);
+    }
+    if (cambio) this.guardarIndice(indice);
+    // Los «3 agentes te necesitan» con la voz elegida para el Resumen, si cambió.
+    this.alinearResumen();
+    let enFila = 0;
+    for (const t of faltan) {
+      // Ya lo está grabando otra cosa (una voz nueva elegida para un agente): entra al índice en la próxima pasada.
+      if (this.enCurso.has(t.archivo)) continue;
+      if (this.encolar(t.voz as VozTrabajo, t.texto, false, { archivo: t.archivo, preparar: claveAudio(t.voz.id, t.texto) }) !== "fila") continue;
+      this.pendientesPrep.add(t.archivo);
+      enFila += 1;
+    }
+    this.prep =
+      this.prep.fase === "grabando"
+        ? { ...this.prep, total: this.prep.hechas + this.prep.fallas + this.pendientesPrep.size, sinMotor }
+        : { fase: this.pendientesPrep.size > 0 ? "grabando" : "listo", modelo: null, bajado: 0, pesa: 0, hechas: 0, total: this.pendientesPrep.size, fallas: 0, sinMotor, motivo: null };
+    if (enFila > 0) this.log("voces: preparando", { frases: enFila, agentes: agentes.length, sinMotor });
+    for (const f of FILAS) void this.correr(f);
+  }
+
+  /** Terminó una frase de «Preparar voces»: entra al índice (de a varias, cada 2 s) y cuenta para el avance. */
+  private preparada(t: TrabajoVoz, ok: boolean): void {
+    if (ok && t.preparar) this.porAnotar.set(t.preparar, t.archivo);
+    this.pendientesPrep.delete(t.archivo);
+    if (this.prep.fase === "grabando") {
+      this.prep = ok ? { ...this.prep, hechas: this.prep.hechas + 1 } : { ...this.prep, fallas: this.prep.fallas + 1 };
+      if (this.pendientesPrep.size === 0) {
+        this.prep = { ...this.prep, fase: "listo" };
+        this.log("voces: preparadas", { hechas: this.prep.hechas, fallas: this.prep.fallas });
+      }
+    }
+    if (this.prep.fase !== "grabando") return this.anotarPreparadas();
+    this.anotarLuego ??= setTimeout(() => this.anotarPreparadas(), 2_000);
+    this.anotarLuego.unref?.();
+  }
+
+  private anotarPreparadas(): void {
+    if (this.anotarLuego) clearTimeout(this.anotarLuego);
+    this.anotarLuego = null;
+    if (this.porAnotar.size === 0) return;
+    const indice = this.indice();
+    if (!indice) return;
+    for (const [k, archivo] of this.porAnotar) indice.audios[k] = archivo;
+    this.porAnotar.clear();
+    this.guardarIndice(indice);
+  }
+
+  /** Por qué no se puede usar un motor aquí, o `null`. A Supertonic y Kokoro les puede faltar el modelo (se baja al preparar). */
+  private porQueNo(g: GrupoMotor): string | null {
+    if (g === "supertonic") return this.problemaSupertonic();
+    return this.problemaPython();
+  }
+
+  /** Lo que el panel muestra en «Preparar voces». */
+  estadoMotores(): EstadoMotores {
+    const motores = Object.fromEntries(GRUPOS_MOTOR.map((g) => [g, this.porQueNo(g)])) as Record<GrupoMotor, string | null>;
+    const falta = (m: Modelo) => (this.hayModelo(m) ? 0 : pesoModelo(m));
+    return { motores, porBajar: { supertonic: falta(MODELO_SUPERTONIC), kokoro: falta(MODELO_KOKORO) }, preparar: { ...this.prep } };
   }
 
   /** Lo que se está grabando, en el orden de la cola, para que la página muestre «Grabando 12 de 20 · sigue con Alex». */
@@ -786,10 +1099,10 @@ export class PreparadorVoces {
     }));
   }
 
-  /** Lo que ve el panel «Voces» de este worker: si se puede, lo elegido y lo que se está grabando. */
-  estadoElegir(): EstadoVoz & { eleccion: EleccionVoces; grabando: GrabandoVoz[]; cambios: boolean } {
+  /** Lo que ve el panel «Voces» de este worker: si se puede, lo elegido, lo que se está grabando y (0.13.0) cómo va «Preparar voces». */
+  estadoElegir(): EstadoVoz & EstadoMotores & { eleccion: EleccionVoces; grabando: GrabandoVoz[]; cambios: boolean } {
     const eleccion = this.eleccion();
-    return { ...this.estado(), eleccion, grabando: this.grabando(), cambios: hayCambios(eleccion, this.indice()?.agentes ?? null) };
+    return { ...this.estado(), ...this.estadoMotores(), eleccion, grabando: this.grabando(), cambios: hayCambios(eleccion, this.indice()?.agentes ?? null) };
   }
 
   /**
@@ -799,16 +1112,15 @@ export class PreparadorVoces {
    */
   calentar(voz: unknown): boolean {
     const v = vozPorId(voz);
-    if (!v || !esAlMomento(v.id) || !this.estado().disponible) return false;
-    if (v.motor === "kokoro" && !hayModeloKokoro()) return false;
+    if (!v || !esAlMomento(v.id) || !this.motorListo(v.motor)) return false;
     this.calentarMotor(filaDe(v.motor), v.motor);
     return true;
   }
 
-  /** Cuánto dura un MP3 de la carpeta de las voces (ms), o `null` si no se sabe. */
+  /** Cuánto dura un audio de la carpeta de las voces (ms), o `null` si no se sabe. */
   private duracion(archivo: string): number | null {
     try {
-      return duracionMp3(readFileSync(join(this.dirVoces, archivo)));
+      return duracionAudio(readFileSync(join(this.dirVoces, archivo)));
     } catch {
       // Sin el archivo: sin duración.
       return null;
@@ -825,6 +1137,7 @@ export class PreparadorVoces {
     const tope = maximoAudioMs(paraDecir(texto, motor));
     if (ms <= tope) return false;
     rmSync(join(this.dirVoces, archivo), { force: true });
+    this.despublicar(archivo);
     this.log("voces: un clon dura demasiado para su texto, se bota", { archivo, segundos: ms / 1000, tope: tope / 1000 });
     return true;
   }
@@ -843,13 +1156,17 @@ export class PreparadorVoces {
     const ruta = join(this.dirVoces, "vivo.json");
     writeFileSync(`${ruta}.parcial`, JSON.stringify(indice));
     renameSync(`${ruta}.parcial`, ruta);
+    this.publicar("vivo.json");
   }
 
   /** Lo hecho queda en `vivo.json` (escrito aparte y renombrado), y se limpia lo viejo. */
   private anotar(t: TrabajoVoz, ms: number | null): void {
     const indice = this.leerVivo();
     indice.audios[t.archivo] = { voz: t.voz.id, texto: t.texto, creado: new Date(this.ahora()).toISOString(), ms };
-    limpiarVivo(join(this.dirVoces, CARPETA_VIVO), this.ahora(), (archivo) => delete indice.audios[`${CARPETA_VIVO}/${archivo}`]);
+    limpiarVivo(join(this.dirVoces, CARPETA_VIVO), this.ahora(), (archivo) => {
+      delete indice.audios[`${CARPETA_VIVO}/${archivo}`];
+      this.despublicar(`${CARPETA_VIVO}/${archivo}`);
+    });
     this.escribirVivo(indice);
   }
 
@@ -895,7 +1212,8 @@ export class PreparadorVoces {
 
   /** Paperclip se apaga o reinicia el worker: se cierran los motores (la fila se pierde; la página vuelve a pedir). */
   cerrar(): void {
-    for (const f of ["edge", "kokoro", "clon"] as const) this.filas[f] = [];
+    this.anotarPreparadas();
+    for (const f of FILAS) this.filas[f] = [];
     if (this.reintento) clearTimeout(this.reintento);
     this.reintento = null;
     this.motores.cerrarTodos();
@@ -910,7 +1228,7 @@ export function limpiarVivo(dir: string, ahora: number, alBorrar: (archivo: stri
   let lista: Array<{ f: string; t: number; b: number }>;
   try {
     lista = readdirSync(dir)
-      .filter((f) => f.endsWith(".mp3"))
+      .filter((f) => /\.(mp3|wav)$/.test(f))
       .map((f) => {
         const s = statSync(join(dir, f));
         return { f, t: s.mtimeMs, b: s.size };
@@ -931,6 +1249,20 @@ export function limpiarVivo(dir: string, ahora: number, alBorrar: (archivo: stri
 /** El entorno de los motores: el `PATH` con que arrancó Paperclip y lo que `uv` necesita (el worker no recibe `HOME`). */
 function entorno(): NodeJS.ProcessEnv {
   return { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: homedir(), TMPDIR: tmpdir(), LANG: "en_US.UTF-8", PYTHONUNBUFFERED: "1" };
+}
+
+/**
+ * 0.13.0: `null` si el motor de Supertonic arranca en este computador (carga
+ * sherpa-onnx-node, sin el modelo); si no, por qué. sherpa-onnx-node es una
+ * dependencia opcional: npm la instala con el binario de la Mac, Linux o
+ * Windows (x64 y arm64) que corresponda, y en otro sistema falta.
+ */
+export function problemaSupertonic(raiz: string): string | null {
+  const motor = motorSupertonic(raiz);
+  if (!existsSync(motor)) return "falta dist/motor_supertonic.mjs (npm run build)";
+  const p = problemaCon(process.execPath, [motor, "--probar"], entorno());
+  if (!p) return null;
+  return /sherpa-onnx/i.test(p) ? `sherpa-onnx-node no está instalado para ${process.platform}-${process.arch}` : p.replace(process.execPath, "node");
 }
 
 /** Swap libre (MB) según `sysctl vm.swapusage` (macOS), o `null` si no se sabe. */
@@ -1031,7 +1363,9 @@ class Motores {
     // La fila de los clones cambia de motor: el anterior se cierra (uno a la vez, por la memoria).
     if (ya) this.cerrar(fila);
     // En su propio grupo de procesos: al matarlo se mata también el Python que abre `uv` (si no, sigue andando solo).
-    const hijo = spawn("uv", comando(this.raiz, motor, "-"), { stdio: ["pipe", "pipe", "pipe"], env: entorno(), detached: true });
+    // En Windows no hay grupos (y `detached` le abriría una ventana): solo se oculta.
+    const { programa, args } = comandoMotor(this.raiz, motor, "-");
+    const hijo = spawn(programa, args, { stdio: ["pipe", "pipe", "pipe"], env: entorno(), detached: process.platform !== "win32", windowsHide: true });
     try {
       if (hijo.pid) setPriority(hijo.pid, 10);
     } catch {
@@ -1072,7 +1406,7 @@ class Motores {
   async generar(t: TrabajoVoz, destino: string, cortar: AbortSignal): Promise<void> {
     const fila = filaDe(t.voz.motor);
     const a = this.abrir(fila, t.voz.motor);
-    const salida = join(a.tmp, `${t.archivo.split("/").pop()!.replace(/\.mp3$/, "")}${t.voz.motor === "edge" ? ".edge.mp3" : ".wav"}`);
+    const salida = join(a.tmp, `${t.archivo.split("/").pop()!.replace(/\.(mp3|wav)$/, "")}${t.voz.motor === "edge" ? ".edge.mp3" : ".wav"}`);
     // Las mascotas (0.6.0): una voz de Edge más aguda y a su ritmo.
     const tono = t.voz.pitch || t.voz.rate ? { pitch: t.voz.pitch ?? "+0Hz", rate: t.voz.rate ?? "+0%" } : {};
     const trabajo = { texto: paraDecir(t.texto, t.voz.motor), salida, ...datosDeVoz(this.raiz, t.voz.motor, t.voz.clave), ...tono };
@@ -1095,7 +1429,7 @@ class Motores {
       a.hijo.stdin.write(`${JSON.stringify(trabajo)}\n`);
     });
     try {
-      convertir(salida, destino, entorno());
+      dejarListo(t.voz.motor, salida, destino, entorno());
     } finally {
       rmSync(salida, { force: true });
     }
@@ -1140,7 +1474,7 @@ class Motores {
 /** Mata a `uv` y a todo lo que abrió (su grupo de procesos). */
 function matarGrupo(hijo: ChildProcessWithoutNullStreams): void {
   try {
-    if (hijo.pid) process.kill(-hijo.pid, "SIGKILL");
+    if (hijo.pid && process.platform !== "win32") process.kill(-hijo.pid, "SIGKILL");
   } catch {
     // Ya no estaba el grupo.
   }
