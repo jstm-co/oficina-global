@@ -53,5 +53,8 @@
   "homepage": "https://github.com/jstm-co/oficina-global#readme",
   "bugs": {
     "url": "https://github.com/jstm-co/oficina-global/issues"
+  },
+  "optionalDependencies": {
+    "sherpa-onnx-node": "2.0.1"
   }
 }
