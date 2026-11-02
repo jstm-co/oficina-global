@@ -117,6 +117,8 @@ In desktop Chrome, Gemini Nano (free and local) can write the ending of the brea
 
 Chrome's AI only exists on secure pages: if you open Paperclip over `http://`, add its address in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` and relaunch Chrome.
 
+Outside Chrome, the plugin uses the page's `LanguageModel` if it has one (the same API), and the menus call it «IA del computador» (the computer's AI). For example, [Paperclip Dispatch](https://github.com/Javiervinus/paperclip-dispatch), the Mac app for Paperclip, serves it with Apple Intelligence.
+
 ## Adapting it to your instance
 
 This needs an install from source.

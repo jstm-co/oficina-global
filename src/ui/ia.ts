@@ -14,6 +14,7 @@ import { useSyncExternalStore } from "react";
 import type { FuenteIa, MuestraFinal } from "../charlas.js";
 import { accionPlugin } from "../fuentes.js";
 import { Escritor, usaReserva, type EstadoIa, type ModeloIa, type SinApi } from "../ia/escritor.js";
+import { FINALES_POR_PAQUETE, FINALES_POR_PAQUETE_CHICO } from "../ia/prompt.js";
 import { CLAVE_RESERVA, fuenteDe, leerReserva, reservaVacia, type DatosReserva } from "../ia/reserva.js";
 import { ajustes, alCambiarAjustes, type Ajustes } from "./ajustes.js";
 import { instalacion } from "./audiosVoces.js";
@@ -36,15 +37,28 @@ let escritor: Escritor | null = null;
 let canal: BroadcastChannel | null = null;
 let reloj: ReturnType<typeof setInterval> | null = null;
 
+/** Si la página corre en Google Chrome (no en otro navegador hecho con Chromium). */
+function esChrome(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const marcas = (navigator as Navigator & { userAgentData?: { brands?: Array<{ brand: string }> } }).userAgentData?.brands ?? [];
+  return marcas.some((m) => m.brand === "Google Chrome") || (/Chrome\//.test(navigator.userAgent) && !/Edg\/|OPR\/|Brave/.test(navigator.userAgent));
+}
+
 /** Por qué no hay `LanguageModel` aquí: celular, otro navegador, Chrome sin el flag (http) o un Chrome que no la trae. */
 export function sinApiAqui(): SinApi {
   if (typeof window === "undefined") return "otro";
   if (window.matchMedia?.("(max-width: 767px)").matches || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) return "celular";
-  const marcas = (navigator as Navigator & { userAgentData?: { brands?: Array<{ brand: string }> } }).userAgentData?.brands ?? [];
-  const chrome = marcas.some((m) => m.brand === "Google Chrome") || (/Chrome\//.test(navigator.userAgent) && !/Edg\/|OPR\/|Brave/.test(navigator.userAgent));
-  if (!chrome) return "otro";
+  if (!esChrome()) return "otro";
   return window.isSecureContext ? "vieja" : "insegura";
 }
+
+/**
+ * Cómo se llama la IA en los textos. Fuera de Chrome también puede haber un `LanguageModel`: otro navegador que
+ * lo trae, o una app que muestra Paperclip con el modelo de su sistema (Paperclip Dispatch, con el de Apple).
+ * Ahí no es «la IA de Chrome» ni se baja con Chrome: es la IA del computador.
+ */
+export const IA_CHROME = esChrome();
+export const NOMBRE_IA = IA_CHROME ? "IA de Chrome" : "IA del computador";
 
 function modeloAqui(): ModeloIa | null {
   const lm = (globalThis as { LanguageModel?: ModeloIa }).LanguageModel;
@@ -114,6 +128,8 @@ export function escritorIa(): Escritor {
     // Al día con lo que escribió otra pestaña (el evento `storage` ya la dejó en `reserva`).
     leer: () => structuredClone(reserva),
     guardar: guardarReserva,
+    // Fuera de Chrome, la IA de la página es más chica que Gemini Nano (la de Apple en Paperclip Dispatch).
+    finalesPorPaquete: IA_CHROME ? FINALES_POR_PAQUETE : FINALES_POR_PAQUETE_CHICO,
   });
   escritor.suscribir(avisar);
   if (typeof window !== "undefined") {

@@ -9,13 +9,22 @@
 // en JSON con un esquema (`responseConstraint`): con objetos `{texto}`, porque
 // las respuestas desbocadas del spike fueron con listas de textos sueltos.
 import type { MuestraFinal } from "../charlas.js";
-import { revisarFinal, revisarSuelta } from "./revision.js";
+import { plano, revisarFinal, revisarSuelta } from "./revision.js";
 
-/** Si cambia el prompt o la revisión, la reserva guardada se bota (la escribió otra versión). */
-export const VERSION_PROMPT = "v4.1-jst232";
+/**
+ * Si cambia el prompt o la revisión, la reserva guardada se bota (la escribió otra versión). La v4.2 bota lo que copia
+ * el ejemplo y los finales que son una frase de siempre.
+ */
+export const VERSION_PROMPT = "v4.2";
 /** Por paquete: 8 finales y 5 sueltas (punto 10 del spike). */
 export const FINALES_POR_PAQUETE = 8;
 export const SUELTAS_POR_PAQUETE = 5;
+/**
+ * Los finales por paquete con un modelo más chico que Gemini Nano (fuera de Chrome: el de Apple en Paperclip
+ * Dispatch). Con 8, el de Apple copia las frases del pedido y pasan 45 finales de 192; con 4, 75 (las mismas
+ * conversaciones, con esta revisión). Las sueltas y los paquetes de la ráfaga van en proporción.
+ */
+export const FINALES_POR_PAQUETE_CHICO = 4;
 
 export const SISTEMA = `Escribes lo que dicen los agentes de una oficina pixel. Son agentes de IA que trabajan en tareas de software. Cuando están libres van al descanso a tomar café y conversan de a dos. Escribe en español de Chile, cercano y con humor suave, como compañeros de pega: frases cortas y naturales («bacán», «harta pega», «¡buena!», «uf»), sin groserías.
 
@@ -36,7 +45,7 @@ Frases sueltas:
 - s1
 - s2`;
 
-export const EJEMPLO_RESPUESTA = JSON.stringify({
+const EJEMPLO = {
   charlas: [
     { id: "c1", frases: [{ texto: "¡Buena! ¿Te costó mucho?" }, { texto: "Un poco, pero quedó bien." }] },
     { id: "c2", frases: [{ texto: "Entonces nos toca cuidar el café." }] },
@@ -46,7 +55,17 @@ export const EJEMPLO_RESPUESTA = JSON.stringify({
     { id: "s1", texto: "Este café me salva." },
     { id: "s2", texto: "Un respiro y sigo." },
   ],
-});
+};
+export const EJEMPLO_RESPUESTA = JSON.stringify(EJEMPLO);
+
+/**
+ * Las frases del ejemplo, pedido y respuesta (como `plano`): la IA no puede copiarlas (un modelo chico lo hace, y
+ * pegan con cualquier conversación: «¡Buena! ¿Te costó mucho?» después de un error).
+ */
+const DEL_EJEMPLO: ReadonlySet<string> = new Set(
+  [...[...EJEMPLO_PEDIDO.matchAll(/«([^»]+)»/g)].map((m) => m[1]!), ...EJEMPLO.charlas.flatMap((c) => c.frases.map((f) => f.texto)), ...EJEMPLO.sueltas.map((s) => s.texto)].map(plano),
+);
+const copiaEjemplo = (frases: readonly string[]): string[] => (frases.some((f) => DEL_EJEMPLO.has(plano(f))) ? ["copia el ejemplo"] : []);
 
 /** Lo que el esquema deja escribir: letras y signos (sin números, comillas ni emojis), y un tope de largo. */
 const texto = (max: number) => ({ type: "string", pattern: `^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ¿?¡!.,;:…-]{1,${max}}$` });
@@ -130,7 +149,8 @@ const textoDe = (f: unknown): string | null => (typeof f === "string" ? f : f &&
 /**
  * Lo que respondió la IA a un paquete, revisado: lo que no pasa se bota (esa
  * frase o ese final, no el paquete) y en su lugar queda la frase de siempre.
- * Un id que no se pidió o repetido, también se bota.
+ * Un id que no se pidió o repetido, también se bota, y lo que copia una frase
+ * del ejemplo.
  */
 export function leerPaquete(salida: string, p: Paquete, nombres: readonly string[]): Leido {
   const r: Leido = { finales: [], sueltas: [], botadas: [], error: null };
@@ -147,6 +167,7 @@ export function leerPaquete(salida: string, p: Paquete, nombres: readonly string
     const m = p.finales.get(id);
     const frases = (Array.isArray(c?.frases) ? c.frases : []).map(textoDe).filter((t: string | null): t is string => t !== null).map((t: string) => t.trim());
     const motivos = !m || vistos.has(id) ? ["id que no se pidió"] : revisarFinal(frases, m.fijas, nombres);
+    if (motivos.length === 0) motivos.push(...copiaEjemplo(frases));
     vistos.add(id);
     if (motivos.length === 0 && m) r.finales.push({ clave: m.clave, frases, muestra: m });
     else r.botadas.push({ id, tipo: "final", texto: frases.join(" / "), motivos });
@@ -156,6 +177,7 @@ export function leerPaquete(salida: string, p: Paquete, nombres: readonly string
     const id = typeof s?.id === "string" ? s.id : "";
     const t = (textoDe(s) ?? "").trim();
     const motivos = !p.sueltas.includes(id) || vistos.has(id) ? ["id que no se pidió"] : revisarSuelta(t, nombres);
+    if (motivos.length === 0) motivos.push(...copiaEjemplo([t]));
     vistos.add(id);
     if (motivos.length === 0 && dichas.has(t.toLowerCase())) motivos.push("repetida en el paquete");
     dichas.add(t.toLowerCase());

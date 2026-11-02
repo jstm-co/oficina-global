@@ -45,12 +45,12 @@ describe("lo que se lee de la respuesta", () => {
         { id: "c1", frases: [{ texto: "Uf, qué mal momento." }] },
         { id: "c2", frases: [{ texto: "¡Buena! ¿Fue para la QA?" }] },
       ],
-      sueltas: [{ id: "s1", texto: "Este café me salva." }, { id: "s2", texto: "Ojalá termine pronto." }],
+      sueltas: [{ id: "s1", texto: "Qué rico el sofá." }, { id: "s2", texto: "Ojalá termine pronto." }],
     });
     const r = leerPaquete(salida, p, ["Catalina"]);
     expect(r.error).toBeNull();
     expect(r.finales).toEqual([{ clave: ERROR.clave, frases: ["Uf, qué mal momento."], muestra: ERROR }]);
-    expect(r.sueltas).toEqual(["Este café me salva."]);
+    expect(r.sueltas).toEqual(["Qué rico el sofá."]);
     expect(r.botadas.map((b) => [b.id, b.motivos[0]])).toEqual([
       ["c2", "nombra a alguien por su cargo"],
       ["s2", "dice un estado"],
@@ -62,6 +62,24 @@ describe("lo que se lee de la respuesta", () => {
     const r = leerPaquete(salida, p, []);
     expect(r.finales.map((f) => f.frases)).toEqual([["Uf, qué lata."]]);
     expect(r.botadas.map((b) => b.id)).toEqual(["c9", "c1"]);
+  });
+
+  it("bota lo que copia una frase del ejemplo (un modelo chico lo hace)", () => {
+    const salida = JSON.stringify({
+      charlas: [
+        { id: "c1", frases: [{ texto: "¡Buena! ¿Te costó mucho?" }] },
+        { id: "c2", frases: [{ texto: "Uf, qué alivio." }, { texto: "Un poco, pero quedó bien." }] },
+      ],
+      sueltas: [{ id: "s1", texto: "Este café me salva." }, { id: "s2", texto: "Qué rico el sofá." }],
+    });
+    const r = leerPaquete(salida, p, []);
+    expect(r.finales).toEqual([]);
+    expect(r.sueltas).toEqual(["Qué rico el sofá."]);
+    expect(r.botadas.map((b) => [b.id, b.motivos])).toEqual([
+      ["c1", ["copia el ejemplo"]],
+      ["c2", ["copia el ejemplo"]],
+      ["s1", ["copia el ejemplo"]],
+    ]);
   });
 
   it("un JSON roto bota todo el paquete (se reintenta en la próxima ráfaga)", () => {

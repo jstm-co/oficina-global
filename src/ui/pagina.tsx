@@ -18,6 +18,7 @@
 // del encabezado (en el celular, en la barra de arriba), y mientras lee, la
 // sala de la que habla encendida. El reproductor lo dibuja la barra de arriba.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { copyTextToClipboard, useHostLocation, useHostNavigation, usePluginToast, type PluginPageProps } from "@paperclipai/plugin-sdk/ui";
 import { nombreCorto } from "../avisos.js";
 import { idInstalacion } from "../fuentes.js";
@@ -390,10 +391,14 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     resumen.cerrar();
     setTv(true);
   };
+  // Dentro del clic (`flushSync`): la vista se monta ahí mismo y captura el puntero con él (Safari no deja hacerlo
+  // después). Si el host no trae `flushSync`, React igual suele montarla dentro del clic.
   const abrir3d = () => {
-    setSel(null);
-    setEscritorio(null);
-    setEn3d(true);
+    (flushSync ?? ((f: () => void) => f()))(() => {
+      setSel(null);
+      setEscritorio(null);
+      setEn3d(true);
+    });
   };
   // Al salir, se cierra también lo que se abrió desde ella (la ficha y tu fila iban pegadas a su ancla).
   const cerrar3d = useCallback(() => {

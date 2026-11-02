@@ -23,6 +23,8 @@ export function baseUi(): Promise<string | null> {
 }
 
 let indice: IndiceVoces | null = null;
+/** El servidor dijo que no hay índice (404): en este Paperclip nunca se corrió el generador. */
+let sinGenerar = false;
 let leidoEn = 0;
 let leyendo: Promise<IndiceVoces | null> | null = null;
 const oyentes = new Set<() => void>();
@@ -35,6 +37,7 @@ export function cargarIndice(forzar = false): Promise<IndiceVoces | null> {
       if (!b) return null;
       // Sin caché: el generador lo reescribe al sumar agentes.
       const r = await fetch(`${b}voces/indice.json?t=${Date.now()}`, { credentials: "include", cache: "no-store" });
+      sinGenerar = r.status === 404;
       return r.ok ? leerIndice(await r.json()) : null;
     })
     .catch(() => null)
@@ -48,15 +51,19 @@ export function cargarIndice(forzar = false): Promise<IndiceVoces | null> {
   return leyendo;
 }
 
+const suscribir = (o: () => void) => {
+  oyentes.add(o);
+  return () => oyentes.delete(o);
+};
+
 /** Para el panel «Voces»: el índice ya leído (o `null`). */
 export function useIndiceVoces(): IndiceVoces | null {
-  return useSyncExternalStore(
-    (o) => {
-      oyentes.add(o);
-      return () => oyentes.delete(o);
-    },
-    () => indice,
-  );
+  return useSyncExternalStore(suscribir, () => indice);
+}
+
+/** Para el panel «Voces»: el servidor dijo que en este Paperclip todavía no se grabaron los audios. */
+export function useVocesSinGenerar(): boolean {
+  return useSyncExternalStore(suscribir, () => sinGenerar && !indice);
 }
 
 const pedidos = new Map<string, { promesa: Promise<Blob | null>; desde: number }>();
