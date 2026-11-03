@@ -15,8 +15,11 @@ describe("lo que se elige", () => {
     expect(leerEleccion("basura")).toEqual(eleccionInicial());
   });
 
-  it("solo 5 voces y la del navegador leen al momento; un clon, no (14 a 28 s por la primera frase)", () => {
-    expect(VOCES_AL_MOMENTO).toEqual(["lorenzo", "catalina", "alex", "dora", "santa"]);
+  it("solo 5 voces (y desde la 0.13.0 las 10 de Supertonic) y la del navegador leen al momento; un clon, no (14 a 28 s por la primera frase)", () => {
+    expect(VOCES_AL_MOMENTO.slice(0, 5)).toEqual(["lorenzo", "catalina", "alex", "dora", "santa"]);
+    expect(VOCES_AL_MOMENTO.slice(5)).toEqual(VOCES.filter((v) => v.motor === "supertonic").map((v) => v.id));
+    expect(esAlMomento("supertonic-m1")).toBe(true);
+    expect(porqueNoAlcanza("supertonic-f2")).toBeNull();
     expect(esAlMomento("alex")).toBe(true);
     expect(esAlMomento("qwen3-mujer")).toBe(false);
     expect(leerEleccion({ resumen: "chatterbox-hombre", contexto: "qwen3-mujer" })).toMatchObject({ resumen: "alex", contexto: "dora" });
@@ -89,9 +92,10 @@ describe("lo que se graba", () => {
 });
 
 describe("las listas del panel", () => {
-  it("Resumen: las 5 que leen al momento y la del navegador, y los 4 clones aparte, con su porqué", () => {
+  it("Resumen: las que leen al momento y la del navegador, y los 4 clones aparte, con su porqué", () => {
     const o = opcionesDe("resumen", "Alex");
-    expect(o.filter((x) => x.grupo === "momento").map((x) => x.valor)).toEqual(["lorenzo", "catalina", "alex", "dora", "santa", "navegador"]);
+    expect(o.filter((x) => x.grupo === "momento").map((x) => x.valor)).toEqual([...VOCES_AL_MOMENTO, "navegador"]);
+    expect(o.find((x) => x.valor === "supertonic-m1")).toMatchObject({ nombre: "Supertonic M1", numero: null });
     const clones = o.filter((x) => x.grupo === "no");
     expect(clones).toHaveLength(4);
     expect(clones.every((c) => !!c.porque)).toBe(true);
@@ -111,6 +115,7 @@ describe("las listas del panel", () => {
     expect(o.every((x) => !x.porque && x.grupo === null)).toBe(true);
     expect(o.find((x) => x.valor === "dora")!.detalle).toMatch(/~1 min/);
     expect(o.find((x) => x.valor === "qwen3-mujer")!.detalle).toMatch(/~10 min/);
+    expect(o.find((x) => x.valor === "supertonic-f1")!.detalle).toMatch(/~15 s/);
   });
 
   it("el disparador dice «Igual · Alex» cuando sigue al Resumen", () => {

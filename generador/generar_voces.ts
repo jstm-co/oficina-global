@@ -11,19 +11,27 @@
 // - Deja MP3 de 48 kbit/s, sin silencio en las puntas y todos al mismo volumen
 //   (~−19 LUFS), en `<plugin>/dist/ui/voces/`, con `indice.json`. El host los
 //   sirve con la UI: sumar un agente no obliga a sacar otra versión.
+// - 0.13.0 (issue #9): las voces se preparan también desde la oficina, sin este
+//   comando. Los audios quedan en la carpeta de datos del usuario
+//   (`src/almacenVoces.ts`) y se publican en `dist/ui/voces/`, así que una
+//   actualización desde npm ya no se los lleva. Supertonic corre con Node (WAV,
+//   sin `uv` ni ffmpeg). Sin `--motores`, usa los elegidos en la oficina (o, si
+//   nunca se eligieron, los 4 de siempre).
 //
 // Uso, desde la carpeta del plugin (después de `npm run build`):
 //   node dist/generar_voces.mjs --api http://127.0.0.1:3210 --sesion <sesion.json>   # la copia
 //   node dist/generar_voces.mjs --api http://192.0.2.15:3100                         # la real, con ~/.paperclip/auth.json
-// Opciones: --plugin <carpeta> (por omisión, esta) · --motores edge,kokoro,qwen3,chatterbox · --solo-plan · --tabla <archivo.md>
+// Opciones: --plugin <carpeta> (por omisión, esta) · --motores supertonic,edge,kokoro,qwen3,chatterbox · --solo-plan · --tabla <archivo.md>
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
+import { carpetaAlmacen, despublicar, prepararAlmacen, publicar } from "../src/almacenVoces.js";
+import { grupoDe, leerEleccion, vocesDe, type GrupoMotor } from "../src/eleccionVoces.js";
 import { claveAudio, leerIndice, VOCES, VOZ_RESUMEN, type IndiceVoces, type Motor } from "../src/voces.js";
-import { comando, convertir, datosDeVoz, modeloKokoro, PRUEBA_FFMPEG, revisar } from "./motores.js";
+import { bajarModelo, comandoMotor, datosDeVoz, dejarListo, hayModelo, modeloKokoro, MODELO_SUPERTONIC, pesoModelo, PRUEBA_FFMPEG, revisar } from "./motores.js";
 import { asignarVoces, plan, type AgentePlan, type Trabajo } from "./plan.js";
 import { paraDecir } from "./pronunciar.js";
 
@@ -41,9 +49,12 @@ for (let i = 2; i < process.argv.length; i++) {
 const API = (args.get("api") ?? "").replace(/\/+$/, "").replace(/\/api$/, "");
 if (!API) throw new Error("falta --api (por ejemplo, --api http://127.0.0.1:3210)");
 const PLUGIN = resolve(args.get("plugin") ?? REPO);
-const DIR = join(PLUGIN, "dist", "ui", "voces");
-const ORDEN: readonly Motor[] = ["edge", "kokoro", "qwen3", "chatterbox"];
-const MOTORES = (args.get("motores")?.split(",") ?? ORDEN).filter((m): m is Motor => (ORDEN as readonly string[]).includes(m));
+/** Donde se escriben los audios (0.13.0, fuera del plugin) y donde los sirve Paperclip. */
+const DIR = carpetaAlmacen(PLUGIN);
+const PUBLICO = join(PLUGIN, "dist", "ui", "voces");
+const ORDEN: readonly Motor[] = ["supertonic", "edge", "kokoro", "qwen3", "chatterbox"];
+/** Hasta la 0.12, sin `--motores` iban estos 4 (y así sigue si nunca se eligieron en la oficina). */
+const DE_SIEMPRE: readonly Motor[] = ["edge", "kokoro", "qwen3", "chatterbox"];
 
 function encabezados(): Record<string, string> {
   const sesion = args.get("sesion");
@@ -89,7 +100,7 @@ async function generar(m: Motor, pendientes: Trabajo[], alHacer: (t: Trabajo) =>
   const porSalida = new Map<string, Trabajo>();
   const trabajos = pendientes
     .map((t) => {
-      const salida = join(tmp, t.archivo.replace(/\.mp3$/, m === "edge" ? ".edge.mp3" : ".wav"));
+      const salida = join(tmp, t.archivo.replace(/\.(mp3|wav)$/, m === "edge" ? ".edge.mp3" : ".wav"));
       porSalida.set(salida, t);
       return { texto: paraDecir(t.texto, m), salida, ...datosDeVoz(REPO, m, t.voz.clave) };
     })
@@ -99,7 +110,8 @@ async function generar(m: Motor, pendientes: Trabajo[], alHacer: (t: Trabajo) =>
   writeFileSync(archivo, JSON.stringify(trabajos));
   const res: Resultado = { frases: pendientes.length, hechas: 0, fallas: [], segundos: 0 };
   const tiempos: number[] = [];
-  const hijo = spawn("uv", comando(REPO, m, archivo), { stdio: ["ignore", "pipe", "pipe"] });
+  const { programa, args: argumentos } = comandoMotor(REPO, m, archivo);
+  const hijo = spawn(programa, argumentos, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let error = "";
   hijo.stderr.on("data", (b: Buffer) => (error = `${error}${b.toString()}`.slice(-2000)));
   for await (const linea of createInterface({ input: hijo.stdout })) {
@@ -121,7 +133,8 @@ async function generar(m: Motor, pendientes: Trabajo[], alHacer: (t: Trabajo) =>
       continue;
     }
     try {
-      convertir(r.salida!, join(DIR, t.archivo));
+      dejarListo(m, r.salida!, join(DIR, t.archivo));
+      publicar(DIR, PUBLICO, t.archivo);
       res.hechas++;
       alHacer(t);
       if (res.hechas % 10 === 0) console.log(`  ${m}: ${res.hechas} de ${res.frases}`);
@@ -143,16 +156,27 @@ async function generar(m: Motor, pendientes: Trabajo[], alHacer: (t: Trabajo) =>
 function guardarIndice(indice: IndiceVoces): void {
   writeFileSync(join(DIR, "indice.json.parcial"), JSON.stringify(indice));
   renameSync(join(DIR, "indice.json.parcial"), join(DIR, "indice.json"));
+  publicar(DIR, PUBLICO, "indice.json");
 }
 
 if (!existsSync(join(PLUGIN, "dist", "ui"))) throw new Error(`${PLUGIN} no tiene dist/ui: corre npm run build en el plugin primero`);
-mkdirSync(DIR, { recursive: true });
+// Lo de antes de la 0.13.0 (en `dist/ui/voces/`) pasa a la carpeta de datos, y todo queda publicado.
+const almacen = prepararAlmacen(DIR, PUBLICO);
+console.log(`audios en ${DIR}${almacen.adoptado ? " (se trajeron los que había en dist/ui/voces)" : ""}`);
 const previo = existsSync(join(DIR, "indice.json")) ? leerIndice(JSON.parse(readFileSync(join(DIR, "indice.json"), "utf8"))) : null;
+const elegidos = existsSync(join(DIR, "eleccion.json")) ? leerEleccion(JSON.parse(readFileSync(join(DIR, "eleccion.json"), "utf8"))).motores : null;
+const MOTORES: readonly Motor[] = args.get("motores")
+  ? args.get("motores")!.split(",").filter((m): m is Motor => (ORDEN as readonly string[]).includes(m))
+  : elegidos
+    ? ORDEN.filter((m) => elegidos.includes(grupoDe(m)))
+    : DE_SIEMPRE;
+const grupos = [...new Set(MOTORES.map(grupoDe))] as GrupoMotor[];
 const lista = await agentes();
-const voces = asignarVoces(previo?.agentes ?? {}, lista);
+// Los nuevos reciben una voz de los motores que se van a correr.
+const voces = asignarVoces(previo?.agentes ?? {}, lista, vocesDe(grupos));
 // 0.11.0 (JST-325): la voz de los «3 agentes te necesitan» es la que el usuario eligió para el Resumen (la que ya está en el índice).
 const vozResumen = previo?.resumen ?? VOZ_RESUMEN;
-const todos = plan(lista, voces, vozResumen);
+const todos = plan(lista, voces, vozResumen, vocesDe(grupos));
 const hecho = (t: Trabajo) => existsSync(join(DIR, t.archivo));
 const indice: IndiceVoces = { version: 1, generado: new Date().toISOString(), resumen: vozResumen, agentes: voces, audios: {} };
 for (const t of todos) if (hecho(t)) indice.audios[claveAudio(t.voz.id, t.texto)] = t.archivo;
@@ -172,7 +196,7 @@ if (args.has("solo-plan")) {
   process.exit(0);
 }
 
-if (faltan.some((t) => MOTORES.includes(t.voz.motor))) {
+if (faltan.some((t) => MOTORES.includes(t.voz.motor) && t.voz.motor !== "supertonic")) {
   revisar("uv", ["--version"], "Instálalo: https://docs.astral.sh/uv/");
   // Un MP3 de prueba como los de `convertir`.
   revisar("ffmpeg", PRUEBA_FFMPEG, "Con Homebrew: brew reinstall ffmpeg (o brew install ffmpeg si no está)");
@@ -183,6 +207,14 @@ for (const m of MOTORES) {
   const pendientes = faltan.filter((t) => t.voz.motor === m);
   if (pendientes.length === 0) continue;
   if (m === "kokoro") await modeloKokoro();
+  if (m === "supertonic" && !hayModelo(MODELO_SUPERTONIC)) {
+    console.log(`bajando Supertonic (Hugging Face, ${Math.round(pesoModelo(MODELO_SUPERTONIC) / 1e6)} MB, una vez)…`);
+    let ultimo = -1;
+    await bajarModelo(MODELO_SUPERTONIC, (b, total) => {
+      const p = Math.floor((b / total) * 10) * 10;
+      if (p !== ultimo) console.log(`  ${(ultimo = p)} %`);
+    });
+  }
   console.log(`${m}: ${pendientes.length} frases…`);
   resumen[m] = await generar(m, pendientes, (t) => {
     indice.audios[claveAudio(t.voz.id, t.texto)] = t.archivo;
@@ -199,11 +231,12 @@ for (const m of MOTORES) {
 const usados = new Set(Object.values(indice.audios));
 let borrados = 0;
 for (const f of readdirSync(DIR)) {
-  if (f.endsWith(".mp3") && !usados.has(f)) {
+  if (/\.(mp3|wav)$/.test(f) && !usados.has(f)) {
     rmSync(join(DIR, f));
+    despublicar(PUBLICO, f);
     borrados++;
   }
 }
-const mp3 = readdirSync(DIR).filter((f) => f.endsWith(".mp3"));
+const mp3 = readdirSync(DIR).filter((f) => /\.(mp3|wav)$/.test(f));
 const bytes = mp3.reduce((s, f) => s + statSync(join(DIR, f)).size, 0);
 console.log(JSON.stringify({ audios: mp3.length, mb: Math.round(bytes / 1e5) / 10, borrados, motores: resumen }, null, 1));

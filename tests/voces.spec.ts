@@ -2,15 +2,20 @@ import { describe, expect, it } from "vitest";
 import { asignarVoces, archivoDe, plan, type AgentePlan } from "../generador/plan.js";
 import { enPalabras, paraDecir } from "../generador/pronunciar.js";
 import { PRONUNCIAR_KOKORO_INSTANCIA } from "../src/instancia.js";
-import { audioDe, claveAudio, leerIndice, VOCES, VOZ_RESUMEN, vozDeAgente, vozPorId, type IndiceVoces, type VozId } from "../src/voces.js";
+import { vocesDe } from "../src/eleccionVoces.js";
+import { archivoVivo, audioDe, claveAudio, duracionAudio, extensionDe, leerIndice, VOCES, VOZ_RESUMEN, vozDeAgente, vozPorId, type IndiceVoces, type VozId } from "../src/voces.js";
+import { wavPcm16 } from "../src/audio.js";
+
+/** Las 9 de hasta la 0.12 (Edge, Kokoro y los clones). */
+const DE_SIEMPRE = vocesDe(["edge", "kokoro", "clones"]);
 
 const agente = (i: number, empresa = "JSTM"): AgentePlan => ({ id: `id-${String(i).padStart(3, "0")}`, nombre: `Agente ${i}`, empresa, creado: `2026-10-${String(1 + (i % 28)).padStart(2, "0")}T00:00:${String(i % 60).padStart(2, "0")}Z` });
 
 describe("reparto de las voces", () => {
   it("con 26 agentes se usan las 9, y ninguna tiene más de 1 agente que otra", () => {
     const lista = Array.from({ length: 26 }, (_, i) => agente(i));
-    const voces = asignarVoces({}, lista);
-    const cuenta = VOCES.map((v) => Object.values(voces).filter((x) => x === v.id).length);
+    const voces = asignarVoces({}, lista, DE_SIEMPRE);
+    const cuenta = DE_SIEMPRE.map((v) => Object.values(voces).filter((x) => x === v.id).length);
     expect(cuenta.every((n) => n >= 2 && n <= 3)).toBe(true);
     expect(cuenta.reduce((a, b) => a + b)).toBe(26);
   });
@@ -34,6 +39,20 @@ describe("reparto de las voces", () => {
     const voces = asignarVoces({ "se-fue": "lorenzo" }, [agente(1)]);
     expect(voces["se-fue"]).toBeUndefined();
   });
+
+  it("0.13.0: solo con Supertonic, los nuevos reciben sus 10 voces repartidas y quien tenía otra se queda con ella", () => {
+    const lista = Array.from({ length: 21 }, (_, i) => agente(i));
+    const voces = asignarVoces({ [agente(0).id]: "lorenzo" }, lista, vocesDe(["supertonic"]));
+    expect(voces[agente(0).id]).toBe("lorenzo");
+    const otras = lista.slice(1).map((a) => voces[a.id]!);
+    expect(otras.every((v) => v.startsWith("supertonic-"))).toBe(true);
+    const cuenta = vocesDe(["supertonic"]).map((v) => otras.filter((x) => x === v.id).length);
+    expect(cuenta.every((n) => n === 2)).toBe(true);
+  });
+
+  it("0.13.0: sin voces para elegir, los nuevos quedan sin voz (y nadie pierde la suya)", () => {
+    expect(asignarVoces({ [agente(0).id]: "dora" }, [agente(0), agente(1)], [])).toEqual({ [agente(0).id]: "dora" });
+  });
 });
 
 describe("frases que se generan", () => {
@@ -43,8 +62,8 @@ describe("frases que se generan", () => {
       { id: "b", nombre: "Speckit", empresa: "Migo", creado: "2" },
       { id: "c", nombre: "QA Engineer", empresa: "JSTM", creado: "3" },
     ];
-    const voces = asignarVoces({}, lista);
-    const p = plan(lista, voces);
+    const voces = asignarVoces({}, lista, DE_SIEMPRE);
+    const p = plan(lista, voces, VOZ_RESUMEN, DE_SIEMPRE);
     const de = (id: string) => p.filter((t) => t.voz.id === voces[id] && !/agentes/.test(t.texto)).map((t) => t.texto);
     expect(de("a")).toEqual(expect.arrayContaining([
       "Líder técnico, de Betalandia: te necesito.",
@@ -162,9 +181,28 @@ describe("la página busca el audio en el índice", () => {
     expect(leerIndice(null)).toBeNull();
   });
 
-  it("las 9 voces tienen nombre y motor", () => {
-    expect(VOCES.length).toBe(9);
-    expect(new Set(VOCES.map((v) => v.motor))).toEqual(new Set(["edge", "kokoro", "chatterbox", "qwen3"]));
+  it("las 19 voces tienen nombre y motor: las 9 de siempre y, desde la 0.13.0, las 10 de Supertonic", () => {
+    expect(VOCES.length).toBe(19);
+    expect(new Set(VOCES.map((v) => v.motor))).toEqual(new Set(["edge", "kokoro", "chatterbox", "qwen3", "supertonic"]));
     expect(vozPorId("qwen3-mujer")?.clave).toBe("ref_mujer_cl");
+    const st = VOCES.filter((v) => v.motor === "supertonic");
+    expect(st.map((v) => v.clave)).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    expect(vozPorId("supertonic-f1")).toMatchObject({ nombre: "Supertonic F1", detalle: "mujer · Supertonic", clave: "0" });
+    expect(vozPorId("supertonic-m5")).toMatchObject({ nombre: "Supertonic M5", detalle: "hombre · Supertonic", clave: "9" });
+  });
+
+  it("0.13.0: los audios de Supertonic son WAV (salen sin ffmpeg) y los demás siguen en MP3, con el mismo nombre de antes", () => {
+    expect(extensionDe("supertonic-m2")).toBe("wav");
+    expect(extensionDe("dora")).toBe("mp3");
+    expect(extensionDe("mascota-gato")).toBe("mp3");
+    expect(archivoDe("supertonic-f3", "Terminé.")).toMatch(/^[0-9a-f]{20}\.wav$/);
+    expect(archivoVivo("supertonic-f3", "Terminé. Algo.")).toMatch(/^vivo\/supertonic-f3-[0-9a-z]+\.wav$/);
+    // Los de siempre no cambian de nombre: lo ya grabado se sigue usando.
+    expect(archivoDe("dora", "Terminé.")).toMatch(/^[0-9a-f]{20}\.mp3$/);
+  });
+
+  it("0.13.0: la duración de un audio, sea WAV o MP3", () => {
+    expect(duracionAudio(wavPcm16(new Float32Array(22_050 * 2), 22_050))).toBe(2_000);
+    expect(duracionAudio(new Uint8Array([1, 2, 3]))).toBeNull();
   });
 });

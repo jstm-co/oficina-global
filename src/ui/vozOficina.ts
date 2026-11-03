@@ -21,7 +21,7 @@ import { useSyncExternalStore } from "react";
 import { accionPlugin } from "../fuentes.js";
 import { ESPERA_HORA_MS, TurnoVoz, type LoOficina, type Ocupa } from "../turnoVoz.js";
 import { VOZ_EXTRA_MS, type HechoVoz, type TipoMascota, type Vida, type VozVida } from "../vida.js";
-import { archivoVivo, duracionMp3, vozDeAgente, type IndiceVoces } from "../voces.js";
+import { archivoVivo, duracionAudio, vozDeAgente, type IndiceVoces } from "../voces.js";
 import { conLetras, horaParaVoz, paraLeer, pedidosDeCharla, textoOficina, VOCES_MASCOTA, type PedidoOficina } from "../vozOficina.js";
 import { DICEN } from "../charlas.js";
 import { ajustes, alCambiarAjustes, leeOficina, type TipoLeer } from "./ajustes.js";
@@ -170,7 +170,7 @@ const espera = (ms: number) => new Promise<void>((ok) => setTimeout(ok, ms));
 /** Cuánto dura un audio (ms), de sus cuadros. */
 async function duracionDe(b: Blob): Promise<number | null> {
   try {
-    return duracionMp3(new Uint8Array(await b.arrayBuffer()));
+    return duracionAudio(new Uint8Array(await b.arrayBuffer()));
   } catch {
     return null;
   }

@@ -19,7 +19,8 @@ import { Capa, useEsc } from "./capas.js";
 import { CajaPersonaje, cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
 import { cargarIndice, useIndiceVoces, useVocesSinGenerar } from "./audiosVoces.js";
 import { desbloquearAudio, probarVoz, probarVozDetalle, tocarCampana, useHayVoces, useSubtitulo } from "./sonido.js";
-import { abrirPanelVoces } from "./eleccion.js";
+import { abrirPanelVoces, useEstadoMotores } from "./eleccion.js";
+import { PrepararVoces } from "./prepararVoces.js";
 import { useEstadoVozViva } from "./vozViva.js";
 import { PaginaAgentes, QuienHabla } from "./vocesElegir.js";
 
@@ -341,6 +342,8 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
   // Qué voz tiene el del ejemplo: del índice de los audios, que se lee solo con las voces encendidas.
   const indice = useIndiceVoces();
   const sinGenerar = useVocesSinGenerar();
+  // 0.13.0 (issue #9): «Preparar voces» desde aquí; un worker de antes no lo tiene (queda la nota de `npm run voces`).
+  const motores = useEstadoMotores();
   useEffect(() => {
     if (aj.voces) void cargarIndice();
   }, [aj.voces]);
@@ -365,8 +368,9 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
       <p>
         Cada agente lo dice en voz alta, con su propia voz. Por ejemplo{voz ? ` (${voz.nombre})` : ""}: <b>«{frase}»</b>
       </p>
-      {/* Sin el generador, el panel no tiene qué voz le toca a cada uno y las listas quedan cargando. */}
-      {aj.voces && sinGenerar ? (
+      {aj.voces && companyId ? <PrepararVoces agentes={agentes} companyId={companyId} /> : null}
+      {/* Sin audios, el panel no tiene qué voz le toca a cada uno y las listas quedan cargando. */}
+      {aj.voces && sinGenerar && !motores ? (
         <div className="of-avp-note is-box">
           <Icono nombre="info" tam={12} />
           <span>
@@ -426,7 +430,7 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
         <span className="of-avp-l">
           <Icono nombre="volume-2" tam={14} />
           <span>
-            <b>9 voces: Lorenzo, Catalina, Alex, Dora, Santa y 4 clones chilenos</b>
+            <b>19 voces: 10 de Supertonic, Lorenzo, Catalina, Alex, Dora, Santa y 4 clones chilenos</b>
             <em>{hayVoces ? "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez habla la del navegador" : "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez solo se verá el subtítulo"}</em>
           </span>
         </span>
