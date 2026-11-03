@@ -195,11 +195,12 @@ export function vacia(r: DatosReserva): boolean {
   return Object.keys(r.aperturas).length === 0 && Object.keys(r.finales).length === 0 && r.sueltas.length === 0 && r.bromas.length === 0;
 }
 
-/** Mientras alguna categoría conocida esté corta, la ráfaga escribe 4 paquetes; llena, vuelve a 2. */
-export function corta(r: DatosReserva): boolean {
-  const corto = (xs: readonly Escrito[]) => xs.length < POR_CLAVE;
+/** Lo que falta por decir, sin contar lo ya dicho en la hora: corta, 4 paquetes; llena, 2. */
+export function corta(r: DatosReserva, ahora = Date.now()): boolean {
+  const disponible = (e: Escrito) => !e.f.some((t) => (r.dichas[normalizarFrase(t)] ?? -Infinity) > ahora - NO_REPITE_MS);
+  const corto = (xs: readonly Escrito[]) => xs.filter(disponible).length < POR_CLAVE;
   return (
-    r.sueltas.length < MAX_SUELTAS ||
+    r.sueltas.filter(disponible).length < MAX_SUELTAS ||
     corto(r.bromas) ||
     Object.values(r.aperturas).some(corto) ||
     Object.values(r.finales).some(corto) ||
@@ -244,16 +245,19 @@ export function fuenteDe(r: () => DatosReserva, ahora: () => number = Date.now):
       const lista = r().mascotas[id].filter((e) => !dicha(r(), e.f, ahora()));
       return elegir(lista, azar)?.f[0] ?? null;
     },
+    dicha(texto) {
+      return dicha(r(), [texto], ahora());
+    },
   };
 }
 
-/** Guarda lo mostrado: las frases generadas no vuelven en una hora y el panel calcula su proporción de hoy. */
+/** Guarda todo lo mostrado para que no vuelva en una hora; el panel calcula la proporción generada de hoy. */
 export function anotarUso(r: DatosReserva, lineas: readonly Linea[], ia: FinalIa | undefined, sueltaOMascota: boolean, ahora: number): number {
   let generadas: string[] = [];
   if (sueltaOMascota) generadas = lineas.map((l) => l.texto);
   else if (ia?.broma) generadas = [...ia.frases];
   else if (ia) generadas = [...(ia.apertura ? [ia.apertura] : []), ...ia.frases];
-  for (const t of generadas) r.dichas[normalizarFrase(t)] = ahora;
+  for (const t of [...lineas.map((l) => l.texto), ...(ia?.apertura ? [ia.apertura] : []), ...(ia?.frases ?? [])]) r.dichas[normalizarFrase(t)] = ahora;
   for (const [t, en] of Object.entries(r.dichas)) if (ahora - en > NO_REPITE_MS || en > ahora) delete r.dichas[t];
   r.usos = [...r.usos, { t: ahora, total: lineas.length, ia: generadas.length }].slice(-2000);
   return generadas.length;

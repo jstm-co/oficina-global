@@ -44,8 +44,8 @@
 // dicen las mascotas y las entregas.
 //
 // 0.7.0 (JST-232, spike de JST-230): con la IA de Chrome elegida y lista, el
-// Guionista toma el final de las conversaciones y la mitad de las frases
-// sueltas de la reserva que escribe la IA (`fijarIa`), y la vida le dice a la IA
+// Guionista toma el final de las conversaciones y las frases sueltas nuevas de
+// la reserva que escribe la IA (`fijarIa`), y la vida le dice a la IA
 // qué se puede pedir con las salas de ahora (`pedidosIa`).
 //
 // Solo lee: nada de esto cambia tareas ni agentes.
@@ -2138,6 +2138,7 @@ export class Vida {
         this.proxSuelta.set(a.id, ahora + this.entre(SUELTA_MS));
         if (this.charlas.some((c) => c.prefijo === pre) || this.sueltas.some((s) => s.prefijo === pre) || this.juntas.some((j) => j.prefijo === pre)) continue;
         const linea = this.guionista.suelta(a.id, this.temas?.guardado(a.id) ?? null, this.azar, (codigo) => this.titulos?.titulo(codigo) ?? null);
+        if (!linea) continue;
         const su: Suelta = { id: this.sigId++, prefijo: pre, quien: a.id, linea, t0: ahora, dur: duracionFrase(linea, true) };
         this.sueltas.push(su);
         this.fuenteIa?.usado?.("suelta", [linea], null, pre);
@@ -2225,6 +2226,7 @@ export class Vida {
   private hablarMascota(m: Mascota, ahora: number): void {
     for (const q of this.mascotasVivas) q.dice = null;
     const texto = this.guionista.mascota(m.id, this.azar);
+    if (!texto) return;
     m.dice = { texto, hasta: ahora + MASCOTA_DICE_MS };
     this.fuenteIa?.usado?.("mascota", [{ quien: m.id, texto, codigo: null, titulo: null }], m.id, "pasillo");
   }

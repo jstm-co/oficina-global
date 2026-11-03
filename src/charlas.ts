@@ -12,7 +12,7 @@
 // 0.13.0 (JST-345): con la IA de Chrome lista y elegida, también reescribe la
 // apertura con huecos (`{tarea}`, `{agente}`, `{n}`…), las sueltas, las bromas y
 // las mascotas. El código rellena los huecos con los datos actuales; las frases
-// fijas quedan de respaldo cuando la IA no está disponible o no tiene variantes.
+// fijas son respaldo solo si no se dijeron en la hora y, si no queda otra, se calla.
 import type { TipoEspera } from "./estado.js";
 import { cortarNombre } from "./rotulo.js";
 import type { EstadoCola, Temas } from "./temas.js";
@@ -864,7 +864,9 @@ export interface FuenteIa {
   broma(azar: () => number): readonly string[] | null;
   /** Algo nuevo que dice esa mascota, o `null`. */
   mascota(id: IdMascota, azar: () => number): string | null;
-  /** Lo que la vida mostró; `ia` identifica las frases generadas para no repetirlas en una hora y calcular el contador. */
+  /** Si ese texto exacto ya se mostró en la última hora. */
+  dicha(texto: string): boolean;
+  /** Lo que la vida mostró; `ia` identifica las frases generadas para calcular el contador. */
   usado?(tipo: "final" | "suelta" | "mascota", lineas: readonly Linea[], variante: string | null, sala: string, ia?: FinalIa): void;
 }
 
@@ -951,7 +953,7 @@ export class Guionista {
   private ia: FuenteIa | null = null;
   private readonly ultimoFinal = new Map<string, string>();
 
-  /** 0.7.0: con la IA lista y elegida, los finales y la mitad de las sueltas salen de su reserva; `null`, las de siempre. */
+  /** Con la IA lista y elegida se usan primero sus variantes; `null`, las frases de siempre sin memoria persistente. */
   fijarIa(fuente: FuenteIa | null): void {
     this.ia = fuente;
   }
@@ -1002,6 +1004,8 @@ export class Guionista {
       const d = x.si(c);
       if (!d) continue;
       if (!forzar && claves(x, d).some((k) => this.dicho(k, c.ahora))) continue;
+      const lineas = this.lineasDe(x, d, c);
+      if (this.ia && lineas.some((l) => this.ia!.dicha(l.texto))) continue;
       out.push({ x, d });
     }
     return out;
@@ -1171,11 +1175,10 @@ export class Guionista {
 
   /**
    * Una frase suelta para alguien solo en el descanso (§1.6): 1 de cada 3, de
-   * sus temas guardados (sin leer nada); si no, del mazo de las fijas, que no
-   * repite ninguna de las 5 últimas.
+   * sus temas guardados (sin leer nada); si no, del mazo de las fijas. Con la IA
+   * elegida no se repite nada dicho en la hora: sin otra variante, se calla.
    */
-  suelta(quien: string, temas: Temas | null, azar: () => number, titulo: (codigo: string) => string | null = () => null): Linea {
-    // Con la IA elegida, siempre sale de su reserva; las fijas quedan de respaldo.
+  suelta(quien: string, temas: Temas | null, azar: () => number, titulo: (codigo: string) => string | null = () => null): Linea | null {
     if (this.ia) {
       const t = this.ia.suelta(azar, this.sueltasDichas.slice(-NO_SUELTA));
       if (t) {
@@ -1191,7 +1194,7 @@ export class Guionista {
       ];
       for (const [texto, codigo, nombre] of conDato) {
         const clave = `${texto}:${codigo}`;
-        if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave)) continue;
+        if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave) || this.ia?.dicha(texto)) continue;
         this.sueltasDichas.push(clave);
         return { quien, texto, codigo, titulo: nombre ?? titulo(codigo) };
       }
@@ -1199,22 +1202,23 @@ export class Guionista {
     for (let k = 0; k < SUELTAS.length * 3; k++) {
       if (this.mazoSueltas.length === 0) this.mazoSueltas = barajar(SUELTAS, azar);
       const s = this.mazoSueltas.shift()!;
-      if (this.sueltasDichas.slice(-NO_SUELTA).includes(s)) continue;
+      if (this.sueltasDichas.slice(-NO_SUELTA).includes(s) || this.ia?.dicha(s)) continue;
       this.sueltasDichas.push(s);
       if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
       return { quien, texto: s, codigo: null, titulo: null };
     }
-    return { quien, texto: "☕", codigo: null, titulo: null };
+    return this.ia ? null : { quien, texto: "☕", codigo: null, titulo: null };
   }
 
-  /** Lo que dice una mascota: de la reserva de la IA; sin variantes, rota las fijas. */
-  mascota(id: IdMascota, azar: () => number = Math.random): string {
+  /** Lo que dice una mascota: con la IA elegida tampoco repite una fija dicha en la hora. */
+  mascota(id: IdMascota, azar: () => number = Math.random): string | null {
     const generada = this.ia?.mascota(id, azar);
     if (generada) return generada;
     const l = DICEN[id];
     const i = ((this.mascotas.get(id) ?? -1) + 1) % l.length;
     this.mascotas.set(id, i);
-    return l[i]!;
+    const fija = l[i]!;
+    return this.ia?.dicha(fija) ? null : fija;
   }
 
   /**

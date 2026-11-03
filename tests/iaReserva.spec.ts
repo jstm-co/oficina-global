@@ -7,6 +7,7 @@ import {
   anotarUso,
   CADA_MS,
   conteoIa,
+  corta,
   fuenteDe,
   leerReserva,
   MAX_SUELTAS,
@@ -79,6 +80,16 @@ describe("el pedido con aperturas, bromas y mascotas", () => {
     expect(SISTEMA).toContain("exactamente los mismos huecos");
     expect(SISTEMA).toContain("No repitas las frases recientes");
     expect(SISTEMA).toContain("gato, perro, conejo o robot aspiradora");
+  });
+
+  it("un paquete solo de sueltas pide veinte y no gasta la respuesta en otras categorías", () => {
+    const dedicado = armarPaquete([ERROR], 20, [], false, true);
+    expect(dedicado.sueltas).toHaveLength(20);
+    expect(dedicado.texto).toContain("Frases sueltas:");
+    expect(dedicado.texto).not.toContain("Conversaciones");
+    expect(dedicado.texto).not.toContain("Bromas:");
+    expect(dedicado.texto).not.toContain("Mascotas:");
+    expect(dedicado.esquema.required).toEqual(["sueltas"]);
   });
 
   it("un paquete solo de aperturas no pide finales ni otras categorías", () => {
@@ -229,6 +240,8 @@ describe("la reserva persistente", () => {
     expect(f.suelta(() => 0, [])).toBeNull();
     expect(f.broma(() => 0)).toBeNull();
     expect(f.mascota("gato", () => 0)).toBeNull();
+    expect(f.dicha("¿Qué le pasó?")).toBe(true);
+    expect(f.dicha("Una frase que no salió.")).toBe(false);
     const despues = ahora + NO_REPITE_MS + 1;
     f = fuenteDe(() => r, () => despues);
     expect(f.apertura(ERROR.variante, () => 0)).toBe("¡Qué lata por {agente}!");
@@ -236,8 +249,50 @@ describe("la reserva persistente", () => {
     expect(f.suelta(() => 0, [])).toBe("Este café me salva.");
     expect(f.broma(() => 0)).toEqual(["¿Café o té?", "Café, por favor."]);
     expect(f.mascota("gato", () => 0)).toBe("Qué rico el sol.");
+    expect(f.dicha("¿Qué le pasó?")).toBe(false);
     const c = conteoIa(r, ahora);
     expect(c.dichas).toBe(7);
     expect(c.deIa).toBe(6);
+  });
+
+  it("dos horas con la demanda del QA: ninguna suelta vuelve dentro de la hora y el exceso queda en silencio", () => {
+    const inicio = Date.parse("2026-10-24T18:34:00.000Z");
+    const fijas = ["☕", "Pausa para el café.", "Mmm…", "¿Y ahora qué?", "Un cafecito y vuelvo.", "A ver qué sale.", "Qué rico este café.", "Cinco minutos más…", "♪ ♫"];
+    const r = reservaVacia();
+    const f = fuenteDe(() => r, () => ahora);
+    const vistas = new Map<string, number>();
+    let ahora = inicio;
+    let generadas = 0;
+    let silencios = 0;
+    const codigo = (n: number): string => {
+      let out = "";
+      do {
+        out = String.fromCharCode(97 + (n % 26)) + out;
+        n = Math.floor(n / 26) - 1;
+      } while (n >= 0);
+      return out;
+    };
+    for (let paso = 0; paso < 2 * 60 * 12; paso++) {
+      ahora = inicio + paso * 5_000;
+      if (paso % (15 * 12) === 0) {
+        const tanda = paso / (15 * 12);
+        for (let i = 0; i < 45; i++) sumarSuelta(r, `Frase ${codigo(tanda * 45 + i)}.`, ahora);
+      }
+      const texto = f.suelta(() => 0, []) ?? fijas.find((t) => !f.dicha(t)) ?? null;
+      if (!texto) {
+        silencios += 1;
+        expect(corta(r, ahora)).toBe(true);
+        continue;
+      }
+      const anterior = vistas.get(texto);
+      expect(anterior === undefined || ahora - anterior >= NO_REPITE_MS, `${texto} · anterior ${anterior} · ahora ${ahora}`).toBe(true);
+      vistas.set(texto, ahora);
+      const deIa = !fijas.includes(texto);
+      if (deIa) generadas += 1;
+      anotarUso(r, [l("a", texto)], undefined, deIa, ahora);
+    }
+    expect(silencios).toBeGreaterThan(0);
+    expect(generadas).toBeGreaterThan(200);
+    expect(conteoIa(r, inicio + 2 * NO_REPITE_MS - 5_000).deIa).toBe(generadas);
   });
 });

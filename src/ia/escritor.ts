@@ -7,7 +7,7 @@
 //   con la Oficina a la vista, la IA elegida y lista, las conversaciones a la
 //   vista, el candado `oficina-ia` (una sola pestaña escribe) y el permiso del
 //   worker (la Mac no está cargada ni hay un clon generando). Cada ráfaga abre
-//   la sesión, escribe 2 paquetes (4 mientras la reserva esté corta) y la suelta.
+//   la sesión, escribe 2 paquetes (4 mientras la reserva esté corta, los últimos 2 solo de sueltas) y la suelta.
 //   Cada pedido tiene un tope de 30 s y de 1.500 letras.
 // - **«En pausa»** (0.8.1, JST-249; punto 5 del spike): una ráfaga que toca y
 //   no tiene permiso espera; se vuelve a preguntar en cada tic hasta que la Mac
@@ -320,7 +320,7 @@ export class Escritor {
   }
 
   /**
-   * Una ráfaga: la sesión, 2 paquetes (4 mientras la reserva esté corta) y soltarla.
+   * Una ráfaga: la sesión, 2 paquetes (4 mientras la reserva esté corta, los últimos 2 solo de sueltas) y soltarla.
    * `conPermiso`: el tic recién le preguntó al worker (no se le vuelve a preguntar).
    */
   async rafaga(conPermiso = false): Promise<void> {
@@ -337,7 +337,7 @@ export class Escritor {
           return true;
         }
         const r = this.d.leer();
-        const paquetes = Math.ceil(((corta(r) ? 4 : 2) * FINALES_POR_PAQUETE) / this.finalesPorPaquete());
+        const paquetes = Math.ceil(((corta(r, this.d.ahora()) ? 4 : 2) * FINALES_POR_PAQUETE) / this.finalesPorPaquete());
         r.rafaga = this.d.ahora();
         this.d.guardar(r);
         this.anotar({ t: this.d.ahora(), tipo: "rafaga", paquetes });
@@ -370,7 +370,7 @@ export class Escritor {
               this.anotar({ t: this.d.ahora(), tipo: "saltada", por: "oculta" });
               break;
             }
-            await this.paquete(base, pedidas, i === 0);
+            await this.paquete(base, pedidas, i === 0 ? "aperturas" : i >= 2 ? "sueltas" : "completo");
           }
         } finally {
           base.destroy();
@@ -400,12 +400,13 @@ export class Escritor {
   }
 
   /** Un paquete: una copia de la sesión, el pedido con su esquema (30 s y 1.500 letras como mucho), la revisión y a la reserva. */
-  private async paquete(base: SesionIa, pedidas: Set<string>, soloAperturas: boolean): Promise<void> {
+  private async paquete(base: SesionIa, pedidas: Set<string>, modo: "aperturas" | "completo" | "sueltas"): Promise<void> {
     const { muestras, nombres } = this.d.pedidos();
     const actual = this.d.leer();
-    const elegidas = this.elegir(muestras, pedidas, actual);
-    if (!soloAperturas) for (const m of elegidas) pedidas.add(m.clave);
-    const p = armarPaquete(elegidas, Math.ceil((SUELTAS_POR_PAQUETE * this.finalesPorPaquete()) / FINALES_POR_PAQUETE), recientes(actual), soloAperturas);
+    const elegidas = modo === "sueltas" ? [] : this.elegir(muestras, pedidas, actual);
+    if (modo === "completo") for (const m of elegidas) pedidas.add(m.clave);
+    const porPaquete = modo === "sueltas" ? 20 : SUELTAS_POR_PAQUETE;
+    const p = armarPaquete(elegidas, Math.ceil((porPaquete * this.finalesPorPaquete()) / FINALES_POR_PAQUETE), recientes(actual), modo === "aperturas", modo === "sueltas");
     const t0 = this.d.ahora();
     const corte = new AbortController();
     let por: "tope" | "largo" | null = null;

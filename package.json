@@ -1,6 +1,6 @@
 {
   "name": "paperclip-plugin-oficina-global",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "type": "module",
   "description": "Oficina pixel con los agentes de todas las empresas de tu instancia de Paperclip: quién trabaja, quién te necesita, con error, en pausa o libre. Responde tarjetas sin salir, con avisos y voces, modo TV y un resumen leído en voz alta.",
   "scripts": {

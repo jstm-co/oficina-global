@@ -16,7 +16,12 @@ const MUESTRAS: MuestraFinal[] = [
 function respuesta(texto: string): string {
   const cs = [...texto.matchAll(/- (c\d+) · Apertura: «([^»]+)»/g)].map((m) => ({ id: m[1]!, apertura: m[2]! }));
   const ss = [...texto.matchAll(/- (s\d+)$/gm)].map((m) => m[1]!);
-  const SUELTAS = ["Linda la ventana.", "Un sorbo y sigo.", "Qué rico el sofá.", "A estirar las piernas.", "Mmm, café de grano."];
+  const SUELTAS = [
+    "Linda la ventana.", "Un sorbo y sigo.", "Qué rico el sofá.", "A estirar las piernas.", "Mmm, café de grano.",
+    "El sol entra rico.", "Qué blando el cojín.", "Se ve despejado.", "Un respiro profundo.", "El café está justo.",
+    "Me estiro un poco.", "Qué quieto acá.", "La silla abraza.", "Una pausa redonda.", "El vapor sube lento.",
+    "Qué rica esta pausa.", "El sofá está tibio.", "Aire fresco y café.", "Unos sorbos lentos.", "La ventana invita.",
+  ];
   const MASCOTAS = ["Qué rico el sol.", "El sofá me llama.", "Qué lindo el jardín.", "Todo está limpio."];
   return JSON.stringify({
     charlas: cs.map(({ id, apertura }) => ({ id, primera: apertura.includes("{agente}") ? "¡Qué lata por {agente}!" : "Uf, qué mal momento.", frases: texto.includes("Solo reescribe aperturas") ? [] : [{ texto: "Ánimo, ya pasará." }] })),
@@ -171,9 +176,11 @@ describe("las ráfagas", () => {
     const r = reserva();
     expect(r.aperturas["error-1"]!.map((x) => x.f)).toEqual([["¡Qué lata por {agente}!"]]);
     expect(r.finales[MUESTRAS[0]!.clave]!.map((x) => x.f)).toEqual([["Ánimo, ya pasará."]]);
-    expect(r.sueltas.length).toBe(5);
+    expect(r.sueltas.length).toBe(18);
     expect(r.bromas.length).toBe(1);
     expect(Object.values(r.mascotas).flat().length).toBe(4);
+    expect(f.pedidos.slice(2).every((p) => [...p.matchAll(/^- s\d+$/gm)].length === 20)).toBe(true);
+    expect(f.pedidos.slice(2).every((p) => !p.includes("Conversaciones") && !p.includes("Bromas:") && !p.includes("Mascotas:"))).toBe(true);
     expect(e.escritas.some((x) => x.tipo === "final" && x.fijas[0] === "A CEO le falló el run.")).toBe(true);
     pasar(CADA_MS - 1_000);
     await e.tic();
@@ -191,7 +198,8 @@ describe("las ráfagas", () => {
     await e.tic();
     expect(f.copias).toBe(8);
     expect(f.pedidos[0]).toContain("Solo reescribe aperturas");
-    expect(f.pedidos.slice(1).every((p) => [...p.matchAll(/^- s\d+$/gm)].length === 3)).toBe(true);
+    expect([...f.pedidos[1]!.matchAll(/^- s\d+$/gm)]).toHaveLength(3);
+    expect(f.pedidos.slice(2).every((p) => [...p.matchAll(/^- s\d+$/gm)].length === 10)).toBe(true);
   });
 
   it("pide primero lo que tiene menos finales, sin repetir una clave en la ráfaga", async () => {

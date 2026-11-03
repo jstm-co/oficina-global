@@ -77,13 +77,13 @@ function continuacion(m: MuestraFinal): string {
   return ` · Sigue: ${fijas.map((l) => `${l.quien === a ? "A" : "B"}: «${l.texto}»`).join(" / ")}`;
 }
 
-export function armarPaquete(muestras: readonly MuestraFinal[], nSueltas: number, recientes: readonly string[] = [], soloAperturas = false): Paquete {
+export function armarPaquete(muestras: readonly MuestraFinal[], nSueltas: number, recientes: readonly string[] = [], soloAperturas = false, soloSueltas = false): Paquete {
   const finales = new Map<string, MuestraFinal>();
-  muestras.slice(0, FINALES_POR_PAQUETE).forEach((m, i) => finales.set(`c${i + 1}`, m));
+  if (!soloSueltas) muestras.slice(0, FINALES_POR_PAQUETE).forEach((m, i) => finales.set(`c${i + 1}`, m));
   const sueltas = soloAperturas ? [] : Array.from({ length: Math.max(0, nSueltas) }, (_, i) => `s${i + 1}`);
-  const bromas = sueltas.length > 0 ? ["b1"] : [];
+  const bromas = sueltas.length > 0 && !soloSueltas ? ["b1"] : [];
   const mascotas = new Map<string, IdMascota>();
-  if (sueltas.length > 0) (["gato", "perro", "conejo", "robot"] as const).forEach((id, i) => mascotas.set(`m${i + 1}`, id));
+  if (bromas.length > 0) (["gato", "perro", "conejo", "robot"] as const).forEach((id, i) => mascotas.set(`m${i + 1}`, id));
   const lineas: string[] = soloAperturas ? ["Solo reescribe aperturas; en cada respuesta, frases debe ser []."] : [];
   const props: Record<string, unknown> = {};
   const req: string[] = [];
@@ -118,33 +118,35 @@ export function armarPaquete(muestras: readonly MuestraFinal[], nSueltas: number
       items: { type: "object", required: ["id", "texto"], properties: { id: { type: "string", enum: sueltas }, texto: texto(30) } },
     };
     req.push("sueltas");
-    lineas.push("Bromas:", ...bromas.map((id) => `- ${id}`));
-    props.bromas = {
-      type: "array",
-      minItems: 1,
-      maxItems: 1,
-      items: {
-        type: "object",
-        required: ["id", "frases"],
-        properties: {
-          id: { type: "string", enum: bromas },
-          frases: { type: "array", minItems: 2, maxItems: 2, items: { type: "object", required: ["texto"], properties: { texto: texto(50) } } },
+    if (!soloSueltas) {
+      lineas.push("Bromas:", ...bromas.map((id) => `- ${id}`));
+      props.bromas = {
+        type: "array",
+        minItems: 1,
+        maxItems: 1,
+        items: {
+          type: "object",
+          required: ["id", "frases"],
+          properties: {
+            id: { type: "string", enum: bromas },
+            frases: { type: "array", minItems: 2, maxItems: 2, items: { type: "object", required: ["texto"], properties: { texto: texto(50) } } },
+          },
         },
-      },
-    };
-    req.push("bromas");
-    lineas.push("Mascotas:", ...[...mascotas].map(([id, animal]) => `- ${id}: ${animal}`));
-    props.mascotas = {
-      type: "array",
-      minItems: mascotas.size,
-      maxItems: mascotas.size,
-      items: {
-        type: "object",
-        required: ["id", "texto"],
-        properties: { id: { type: "string", enum: [...mascotas.keys()] }, texto: texto(30) },
-      },
-    };
-    req.push("mascotas");
+      };
+      req.push("bromas");
+      lineas.push("Mascotas:", ...[...mascotas].map(([id, animal]) => `- ${id}: ${animal}`));
+      props.mascotas = {
+        type: "array",
+        minItems: mascotas.size,
+        maxItems: mascotas.size,
+        items: {
+          type: "object",
+          required: ["id", "texto"],
+          properties: { id: { type: "string", enum: [...mascotas.keys()] }, texto: texto(30) },
+        },
+      };
+      req.push("mascotas");
+    }
   }
   if (recientes.length) lineas.push("No repitas estas frases recientes:", ...recientes.map((t) => `- «${t}»`));
   return { texto: lineas.join("\n"), esquema: { type: "object", required: req, properties: props }, finales, sueltas, bromas, mascotas, soloAperturas };

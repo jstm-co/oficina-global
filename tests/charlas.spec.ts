@@ -560,7 +560,7 @@ describe("frases sueltas (JST-162 §1.6)", () => {
   it("las fijas salen de un mazo y ninguna vuelve en las 5 siguientes", () => {
     const g = new Guionista();
     const azar = semilla(9);
-    const dichas = Array.from({ length: 80 }, () => g.suelta("Ana", null, azar).texto);
+    const dichas = Array.from({ length: 80 }, () => g.suelta("Ana", null, azar)?.texto);
     for (const d of dichas) expect(SUELTAS).toContain(d);
     for (let i = 0; i < dichas.length; i++) expect(dichas.slice(i + 1, i + 1 + NO_SUELTA)).not.toContain(dichas[i]);
     expect(new Set(dichas).size).toBe(SUELTAS.length);
@@ -572,7 +572,7 @@ describe("frases sueltas (JST-162 §1.6)", () => {
     const azar = semilla(13);
     for (let s = 1; s <= 600; s++) {
       const l = new Guionista().suelta("Ana", t, azar);
-      if (l.codigo) {
+      if (l?.codigo) {
         conDato += 1;
         expect(["Después viene esta.", "Esta ya está. Me gané el café."]).toContain(l.texto);
         expect(l.titulo).toBe(l.codigo === "JST-91" ? "Re-QA" : "QA");
@@ -583,7 +583,7 @@ describe("frases sueltas (JST-162 §1.6)", () => {
     // «Después viene esta» solo si lo primero de su cola es `todo`.
     const g = new Guionista();
     const bloqueada: Temas = { hecho: null, sigue: { codigo: "JST-5", estado: "blocked" } };
-    for (let i = 0; i < 50; i++) expect(g.suelta("Ana", bloqueada, () => 0).codigo).toBeNull();
+    for (let i = 0; i < 50; i++) expect(g.suelta("Ana", bloqueada, () => 0)?.codigo).toBeNull();
   });
 });
 
