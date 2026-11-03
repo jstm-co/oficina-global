@@ -118,6 +118,8 @@ describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del
     expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "¡Qué lata por CEO!", apertura: { plantilla: "Son 4 con {agente}.", datos: { agente: "CEO" } } })).toBeNull();
     expect(validarPedidoOficina({ clase: "mascota", agenteId: null, mascota: "gato", texto: "Qué rico el sol." })).toMatchObject({ ia: true, mascota: "gato" });
     expect(validarPedidoOficina({ clase: "mascota", agenteId: null, mascota: "gato", texto: "Somos 4." })).toBeNull();
+    expect(validarPedidoOficina({ clase: "mascota", agenteId: null, mascota: "conejo", texto: "Pío, qué rico el sol." })).toBeNull();
+    expect(validarPedidoOficina({ clase: "suelta", agenteId: "a", texto: "Necesito un momento!" })).toBeNull();
   });
 
   it("valida cada clase: la suelta es una de las suyas, la mascota dice lo suyo, la entrega lleva un nombre acotado y la hora números de verdad", () => {

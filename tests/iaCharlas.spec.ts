@@ -95,6 +95,14 @@ describe("las aperturas con huecos", () => {
     expect(rellenarApertura(APERTURA_ERROR, { texto: "A CEO le falló el run.", codigo: null })).toEqual({ texto: "¡Qué lata por CEO!", apertura: { plantilla: APERTURA_ERROR, datos: { agente: "CEO" } } });
     expect(rellenarApertura("Sin huecos.", { texto: "A CEO le falló el run.", codigo: null })).toBeNull();
   });
+
+  it("«Esta» conserva la mayúscula solo al principio de una frase", () => {
+    const actual = { texto: "Esta espera a que termine otra.", codigo: "BET-953" };
+    expect(aperturaDe(actual).datos.tarea).toBe("Esta");
+    expect(rellenarApertura("Todavía queda {tarea} pendiente.", actual)?.texto).toBe("Todavía queda esta pendiente.");
+    expect(rellenarApertura("{tarea} todavía está pendiente.", actual)?.texto).toBe("Esta todavía está pendiente.");
+    expect(rellenarApertura("Queda pendiente. ¡{tarea} sigue!", actual)?.texto).toBe("Queda pendiente. ¡Esta sigue!");
+  });
 });
 
 describe("el Guionista con la reserva de la IA", () => {

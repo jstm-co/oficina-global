@@ -76,6 +76,11 @@ import { VERSION_PLUGIN } from "./version.js";
 // fuera de Chrome los menús llaman «IA del computador» a la IA de la página y
 // se le piden menos finales por pedido; la revisión bota lo que copia el
 // ejemplo, y el panel «Voces» avisa si en ese Paperclip faltan los audios.
+//
+// La 0.13.0 (issue #9) tampoco: «Preparar voces» y las voces al día usan otra
+// acción del worker (`voz-al-dia`); los audios quedan en una carpeta de datos
+// del usuario, fuera del plugin, y se publican en `dist/ui/voces/`; Supertonic
+// corre en el worker con `sherpa-onnx-node` (dependencia opcional).
 const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_KEY,
   apiVersion: 1,

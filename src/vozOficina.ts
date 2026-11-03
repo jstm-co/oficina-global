@@ -21,7 +21,7 @@
 //   Va marcada (`ia`) para que el worker le ponga un tope por minuto.
 import { sinBarras, tareaParaVoz, TOPES_OFICINA } from "./paraVoz.js";
 import { DICEN, fraseDeCharla, fraseSuelta, NOMBRE_EN_FRASE, rellenarHuecos, SUELTAS_CON_DATO, type AperturaRellena, type IdMascota, type Linea } from "./charlas.js";
-import { fraseIaParaVoz, revisarPlantillaApertura } from "./ia/revision.js";
+import { fraseIaParaVoz, revisarMascota, revisarPlantillaApertura } from "./ia/revision.js";
 import type { Motor } from "./voces.js";
 
 /** Los 5 tipos del panel, por la clase de cada frase («dale» y «sobre» son de «Entregas»). */
@@ -190,7 +190,7 @@ export function validarPedidoOficina(x: unknown): PedidoOficina | null {
     if (!MASCOTAS.has(p.mascota as string) || typeof p.texto !== "string") return null;
     if (DICEN[p.mascota!].includes(p.texto)) return { clase, agenteId: null, mascota: p.mascota!, texto: p.texto };
     if (Object.values(DICEN).some((frases) => frases.includes(p.texto!))) return null;
-    return fraseIaParaVoz(p.texto) ? { clase, agenteId: null, mascota: p.mascota!, texto: p.texto, ia: true } : null;
+    return revisarMascota(p.mascota!, p.texto).length === 0 ? { clase, agenteId: null, mascota: p.mascota!, texto: p.texto, ia: true } : null;
   }
   if (!id(p.agenteId)) return null;
   const agenteId = p.agenteId;

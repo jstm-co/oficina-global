@@ -160,13 +160,36 @@ describe("aperturas, bromas, mascotas y casi repeticiones (0.13.0)", () => {
     expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n}.", "{agente} lleva {n} con {tarea}.")).toEqual([]);
   });
 
-  it("las bromas tienen dos frases y las mascotas no reutilizan el respaldo fijo", () => {
+  it("las bromas tienen dos frases y las mascotas no reutilizan el respaldo fijo ni suenan como otra especie", () => {
     expect(revisarBroma(["¿Café o té?", "Café, por favor."])).toEqual([]);
     expect(revisarBroma(["Solo una."])).toContain("una broma tiene 2 frases");
     expect(revisarBroma(["¿Quién rompió el build?", "Café, por favor."])).toContain("es una de siempre");
     expect(revisarMascota("gato", "Qué rico el sol.")).toEqual([]);
     expect(revisarMascota("gato", "¡Miau!")).toContain("es una de siempre");
     expect(revisarMascota("perro", "Somos 4.")).toContain("número");
+    expect(revisarMascota("conejo", "Pío, qué rico el sol.")).toContain("sonido de otra mascota");
+    expect(revisarMascota("gato", "Guau, a jugar!")).toEqual(expect.arrayContaining(["sonido de otra mascota", "signos de apertura"]));
+  });
+
+  it("los signos de cierre necesitan su apertura en cada frase", () => {
+    for (const t of ["Necesito un momento!", "Caliente, para despertar!", "Guau, a jugar!"]) expect(revisarTexto(t, { letras: 45 }), t).toContain("signos de apertura");
+    expect(revisarTexto("¡Necesito un momento! ¿Vienes?", { letras: 45 })).toEqual([]);
+  });
+
+  it("ninguna palabra queda pegada a un dato ni convierte el rol en una persona", () => {
+    const empresa = "¿Cómo están en {empresa}?";
+    expect(revisarApertura("¿Qué onda en {empresa} rara?", empresa)).toContain("palabra pegada a {empresa}");
+    expect(revisarApertura("¿Cómo están en {empresa} rara?", empresa)).toContain("palabra pegada a {empresa}");
+    expect(revisarApertura("¿Qué onda en {empresa}?", empresa)).toEqual([]);
+    expect(revisarApertura("¿Cómo va {rol} definitiva?", "¿Cómo va {rol}?")).toContain("palabra pegada a {rol}");
+    expect(revisarApertura("¿Cómo te encuentras, {rol}?", "¿Cómo va {rol}?")).toContain("{rol} usado como persona");
+    expect(revisarApertura("Todavía queda {tarea} pendiente.", "Acabo de terminar {tarea}.")).toEqual([]);
+  });
+
+  it("una pregunta de cantidad sin referente no sirve de final", () => {
+    const fijas = [{ texto: "Ingeniero Backend lleva 3 horas con esta." }];
+    expect(revisarFinal(["¿Cuánto?"], fijas)).toContain("pregunta sin contexto");
+    expect(revisarFinal(["¿Cuánto falta?"], fijas)).toEqual([]);
   });
 
   it("detecta igualdad normalizada y coincidencia de palabras muy alta", () => {

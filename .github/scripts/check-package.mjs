@@ -12,7 +12,9 @@ const required = [
   "dist/worker.js",
   "dist/ui/index.js",
   "dist/ui/tv.html",
+  "dist/ui/oficina3d.js",
   "dist/generar_voces.mjs",
+  "dist/motor_supertonic.mjs",
   "generador/motor_kokoro.py",
   "generador/referencias/ref_hombre_cl.wav",
 ];

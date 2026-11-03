@@ -93,6 +93,12 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   if (CODIGO.test(texto)) mal.push("código de tarea");
   if (/\d/.test(texto) || NUMEROS.test(texto)) mal.push("número");
   if (!PERMITIDOS.test(texto)) mal.push("signos, comillas o emojis");
+  for (const f of texto.split(/(?<=[.!?…])\s+/)) {
+    if ((f.match(/¡/g)?.length ?? 0) !== (f.match(/!/g)?.length ?? 0) || (f.match(/¿/g)?.length ?? 0) !== (f.match(/\?/g)?.length ?? 0)) {
+      mal.push("signos de apertura");
+      break;
+    }
+  }
   if (INGLES.test(texto)) mal.push("inglés");
   if (GROSERIAS.test(texto)) mal.push("grosería");
   if (TONO.test(texto)) mal.push("no es de Chile");
@@ -142,6 +148,7 @@ export function revisarFinal(frases: readonly string[], fijas: readonly Pick<Lin
   const vistas = new Set(fijas.map((l) => plano(l.texto)));
   for (const f of frases) {
     mal.push(...revisarTexto(f, { letras: LETRAS_FINAL, px: MAX_FINAL_PX, nombres }));
+    if (/^¿\s*cu[aá]nt(?:o|a|os|as)\s*\?$/iu.test(f.trim())) mal.push("pregunta sin contexto");
     const p = plano(f);
     if (vistas.has(p)) mal.push("repite una frase");
     else if (FIJAS_PLANAS.has(p)) mal.push("es una de siempre");
@@ -163,6 +170,11 @@ export function revisarPlantillaApertura(texto: string, nombres: readonly string
   return revisarTexto(estatico, { letras: 70, nombres });
 }
 
+const VECINOS = new Set(
+  "a al algo así como con de del desde en entre es está están fin hace hacen hay la las le les lo los más menos muy no o para parece parecen pero por porque qué que queda quedan quedó se si sigue siguen sin son suena suenan tal también tampoco tiene tienen todavía un una va van y ya anda andan dice dicen espera esperan lleva llevan trabaja trabajan pendiente lista"
+    .split(" "),
+);
+
 /** Una apertura con exactamente los huecos de la plantilla original y ningún dato fuera de ellos. */
 export function revisarApertura(texto: string, plantilla: string, nombres: readonly string[] = []): string[] {
   const esperados = huecosDe(plantilla).sort();
@@ -171,7 +183,13 @@ export function revisarApertura(texto: string, plantilla: string, nombres: reado
   if (esperados.join(",") !== dados.join(",")) mal.push("huecos distintos de la plantilla");
   if (normalizarFrase(texto) === normalizarFrase(plantilla)) mal.push("es una de siempre");
   if (/\b(?:el|la|los|las)\s+\{rol\}/i.test(texto)) mal.push("artículo de más antes de {rol}");
+  if (/,\s*\{rol\}/i.test(texto)) mal.push("{rol} usado como persona");
   if (texto.includes("{n}") && /\b(?:minutos?|horas?|días?|semanas?|meses?|años?)\b/i.test(texto)) mal.push("unidad de tiempo fuera de {n}");
+  const vecinos = [
+    ...[...texto.matchAll(/([\p{L}]+)\s+\{(agente|empresa|rol|tarea)\}/giu)].map((m) => ({ palabra: m[1]!, hueco: m[2]! })),
+    ...[...texto.matchAll(/\{(agente|empresa|rol|tarea)\}\s+([\p{L}]+)/giu)].map((m) => ({ palabra: m[2]!, hueco: m[1]! })),
+  ];
+  for (const { palabra, hueco } of vecinos) if (!VECINOS.has(plano(palabra))) mal.push(`palabra pegada a {${hueco.toLowerCase()}}`);
   mal.push(...revisarPlantillaApertura(texto, nombres));
   return [...new Set(mal)];
 }
@@ -184,10 +202,19 @@ export function revisarBroma(frases: readonly string[], nombres: readonly string
   return [...new Set(mal)];
 }
 
+const SONIDOS: ReadonlyArray<readonly [IdMascota | "pájaro", RegExp]> = [
+  ["gato", palabras("miau", "mrrr")],
+  ["perro", palabras("guau")],
+  ["conejo", palabras("snif")],
+  ["robot", palabras("bip", "bup")],
+  ["pájaro", palabras("p[íi]o")],
+];
+
 /** Lo que dice una mascota, sin números, nombres ni las frases fijas de respaldo. */
 export function revisarMascota(id: IdMascota, texto: string, nombres: readonly string[] = []): string[] {
   const mal = revisarTexto(texto, { letras: LETRAS_SUELTA, px: MAX_SUELTA_PX, nombres });
   if (Object.values(DICEN).some((frases) => frases.includes(texto.trim()))) mal.push("es una de siempre");
+  if (SONIDOS.some(([animal, re]) => animal !== id && re.test(texto))) mal.push("sonido de otra mascota");
   return mal;
 }
 

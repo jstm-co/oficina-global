@@ -19,6 +19,7 @@ A [Paperclip](https://github.com/paperclipai/paperclip) plugin that draws the ag
 - **Room sign.** Under each room, a sign tells what each issue is about, one at a time.
 - **Summary.** The «Resumen» (summary) button reads out loud what got done, what is waiting for you, what is being worked on and what is queued.
 - **Read context.** In the top bar of each issue, a «Leer contexto» (read context) button reads out loud what the issue is about and what you are being asked.
+- **3D view** (0.12.0). On a computer, the «Vista 3D» (3D view) button lets you walk through the same office in first person, starting at your desk: look around with the mouse and walk with W A S D. Each room has its walls, doors to the hallway and a ceiling with lamps; monitors can be read up close, an arrow points to whoever needs you and clicking someone opens their card, as in 2D. Agents' chats and handoffs show over their heads, and the light follows the viewer's clock: the sky through the windows, the sun reaching the floor and, at night, a dimmer office.
 - **TV mode.** Full screen at 1920×1080, plus a link to open it on a TV with a session.
 - **Phone.** The whole floor and, when you tap a room, that room zoomed in.
 
@@ -29,7 +30,7 @@ It shows up in the sidebar («Oficina global»), on its own page, as a Dashboard
 - Paperclip with plugins (tested with `paperclipai` **2026.824.1**; the SDK is pinned to that version).
 - To install from npm: npm on the machine where Paperclip runs, which uses it to download the package.
 - To install from source: Node 22 and npm.
-- Optional, for recorded voices: `uv`, `ffmpeg` and internet access (see [Voices](#voices)). Without them, the office uses the browser's voice.
+- Recorded voices: Supertonic ships with the plugin (it downloads its model once); the other engines need `uv`, `ffmpeg` and internet access (see [Voices](#voices)). Without audio, the office uses the browser's voice.
 - Optional, to let Chrome's built-in AI write part of the chats and the summary: desktop Chrome with Gemini Nano (see [Chrome AI](#chrome-ai)).
 
 ## Installation
@@ -88,33 +89,41 @@ The plugin only asks for interface capabilities (`ui.page.register`, `ui.sidebar
 
 ## Voices
 
-Voices are optional. The audio files are generated **once, on your computer**, and the page only plays them. Without them, the browser's voice speaks.
+Voices are optional. The audio files are recorded **once, on the computer where Paperclip runs**, and the page only plays them. Anything without audio is spoken by the browser's voice.
 
-Run the generator in the plugin's folder: your clone if you installed from source, or `~/.paperclip/plugins/node_modules/paperclip-plugin-oficina-global` if you installed from npm.
+In the office, open the «Voces» (voices) panel, pick the engines and press **Preparar voces** (prepare voices). The panel shows the progress: first it downloads whatever is missing (once), then it records the phrases of the agents you can see. From then on the voices stay **up to date**: when a new agent shows up or you rename one, the page tells the plugin and the new phrases are recorded on their own, with no command to run.
+
+| Voice | Engine | What it takes | License |
+|---|---|---|---|
+| 10 voices (5 female, 5 male) | Supertonic 3 (int8, with `sherpa-onnx-node`) | Ships with the plugin: downloads 145 MB once and uses ~0.5 GB of memory while recording. Mac, Linux and Windows | OpenRAIL-M (the model); Apache 2.0 (`sherpa-onnx`) |
+| Lorenzo and Catalina (Chilean) | Microsoft Edge TTS (`edge-tts`) | `uv`, `ffmpeg` and internet access. Unofficial free service: **Microsoft receives the text of every phrase** (agent and issue names) | LGPL-3.0 (the library) |
+| Alex, Dora and Santa | Kokoro-82M (`kokoro-onnx`) | `uv` and `ffmpeg`; downloads 354 MB once | Apache 2.0 |
+| 2 Chilean clones | Chatterbox Multilingual (`chatterbox-tts`) | `uv` and `ffmpeg`; 4–5 GB of memory and ~10 min per agent | MIT |
+| 2 Chilean clones | Qwen3-TTS 0.6B (`qwen-tts`) | Same as Chatterbox | Apache 2.0 |
+
+- Only the engines you pick are used. Edge is not used unless you pick it, so no text goes to Microsoft.
+- Supertonic needs neither `uv` nor `ffmpeg`. The others run with `uv run --with <package>` and need `uv` and `ffmpeg` on the `PATH` Paperclip starts with; the panel says which one can't be used and why.
+- The models go to `~/.cache/oficina-voces/` and are checked against their SHA-256 when downloaded.
+- The audio files live **outside the plugin**, so an upgrade doesn't delete them: in `~/Library/Application Support/oficina-global/voces/` on a Mac, `~/.local/share/oficina-global/voces/` on Linux and `%LOCALAPPDATA%\oficina-global\voces\` on Windows, in one folder per plugin install. On start, the plugin links (or copies) them into `dist/ui/voces/` to serve them. The first time, it adopts the ones that were already there.
+- Supertonic records WAV (about 7 times the size of an MP3, ~230 KB for a 5 s phrase); the others, MP3.
+- The worker also builds on the fly the phrases that say the issue's name (in `vivo/`, deleted after 7 days), with the engine of each agent's voice.
+- The audio files are served next to the plugin's interface without a session: they say the name of each agent and its company. Keep that in mind if your Paperclip is open to the internet.
+
+You can also record them from the terminal, in the plugin's folder (your clone, or `~/.paperclip/plugins/node_modules/paperclip-plugin-oficina-global` if you installed from npm). It uses the engines picked in the panel, or the ones in `--motores`:
 
 ```sh
-npm run voces -- --api http://<your-server>:3100              # reads the agents with the CLI session (~/.paperclip/auth.json), GET only
-npm run voces -- --api http://<your-server>:3100 --solo-plan  # no generation: which voice each agent gets and how many phrases are missing
+npm run voces -- --api http://<your-server>:3100                        # reads the agents with the CLI session (~/.paperclip/auth.json), GET only
+npm run voces -- --api http://<your-server>:3100 --motores supertonic    # supertonic, kokoro, edge, qwen3 or chatterbox, comma-separated
+npm run voces -- --api http://<your-server>:3100 --solo-plan            # no recording: which voice each agent gets and how many phrases are missing
 ```
-
-| Voice | Engine | License |
-|---|---|---|
-| Lorenzo and Catalina (Chilean) | Microsoft Edge TTS (`edge-tts`) | Unofficial free service: **Microsoft receives the text of every phrase** (agent and issue names) |
-| Alex, Dora and Santa | Kokoro-82M (`kokoro-onnx`) | Apache 2.0 |
-| 2 Chilean clones | Chatterbox Multilingual (`chatterbox-tts`) | MIT |
-| 2 Chilean clones | Qwen3-TTS 0.6B (`qwen-tts`) | Apache 2.0 |
-
-- It needs `uv` (each engine runs with `uv run --with <package>`), `ffmpeg`, and internet access for Edge and to download the models the first time. It runs one engine at a time; the clones use ~4–5 GB of memory and take longer.
-- The audio files go to `dist/ui/voces/` with their `indice.json`. When a new agent shows up, run the generator again: it only does what is missing.
-- If you installed from npm, every upgrade replaces the plugin's folder and takes the audio files with it: run the generator again after `upgrade`.
-- Since 0.5.0, the plugin's worker also builds on the fly the phrases that say the issue's name (in `dist/ui/voces/vivo/`, deleted after 7 days). For that, `uv` and `ffmpeg` must be on the `PATH` Paperclip starts with.
-- The audio files are served next to the plugin's interface without a session: they say the name of each agent and its company. Keep that in mind if your Paperclip is open to the internet.
 
 ## Chrome AI
 
 In desktop Chrome, Gemini Nano (free and local) can write the ending of the break-room chats and parts of the summary. You pick it in the «Conversaciones» (chats) menu. A check throws out anything that changes the meaning or brings in words that do not exist; without the AI, the usual phrases are used.
 
 Chrome's AI only exists on secure pages: if you open Paperclip over `http://`, add its address in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` and relaunch Chrome.
+
+Outside Chrome, the plugin uses the page's `LanguageModel` if it has one (the same API), and the menus call it «IA del computador» (the computer's AI). For example, [Paperclip Dispatch](https://github.com/Javiervinus/paperclip-dispatch), the Mac app for Paperclip, serves it with Apple Intelligence.
 
 ## Adapting it to your instance
 
@@ -140,6 +149,7 @@ The code is in `src/` (the logic, without React or the DOM, kept apart from `src
 - The operating system notification needs `https://`; over `http://`, Paperclip shows the notice inside the page.
 - Sound and voices start with your first click on the tab after opening it.
 - iPhone has no full screen for web pages: TV mode explains how to add it to the home screen. It was not tested in Safari or on a real iPhone.
+- The 3D view needs WebGL 2 and is for computers only (not on phones or in TV mode).
 - Edge TTS is an unofficial service: if Microsoft changes it, the Lorenzo and Catalina voices stop generating until `edge-tts` is updated.
 
 ## Contributing and releases

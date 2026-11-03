@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
+import { carpetaAlmacen } from "./almacenVoces.js";
 import { PreparadorVoces } from "./vozViva.js";
 
 // La oficina lee todo desde la UI, con la sesión del usuario: el worker no lee
@@ -13,12 +14,16 @@ import { PreparadorVoces } from "./vozViva.js";
 // los audios en su carpeta (`dist/ui/voces/vivo/`). `ctx.actions` no pide
 // capacidades. La 0.9.0 (JST-246) le suma el Resumen en voz alta (`voz-resumen`) y la 0.11.0 (JST-325),
 // elegir las voces (`voz-elegir`).
+//
+// 0.13.0 (issue #9): «Preparar voces» desde la oficina (`voz-al-dia`), con Supertonic, que corre con
+// Node. Los audios viven en la carpeta de datos del usuario (`carpetaAlmacen`) y se publican en
+// `dist/ui/voces/`: una actualización desde npm ya no se los lleva.
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let voces: PreparadorVoces | null = null;
 
 const plugin = definePlugin({
   async setup(ctx) {
-    voces = new PreparadorVoces({ raiz: RAIZ, log: (mensaje, datos) => ctx.logger.info(mensaje, datos) });
+    voces = new PreparadorVoces({ raiz: RAIZ, almacen: carpetaAlmacen(RAIZ), log: (mensaje, datos) => ctx.logger.info(mensaje, datos) });
     // «prepara estas frases»: responde al tiro (el RPC corta a los 30 s) y las hace en segundo plano.
     ctx.actions.register("voz-preparar", async (params) => {
       const pedidos = Array.isArray(params.pedidos) ? params.pedidos : [];
@@ -43,6 +48,9 @@ const plugin = definePlugin({
     ctx.actions.register("voz-elegir", async (params) => voces!.elegir(params));
     ctx.actions.register("voz-reiniciar", async () => voces!.reiniciar());
     ctx.actions.register("voz-calentar", async (params) => ({ ok: voces!.calentar(params.voz) }));
+    // 0.13.0 (issue #9): «Preparar voces» (con `empezar` y los motores) y, desde ahí, los agentes que ve la página:
+    // responde al tiro y graba lo que falta en segundo plano (el avance va en `voz-estado`).
+    ctx.actions.register("voz-al-dia", async (params) => voces!.alDia(params));
     // Lo que quedó grabándose cuando se apagó el worker sigue, y los «3 agentes te necesitan» van con la voz del Resumen.
     voces.reanudar();
   },

@@ -4,10 +4,15 @@
 // grabando al cambiar una voz, que se pregunta al worker (`voz-estado`) mientras
 // dure. Cuando una voz nueva queda lista se vuelve a leer el índice de los audios,
 // y los agentes ya hablan con ella.
+//
+// 0.13.0 (issue #9): «Preparar voces» (`voz-al-dia`): los motores elegidos, cómo
+// va (bajando un modelo, grabando) y, con las voces al día, los agentes que se
+// ven, para que el worker grabe lo de los nuevos o renombrados.
 import { useSyncExternalStore } from "react";
 import { accionPlugin } from "../fuentes.js";
-import { eleccionInicial, leerEleccion, vozDeContexto, type EleccionVoces, type GrabandoVoz, type VozLectura } from "../eleccionVoces.js";
+import { eleccionInicial, leerEleccion, vozDeContexto, type EleccionVoces, type GrabandoVoz, type GrupoMotor, type VozLectura } from "../eleccionVoces.js";
 import type { VozId } from "../voces.js";
+import type { EstadoMotores } from "../vozViva.js";
 import { baseUi, cargarIndice, instalacion } from "./audiosVoces.js";
 import { estadoVozViva } from "./vozViva.js";
 
@@ -22,6 +27,10 @@ let leyendo: Promise<EleccionVoces> | null = null;
 let grabando: readonly GrabandoVoz[] = [];
 let cambios = false;
 let error: ErrorVoz | null = null;
+/** 0.13.0: `null` hasta preguntar, o con un worker de antes de la 0.13.0 (no lo manda). */
+let motores: EstadoMotores | null = null;
+/** El botón «Preparar voces» no respondió (red, o el worker se reinicia). */
+let errorPreparar = false;
 const oyentes = new Set<() => void>();
 
 /** Lo que falló al elegir, para decirlo bajo su fila y reintentar. */
@@ -88,6 +97,17 @@ export function useHayCambios(): boolean {
   return cambios;
 }
 
+/** 0.13.0: los motores que se pueden usar aquí y cómo va «Preparar voces» (`null`: todavía no se sabe). */
+export function useEstadoMotores(): EstadoMotores | null {
+  useSyncExternalStore(suscribir, () => version);
+  return motores;
+}
+
+export function useErrorPreparar(): boolean {
+  useSyncExternalStore(suscribir, () => version);
+  return errorPreparar;
+}
+
 export function useErrorVoz(): ErrorVoz | null {
   useSyncExternalStore(suscribir, () => version);
   return error;
@@ -103,13 +123,23 @@ export function descartarError(): void {
 // Preguntarle al worker
 // ---------------------------------------------------------------------------
 
-interface EstadoElegir {
+interface EstadoElegir extends Partial<EstadoMotores> {
   disponible: boolean;
   motivo: string | null;
   eleccion: EleccionVoces;
   grabando: GrabandoVoz[];
   cambios: boolean;
 }
+
+/** Lo de «Preparar voces» que vino en una respuesta del worker (uno de antes de la 0.13.0 no lo manda). */
+const motoresDe = (e: Partial<EstadoMotores>): EstadoMotores | null => (e.motores && e.porBajar && e.preparar ? { motores: e.motores, porBajar: e.porBajar, preparar: e.preparar } : null);
+
+/** ¿Está bajando un modelo o grabando las frases que faltan? */
+const preparando = (m: EstadoMotores | null) => m?.preparar.fase === "bajando" || m?.preparar.fase === "grabando";
+
+/** Mientras se preparan, el índice se vuelve a leer cada 15 s como mucho: los agentes hablan con lo que ya está. */
+const RELEER_INDICE_MS = 15_000;
+let indiceLeidoEn = 0;
 
 let reloj: ReturnType<typeof setTimeout> | null = null;
 let seguirDe: string | null = null;
@@ -124,10 +154,27 @@ export async function refrescarEstado(companyId: string): Promise<void> {
   // Una voz nueva quedó lista: se lee el índice (que ya tiene al agente con ella) antes de dejar de mostrar «Grabando…»,
   // para que el selector no vuelva un instante a la voz de antes.
   if (grabando.length > (e.grabando?.length ?? 0)) await cargarIndice(true).catch(() => null);
+  await alPreparar(motoresDe(e));
   grabando = e.grabando ?? [];
   cambios = !!e.cambios;
   avisar();
 }
+
+/** Lo nuevo de «Preparar voces»: al terminar (o de a poco, mientras graba), se vuelve a leer el índice. */
+async function alPreparar(nuevo: EstadoMotores | null): Promise<void> {
+  const antes = motores?.preparar;
+  const ahora = Date.now();
+  const termino = preparando(motores) && !preparando(nuevo);
+  const avanzo = nuevo?.preparar.fase === "grabando" && nuevo.preparar.hechas > (antes?.hechas ?? 0) && ahora - indiceLeidoEn > RELEER_INDICE_MS;
+  if (termino || avanzo) {
+    indiceLeidoEn = ahora;
+    await cargarIndice(true).catch(() => null);
+  }
+  motores = nuevo;
+}
+
+/** ¿Hay algo que seguir? (una voz que se graba, o «Preparar voces»). */
+const hayQueSeguir = () => grabando.some((g) => !g.error) || preparando(motores);
 
 /** Mientras haya algo grabándose, se vuelve a preguntar. */
 function seguir(companyId: string): void {
@@ -137,7 +184,7 @@ function seguir(companyId: string): void {
     reloj = null;
     if (!seguirDe) return;
     void refrescarEstado(seguirDe).then(() => {
-      if (grabando.some((g) => !g.error)) reloj = setTimeout(vuelta, SEGUIR_MS);
+      if (hayQueSeguir()) reloj = setTimeout(vuelta, SEGUIR_MS);
       else seguirDe = null;
     });
   };
@@ -147,7 +194,7 @@ function seguir(companyId: string): void {
 /** Al abrir el panel: lo que hay ahora y, si se está grabando, seguirlo. */
 export async function abrirPanelVoces(companyId: string): Promise<void> {
   await refrescarEstado(companyId);
-  if (grabando.some((g) => !g.error)) seguir(companyId);
+  if (hayQueSeguir()) seguir(companyId);
 }
 
 async function pedir<T>(companyId: string, accion: string, params: Record<string, unknown>): Promise<T | null> {
@@ -181,7 +228,7 @@ async function mandar(companyId: string, accion: string, params: Record<string, 
   // índice y no habrá un fin de grabación que lo delate: se lee ahora, para que la fila y su ▶ muestren la voz guardada.
   if (r.ok && cambiaIndice(accion, params)) await cargarIndice(true).catch(() => null);
   await refrescarEstado(companyId);
-  if (grabando.some((g) => !g.error)) seguir(companyId);
+  if (hayQueSeguir()) seguir(companyId);
   return r.ok;
 }
 
@@ -213,6 +260,69 @@ export function reintentar(companyId: string): Promise<boolean> {
   const e = error;
   if (!e) return Promise.resolve(false);
   return mandar(companyId, String(e.pedido.accion), e.pedido.params as Record<string, unknown>, e.donde);
+}
+
+// ---------------------------------------------------------------------------
+// «Preparar voces» y voces al día (0.13.0, issue #9)
+// ---------------------------------------------------------------------------
+
+/** Lo que el worker necesita de cada agente para darle una voz y grabar sus frases. */
+export interface AgenteParaVoz {
+  id: string;
+  nombre: string;
+  empresa: string;
+}
+
+type RespuestaAlDia = EstadoMotores & { ok: boolean; eleccion: EleccionVoces };
+
+async function alDia(companyId: string, params: Record<string, unknown>): Promise<RespuestaAlDia | null> {
+  const r = await pedir<RespuestaAlDia>(companyId, "voz-al-dia", params);
+  if (!r) return null;
+  eleccion = leerEleccion(r.eleccion);
+  leidaEn = Date.now();
+  await alPreparar(motoresDe(r));
+  avisar();
+  if (hayQueSeguir()) seguir(companyId);
+  return r;
+}
+
+/** El botón «Preparar voces»: guarda los motores elegidos y graba lo que falte de los agentes que se ven. */
+export async function prepararVoces(companyId: string, agentes: readonly AgenteParaVoz[], elegidos: readonly GrupoMotor[]): Promise<boolean> {
+  errorPreparar = false;
+  avisar();
+  const r = await alDia(companyId, { agentes, motores: elegidos, empezar: true });
+  errorPreparar = !r?.ok;
+  avisar();
+  // Se cuentan como mandados: así la página no los vuelve a mandar enseguida.
+  if (r?.ok) mandados.set(companyId, { firma: firmaDe(agentes), en: Date.now() });
+  return !!r?.ok;
+}
+
+/** Los mismos agentes no se vuelven a mandar antes de 30 min (si el worker se reinició, ahí los vuelve a conocer). */
+const REMANDAR_MS = 30 * 60_000;
+const mandados = new Map<string, { firma: string; en: number }>();
+const firmaDe = (agentes: readonly AgenteParaVoz[]) =>
+  agentes
+    .map((a) => `${a.id}|${a.nombre}|${a.empresa}`)
+    .sort()
+    .join("\n");
+
+/**
+ * Con las voces al día (se apretó «Preparar voces» alguna vez), la página le
+ * manda al worker los agentes de cada empresa que ve cuando cambian (uno nuevo,
+ * otro nombre) y cada 30 min: el worker graba lo que les falte. Sin «al día», no
+ * manda nada.
+ */
+export async function mantenerAlDia(companyId: string, agentes: readonly AgenteParaVoz[]): Promise<void> {
+  if (agentes.length === 0) return;
+  const e = await cargarEleccion();
+  if (!e.alDia) return;
+  const firma = firmaDe(agentes);
+  const antes = mandados.get(companyId);
+  if (antes && antes.firma === firma && Date.now() - antes.en < REMANDAR_MS) return;
+  mandados.set(companyId, { firma, en: Date.now() });
+  // Si no respondió, se vuelve a intentar con el próximo cambio o a los 30 min.
+  await alDia(companyId, { agentes });
 }
 
 // ---------------------------------------------------------------------------

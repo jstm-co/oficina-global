@@ -764,8 +764,12 @@ export function aperturaDe(l: Pick<Linea, "texto" | "codigo">): AperturaRellena 
 export function rellenarHuecos(plantilla: string, datos: Readonly<Record<string, string>>): string | null {
   let texto = plantilla;
   for (const h of new Set(huecosDe(plantilla))) {
-    if (typeof datos[h] !== "string") return null;
-    texto = texto.replaceAll(`{${h}}`, datos[h]);
+    const valor = datos[h];
+    if (typeof valor !== "string") return null;
+    texto = texto.replaceAll(`{${h}}`, (_hueco, offset: number) => {
+      if (h !== "tarea" || /(?:^|[.!?…]\s+)[¿¡]*$/.test(texto.slice(0, offset))) return valor;
+      return valor.toLocaleLowerCase("es");
+    });
   }
   return huecosDe(texto).length ? null : texto;
 }

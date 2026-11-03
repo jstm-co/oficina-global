@@ -47,6 +47,19 @@ const voces = {
   target: "node22",
 };
 
+// 0.13.0 (issue #9): el motor de Supertonic, que el worker y el generador corren con el mismo Node.
+// sherpa-onnx-node (binario de cada sistema) queda afuera: npm lo instala como dependencia opcional.
+const motorSupertonic = {
+  entryPoints: { motor_supertonic: "generador/motor_supertonic.ts" },
+  outdir: "dist",
+  outExtension: { ".js": ".mjs" },
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node20",
+  external: ["sherpa-onnx-node"],
+};
+
 // Sonda de la prueba técnica JST-66 (Node, solo lectura). La copia pública no trae
 // `spike/` (JST-284): ahí no se arma.
 const sonda = {
@@ -65,6 +78,7 @@ await Promise.all([
   esbuild.build(tv),
   esbuild.build(oficina3d),
   esbuild.build(voces),
+  esbuild.build(motorSupertonic),
   existsSync(sonda.entryPoints[0]) ? esbuild.build(sonda) : null,
 ]);
 mkdirSync("dist/ui", { recursive: true });

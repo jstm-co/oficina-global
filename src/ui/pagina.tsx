@@ -33,13 +33,13 @@ import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
 import { ReproductorResumen } from "./reproductorResumen.js";
+import { useVocesAlDia } from "./prepararVoces.js";
 import { resumen, useResumenAbierto } from "./resumen.js";
 import { asegurarEstilos } from "./estilos.js";
 import { anchoFicha, Ficha, FichaFlotante, FichaHoja, type Enlazar } from "./ficha.js";
 import { filaDelPlano, VentanitaEscritorio } from "./escritorio.js";
 import { ListaAgentes } from "./listaAgentes.js";
 import { BotonesAvisos, SubtituloVoz } from "./paneles.js";
-import { PieVersion } from "./pieVersion.js";
 import { cx, EtiquetaEmpresa, Icono, Piso } from "./piso.js";
 import { todosLibres, useAhora, useAnchoVentana, useCelular, useMovimientoReducido, useOficina, usePestanaOculta, useSalasPrevias, useTemaOscuro, type Oficina } from "./useOficina.js";
 import { VentanaResponder } from "./ventana.js";
@@ -231,6 +231,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     [],
   );
   const conResumen = useResumenAbierto();
+  // 0.13.0 (issue #9): con las voces al día, el worker graba solo lo de los agentes nuevos o con otro nombre.
+  useVocesAlDia(oficina.agentes);
 
   const [filtro, setFiltro] = useState<string[]>([]);
   const [hl, setHl] = useState<Resaltado>(null);
@@ -491,7 +493,6 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           <p className="of-hint">Toca a alguien para ver su ficha.</p>
           <Leyenda celular />
           {listaDe(salaAcercada.prefijo)}
-          <PieVersion />
         </div>
       </>
     );
@@ -533,7 +534,6 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           </p>
           <Leyenda celular />
           {listaDe(null)}
-          <PieVersion />
         </div>
       </>
     );
@@ -588,7 +588,6 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           />
           <Leyenda celular={false} />
           {listaDe(null)}
-          <PieVersion />
         </div>
       </>
     );

@@ -5,7 +5,7 @@
 import type { IdMascota, MuestraFinal } from "../charlas.js";
 import { casiIgual, plano, revisarApertura, revisarBroma, revisarFinal, revisarMascota, revisarSuelta } from "./revision.js";
 
-export const VERSION_PROMPT = "v5.4-jst345";
+export const VERSION_PROMPT = "v5.5-jst353";
 /** Cuatro conversaciones por paquete dejan espacio para el resto dentro del tope de 1.500 letras. */
 export const FINALES_POR_PAQUETE = 4;
 export const SUELTAS_POR_PAQUETE = 5;
@@ -14,7 +14,7 @@ export const FINALES_POR_PAQUETE_CHICO = 4;
 
 export const SISTEMA = `Escribes lo que dicen los agentes de una oficina pixel. Son agentes de IA que trabajan en tareas de software. Cuando están libres van al descanso a tomar café y conversan de a dos. Escribe en español de Chile, cercano y con humor suave, como compañeros de pega: frases cortas y naturales («bacán», «harta pega», «¡buena!», «uf»), sin groserías.
 
-Para cada conversación reescribes su apertura y escribes su final. Nunca copies la apertura original: usa otras palabras y otra estructura, no cambies solo signos ni agregues una palabra. Conserva exactamente los mismos huecos ({tarea}, {agente}, {empresa}, {rol}, {n}, {esperando}), sin borrar ninguno ni inventar otros. Esos huecos los rellena el código con datos reales. El valor de {rol} ya incluye su artículo: no pongas «el», «la», «los» ni «las» justo antes de {rol}. El valor de {n} ya incluye número y unidad cuando corresponde: no agregues «minutos», «horas», «días», «semanas», «meses» ni «años» fuera de {n}. Si ya hay cuatro frases fijas, el final va vacío; si no, escribe 1 o 2 frases que reaccionen con sentido a lo último dicho. La primera frase del final la dice quien no habló al último; si escribes 2, se turnan. Si el pedido dice «Solo reescribe aperturas», no escribas ningún final: frases va siempre vacío.
+Para cada conversación reescribes su apertura y escribes su final. Nunca copies la apertura original: usa otras palabras y otra estructura, no cambies solo signos ni agregues una palabra. Conserva exactamente los mismos huecos ({tarea}, {agente}, {empresa}, {rol}, {n}, {esperando}), sin borrar ninguno ni inventar otros. Esos huecos los rellena el código con datos reales: no les pegues adjetivos ni uses {rol} como si fuera una persona. El valor de {rol} ya incluye su artículo: no pongas «el», «la», «los» ni «las» justo antes de {rol}. El valor de {n} ya incluye número y unidad cuando corresponde: no agregues «minutos», «horas», «días», «semanas», «meses» ni «años» fuera de {n}. Si ya hay cuatro frases fijas, el final va vacío; si no, escribe 1 o 2 frases que reaccionen con sentido a lo último dicho, sin preguntas vagas como «¿Cuánto?». La primera frase del final la dice quien no habló al último; si escribes 2, se turnan. Si el pedido dice «Solo reescribe aperturas», no escribas ningún final: frases va siempre vacío.
 
 Reglas que no se rompen:
 1. Fuera de los huecos no traes datos: ningún nombre, cargo, empresa, número, hora, día, tarea ni identificador. En finales, sueltas y bromas tampoco estados ni lo que alguien hizo, hace o va a hacer (nada de «voy a…»).

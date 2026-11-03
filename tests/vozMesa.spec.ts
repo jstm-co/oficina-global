@@ -43,7 +43,7 @@ vi.mock("../src/fuentes.js", async () => {
 vi.mock("../src/voces.js", async (original) => ({
   ...(await original<typeof import("../src/voces.js")>()),
   // El «MP3» de mentira lleva escrito cuánto dura.
-  duracionMp3: (b: Uint8Array) => Number(new TextDecoder().decode(b)),
+  duracionAudio: (b: Uint8Array) => Number(new TextDecoder().decode(b)),
 }));
 vi.mock("../src/ui/audiosVoces.js", () => {
   const indice: IndiceVoces = { version: 1, generado: "", resumen: "dora", agentes: { E: "catalina", R: "dora" }, audios: {} };

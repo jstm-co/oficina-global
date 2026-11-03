@@ -167,6 +167,22 @@ export const CSS_AVISOS = /* css */ `
 .of-hsheet .of-vzp .of-vz-ej { font-size: 12.5px; }
 .of-hsheet .of-vzp .of-vz-mas { height: 44px; font-size: 13.5px; }
 
+/* ---------- 0.13.0 (issue #9): «Preparar voces» en el panel «Voces» ---------- */
+.of-pv .of-pv-c { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.of-pv.is-err { background: var(--of-danger-bg); box-shadow: inset 0 0 0 1px var(--of-danger-border); }
+.of-pv.is-err > svg { color: var(--of-danger-fg); }
+.of-pv-motores { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+.of-pv-motores .of-vz-ev:hover { background: var(--of-hover-strong); }
+.of-pv-motores .of-vz-ev em { line-height: 16px; }
+.of-pv-motores .of-vz-ev.is-no { cursor: not-allowed; opacity: .55; }
+.of-pv-motores .of-vz-ev.is-no:hover { background: transparent; }
+.of-pv-acc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.of-pv-n { font-size: 12px; color: var(--of-muted-fg); }
+.of-pv-err { font-size: 12px; color: var(--of-danger-fg); }
+.of-pv-fila > .of-avp-l > svg { color: var(--of-s-toca); }
+.of-hsheet .of-vzp .of-pv-motores .of-vz-ev { min-height: 44px; }
+.of-hsheet .of-vzp .of-pv-acc .of-btn.is-xs { height: 40px; padding: 0 14px; }
+
 /* ---------- 0.7.0 (JST-231 A · Menú en «Conversaciones»): quién escribe las conversaciones ---------- */
 .of-iaw { position: relative; display: inline-flex; flex: none; }
 /* El botón: con chevron; ✦ cuando escribe la IA, «42 %» y una línea de 2 px mientras baja, ⏸ en pausa, ⚠ si no se pudo */
