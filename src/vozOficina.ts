@@ -15,13 +15,13 @@
 //   tampoco: se dicen como palabras o se sacan.
 // - La barra tampoco (JST-239): el globo dice «¿En qué anda Ingeniero/a?» y la
 //   voz «¿En qué anda Ingeniero?» (`sinBarras`), sin «barra a».
-// - 0.7.0 (JST-232, punto 7 del spike de JST-230): también lo que escribió la IA
-//   de Chrome (el final de una conversación, una frase suelta), si pasa la misma
-//   revisión: sin nombres, números ni códigos, solo letras y signos y hasta 50
-//   letras. Va marcado (`ia`) para que el worker le ponga un tope por minuto.
+// - También lo que escribe la IA: finales, sueltas, bromas y mascotas pasan la
+//   revisión sin datos. Una apertura lleva su plantilla y los datos de sus huecos;
+//   el worker la rellena y exige que coincida con el globo antes de aceptarla.
+//   Va marcada (`ia`) para que el worker le ponga un tope por minuto.
 import { sinBarras, tareaParaVoz, TOPES_OFICINA } from "./paraVoz.js";
-import { DICEN, fraseDeCharla, fraseSuelta, NOMBRE_EN_FRASE, SUELTAS_CON_DATO, type IdMascota, type Linea } from "./charlas.js";
-import { fraseIaParaVoz } from "./ia/revision.js";
+import { DICEN, fraseDeCharla, fraseSuelta, NOMBRE_EN_FRASE, rellenarHuecos, SUELTAS_CON_DATO, type AperturaRellena, type IdMascota, type Linea } from "./charlas.js";
+import { fraseIaParaVoz, revisarMascota, revisarPlantillaApertura } from "./ia/revision.js";
 import type { Motor } from "./voces.js";
 
 /** Los 5 tipos del panel, por la clase de cada frase («dale» y «sobre» son de «Entregas»). */
@@ -50,6 +50,8 @@ export interface PedidoOficina {
   /** A quién se le entrega la tarea (su nombre corto, el del globo). */
   para?: string | null;
   hora?: HoraVoz | null;
+  /** Apertura generada: el worker vuelve a rellenarla y compara antes de aceptar datos reales. */
+  apertura?: AperturaRellena;
   /** 0.7.0: la frase la escribió la IA de Chrome (la pone el worker al validar; lo que mande la página no cuenta). */
   ia?: boolean;
 }
@@ -115,7 +117,7 @@ export function pedidosDeCharla(lineas: readonly Linea[]): PedidoOficina[] {
   return lineas.map((l) => {
     const primera = !!l.codigo && !dichas.has(l.codigo);
     if (l.codigo) dichas.add(l.codigo);
-    return { clase: "charla", agenteId: l.quien, texto: l.texto, tarea: primera ? l.titulo : null };
+    return { clase: "charla", agenteId: l.quien, texto: l.texto, tarea: primera ? l.titulo : null, ...(l.aperturaIa ? { apertura: l.aperturaIa } : {}) };
   });
 }
 
@@ -185,17 +187,31 @@ export function validarPedidoOficina(x: unknown): PedidoOficina | null {
   const tarea = p.tarea === undefined || p.tarea === null ? null : sinControl(p.tarea, 400) ? p.tarea : undefined;
   if (tarea === undefined) return null;
   if (clase === "mascota") {
-    if (!MASCOTAS.has(p.mascota as string) || typeof p.texto !== "string" || !DICEN[p.mascota!].includes(p.texto)) return null;
-    return { clase, agenteId: null, mascota: p.mascota!, texto: p.texto };
+    if (!MASCOTAS.has(p.mascota as string) || typeof p.texto !== "string") return null;
+    if (DICEN[p.mascota!].includes(p.texto)) return { clase, agenteId: null, mascota: p.mascota!, texto: p.texto };
+    if (Object.values(DICEN).some((frases) => frases.includes(p.texto!))) return null;
+    return revisarMascota(p.mascota!, p.texto).length === 0 ? { clase, agenteId: null, mascota: p.mascota!, texto: p.texto, ia: true } : null;
   }
   if (!id(p.agenteId)) return null;
   const agenteId = p.agenteId;
   switch (clase) {
-    case "charla":
+    case "charla": {
       if (typeof p.texto !== "string") return null;
       if (fraseDeCharla(p.texto)) return { clase, agenteId, texto: p.texto, tarea };
-      // 0.7.0: el final que escribió la IA no lleva tarea (la tarea va en las frases fijas).
+      const a = p.apertura;
+      if (a && sinControl(a.plantilla, 100) && a.datos && typeof a.datos === "object") {
+        const datos: Record<string, string> = {};
+        for (const [k, v] of Object.entries(a.datos)) {
+          if (!/^[a-z]+$/.test(k) || !sinControl(v, 100)) return null;
+          datos[k] = v;
+        }
+        if (rellenarHuecos(a.plantilla, datos) === p.texto && revisarPlantillaApertura(a.plantilla).length === 0) {
+          return { clase, agenteId, texto: p.texto, tarea, apertura: { plantilla: a.plantilla, datos }, ia: true };
+        }
+      }
+      // El final que escribió la IA no lleva tarea (la tarea va en las frases fijas).
       return fraseIaParaVoz(p.texto) ? { clase, agenteId, texto: p.texto, tarea: null, ia: true } : null;
+    }
     case "suelta":
       if (typeof p.texto !== "string" || !conLetras(p.texto)) return null;
       if (fraseSuelta(p.texto)) return { clase, agenteId, texto: p.texto, tarea: SUELTAS_CON_DATO.includes(p.texto) ? tarea : null };

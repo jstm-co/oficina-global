@@ -1,16 +1,14 @@
-// La IA de Chrome escribe (0.7.0, JST-232; punto 10 del spike de JST-230), sin
-// React ni DOM: el estado de la IA, la bajada (con el clic del usuario) y las
-// ráfagas que llenan la reserva. Todo lo de afuera llega en `DepsEscritor`
-// (`src/ui/ia.ts` pone el `LanguageModel` de Chrome, el worker, el candado entre
-// pestañas y `localStorage`; las pruebas, uno falso).
+// La IA de Chrome escribe (0.13.0, JST-345), sin React ni DOM: el estado de la
+// IA, la bajada con el clic y las ráfagas que llenan la reserva. Todo lo de
+// afuera llega en `DepsEscritor` (`src/ui/ia.ts` pone `LanguageModel`, el worker,
+// el candado entre pestañas y `localStorage`; las pruebas, uno falso).
 //
 // - **Ráfagas:** cada 15 min (contando la última de cualquier pestaña), solo
 //   con la Oficina a la vista, la IA elegida y lista, las conversaciones a la
 //   vista, el candado `oficina-ia` (una sola pestaña escribe) y el permiso del
 //   worker (la Mac no está cargada ni hay un clon generando). Cada ráfaga abre
-//   la sesión, escribe 2 paquetes (4 la primera vez) y la suelta. Cada pedido
-//   tiene un tope de 30 s y de 1.500 letras. Con un modelo más chico, los
-//   paquetes son más chicos y van más, para pedir lo mismo.
+//   la sesión, escribe 2 paquetes (4 mientras la reserva esté corta, los últimos 2 solo de sueltas) y la suelta.
+//   Cada pedido tiene un tope de 30 s y de 1.500 letras.
 // - **«En pausa»** (0.8.1, JST-249; punto 5 del spike): una ráfaga que toca y
 //   no tiene permiso espera; se vuelve a preguntar en cada tic hasta que la Mac
 //   se libera. Solo se salta la ráfaga: lo que la IA ya escribió se sigue
@@ -21,7 +19,7 @@
 //   intentar en la próxima ráfaga.
 import type { MuestraFinal } from "../charlas.js";
 import { armarPaquete, EJEMPLO_PEDIDO, EJEMPLO_RESPUESTA, FINALES_POR_PAQUETE, leerPaquete, SISTEMA, SUELTAS_POR_PAQUETE, type Botada } from "./prompt.js";
-import { cuantos, sumarFinal, sumarSuelta, tocaRafaga, vacia, type DatosReserva } from "./reserva.js";
+import { corta, cuantos, recientes, sumarApertura, sumarBroma, sumarFinal, sumarMascota, sumarSuelta, tocaRafaga, type DatosReserva } from "./reserva.js";
 
 export type Disponibilidad = "unavailable" | "downloadable" | "downloading" | "available";
 
@@ -41,7 +39,7 @@ export interface SesionIa {
 /** Lo que se usa de `LanguageModel` (la Prompt API de Chrome). */
 export interface ModeloIa {
   availability(o: typeof OPCIONES_MODELO): Promise<Disponibilidad>;
-  create(o: typeof OPCIONES_MODELO & { initialPrompts?: ReadonlyArray<{ role: string; content: string }>; monitor?: (m: EventTarget) => void; signal?: AbortSignal }): Promise<SesionIa>;
+  create(o: typeof OPCIONES_MODELO & { initialPrompts?: ReadonlyArray<{ role: string; content: string }>; monitor?: (m: EventTarget) => void; signal?: AbortSignal; temperature?: number }): Promise<SesionIa>;
 }
 
 /** Por qué no hay IA: el celular, otro navegador, Chrome sin el flag de la dirección (http) o un Chrome que no la trae. */
@@ -67,7 +65,7 @@ export const usaReserva = (e: EstadoIa): boolean => e.k === "lista" || e.k === "
 export type EventoIa =
   | { t: number; tipo: "rafaga"; paquetes: number }
   | { t: number; tipo: "sesion"; ms: number }
-  | { t: number; tipo: "paquete"; ms: number; pedidos: number; finales: number; sueltas: number; botadas: Botada[]; corte: "tope" | "largo" | null; error: string | null }
+  | { t: number; tipo: "paquete"; ms: number; pedidos: number; aperturas: number; finales: number; sueltas: number; bromas: number; mascotas: number; botadas: Botada[]; corte: "tope" | "largo" | null; error: string | null }
   | { t: number; tipo: "saltada"; por: "pausa" | "candado" | "oculta" | "sin-permiso" }
   | { t: number; tipo: "error"; donde: string; mensaje: string }
   | { t: number; tipo: "bajada"; ok: boolean; ms: number };
@@ -75,7 +73,7 @@ export type EventoIa =
 /** Lo que escribió y pasó la revisión (para mostrar ejemplos con sus frases fijas). */
 export interface Escrita {
   t: number;
-  tipo: "final" | "suelta";
+  tipo: "apertura" | "final" | "suelta" | "broma" | "mascota";
   fijas: readonly string[];
   frases: readonly string[];
   variante: string | null;
@@ -322,7 +320,7 @@ export class Escritor {
   }
 
   /**
-   * Una ráfaga: la sesión, 2 paquetes (4 si la reserva está vacía) y soltarla.
+   * Una ráfaga: la sesión, 2 paquetes (4 mientras la reserva esté corta, los últimos 2 solo de sueltas) y soltarla.
    * `conPermiso`: el tic recién le preguntó al worker (no se le vuelve a preguntar).
    */
   async rafaga(conPermiso = false): Promise<void> {
@@ -339,7 +337,7 @@ export class Escritor {
           return true;
         }
         const r = this.d.leer();
-        const paquetes = Math.ceil(((vacia(r) ? 4 : 2) * FINALES_POR_PAQUETE) / this.finalesPorPaquete());
+        const paquetes = Math.ceil(((corta(r, this.d.ahora()) ? 4 : 2) * FINALES_POR_PAQUETE) / this.finalesPorPaquete());
         r.rafaga = this.d.ahora();
         this.d.guardar(r);
         this.anotar({ t: this.d.ahora(), tipo: "rafaga", paquetes });
@@ -356,6 +354,7 @@ export class Escritor {
               { role: "assistant", content: EJEMPLO_RESPUESTA },
             ],
             signal: corte.signal,
+            temperature: 1.2,
           });
         } catch (e) {
           this.anotar({ t: this.d.ahora(), tipo: "error", donde: "sesión", mensaje: String((e as Error)?.message ?? e).slice(0, 200) });
@@ -371,7 +370,7 @@ export class Escritor {
               this.anotar({ t: this.d.ahora(), tipo: "saltada", por: "oculta" });
               break;
             }
-            await this.paquete(base, pedidas);
+            await this.paquete(base, pedidas, i === 0 ? "aperturas" : i >= 2 ? "sueltas" : "completo");
           }
         } finally {
           base.destroy();
@@ -401,11 +400,13 @@ export class Escritor {
   }
 
   /** Un paquete: una copia de la sesión, el pedido con su esquema (30 s y 1.500 letras como mucho), la revisión y a la reserva. */
-  private async paquete(base: SesionIa, pedidas: Set<string>): Promise<void> {
+  private async paquete(base: SesionIa, pedidas: Set<string>, modo: "aperturas" | "completo" | "sueltas"): Promise<void> {
     const { muestras, nombres } = this.d.pedidos();
-    const elegidas = this.elegir(muestras, pedidas, this.d.leer());
-    for (const m of elegidas) pedidas.add(m.clave);
-    const p = armarPaquete(elegidas, Math.ceil((SUELTAS_POR_PAQUETE * this.finalesPorPaquete()) / FINALES_POR_PAQUETE));
+    const actual = this.d.leer();
+    const elegidas = modo === "sueltas" ? [] : this.elegir(muestras, pedidas, actual);
+    if (modo === "completo") for (const m of elegidas) pedidas.add(m.clave);
+    const porPaquete = modo === "sueltas" ? 20 : SUELTAS_POR_PAQUETE;
+    const p = armarPaquete(elegidas, Math.ceil((porPaquete * this.finalesPorPaquete()) / FINALES_POR_PAQUETE), recientes(actual), modo === "aperturas", modo === "sueltas");
     const t0 = this.d.ahora();
     const corte = new AbortController();
     let por: "tope" | "largo" | null = null;
@@ -434,15 +435,41 @@ export class Escritor {
     }
     const leido = por || error ? null : leerPaquete(salida, p, nombres);
     const ahora = this.d.ahora();
+    const botadas = [...(leido?.botadas ?? [])];
+    const contador = { aperturas: 0, finales: 0, sueltas: 0, bromas: 0, mascotas: 0 };
     if (leido) {
       const r = this.d.leer();
       for (const f of leido.finales) {
-        sumarFinal(r, f.clave, f.frases, ahora);
-        this.escritas.push({ t: ahora, tipo: "final", fijas: f.muestra.fijas.map((l) => l.texto), frases: f.frases, variante: f.muestra.variante });
+        if (f.apertura) {
+          if (sumarApertura(r, f.muestra.variante, f.muestra.apertura, f.apertura, ahora)) {
+            contador.aperturas += 1;
+            this.escritas.push({ t: ahora, tipo: "apertura", fijas: [f.muestra.fijas[0]!.texto], frases: [f.apertura], variante: f.muestra.variante });
+          } else botadas.push({ id: f.id, tipo: "apertura", texto: f.apertura, motivos: ["casi igual a una de la reserva"] });
+        }
+        if (f.frases.length) {
+          if (sumarFinal(r, f.clave, f.frases, ahora)) {
+            contador.finales += 1;
+            this.escritas.push({ t: ahora, tipo: "final", fijas: f.muestra.fijas.map((l) => l.texto), frases: f.frases, variante: f.muestra.variante });
+          } else botadas.push({ id: f.id, tipo: "final", texto: f.frases.join(" / "), motivos: ["casi igual a una de la reserva"] });
+        }
       }
       for (const s of leido.sueltas) {
-        sumarSuelta(r, s, ahora);
-        this.escritas.push({ t: ahora, tipo: "suelta", fijas: [], frases: [s], variante: null });
+        if (sumarSuelta(r, s, ahora)) {
+          contador.sueltas += 1;
+          this.escritas.push({ t: ahora, tipo: "suelta", fijas: [], frases: [s], variante: null });
+        } else botadas.push({ id: "suelta", tipo: "suelta", texto: s, motivos: ["casi igual a una de la reserva"] });
+      }
+      for (const b of leido.bromas) {
+        if (sumarBroma(r, b, ahora)) {
+          contador.bromas += 1;
+          this.escritas.push({ t: ahora, tipo: "broma", fijas: [], frases: b, variante: null });
+        } else botadas.push({ id: "broma", tipo: "broma", texto: b.join(" / "), motivos: ["casi igual a una de la reserva"] });
+      }
+      for (const m of leido.mascotas) {
+        if (sumarMascota(r, m.id, m.texto, ahora)) {
+          contador.mascotas += 1;
+          this.escritas.push({ t: ahora, tipo: "mascota", fijas: [], frases: [m.texto], variante: m.id });
+        } else botadas.push({ id: m.id, tipo: "mascota", texto: m.texto, motivos: ["casi igual a una de la reserva"] });
       }
       this.escritas = this.escritas.slice(-MAX_ESCRITAS);
       this.d.guardar(r);
@@ -451,10 +478,9 @@ export class Escritor {
       t: ahora,
       tipo: "paquete",
       ms: ahora - t0,
-      pedidos: elegidas.length + p.sueltas.length,
-      finales: leido?.finales.length ?? 0,
-      sueltas: leido?.sueltas.length ?? 0,
-      botadas: leido?.botadas ?? [],
+      pedidos: elegidas.length * 2 + p.sueltas.length + p.bromas.length + p.mascotas.size,
+      ...contador,
+      botadas,
       corte: por,
       error: error ?? leido?.error ?? null,
     });

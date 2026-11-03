@@ -11,7 +11,7 @@ import { usePluginToast } from "@paperclipai/plugin-sdk/ui";
 import type { EstadoIa } from "../ia/escritor.js";
 import { cambiarAjustes, puntoIa, useAjustes } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
-import { bajarIa, escritorIa, IA_CHROME, NOMBRE_IA, useEstadoIa } from "./ia.js";
+import { bajarIa, escritorIa, IA_CHROME, NOMBRE_IA, useContadorIa, useEstadoIa } from "./ia.js";
 import { abrirMenu, Interruptor, Popover, useMenuAbierto } from "./paneles.js";
 import { cx, Icono } from "./piso.js";
 
@@ -108,6 +108,7 @@ function EstadoTarjeta({ e }: { e: EstadoIa }): ReactNode {
 function PanelConversaciones({ e, celular }: { e: EstadoIa; celular: boolean }) {
   const aj = useAjustes();
   const k = useId();
+  const contador = useContadorIa(!celular);
   const disp = !noDisponible(e);
   const elegidaIa = disp && aj.iaFuente === "ia";
   const bIa = useRef<HTMLButtonElement>(null);
@@ -160,6 +161,11 @@ function PanelConversaciones({ e, celular }: { e: EstadoIa; celular: boolean }) 
             </span>
           </button>
           <EstadoTarjeta e={e} />
+          <span className="of-iaa-ej" data-ia-contador>
+            {e.k === "lista" && elegidaIa && aj.charlas
+              ? `IA: ${contador.escritas} frases escritas · ${contador.dichas ? Math.round((contador.deIa / contador.dichas) * 100) : 0} % de lo dicho hoy`
+              : "La IA no está escribiendo: todo sale de las frases de siempre"}
+          </span>
         </div>
         <div className={cx("of-iaa-op", !elegidaIa && "is-on")}>
           <button ref={bHoy} type="button" className="of-iaa-r" role="radio" aria-checked={!elegidaIa} tabIndex={elegidaIa ? -1 : 0} onClick={() => elegir("hoy")} onKeyDown={flechas}>

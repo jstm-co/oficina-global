@@ -3,15 +3,11 @@
 // navegador ni Node: la usan la página (antes de guardar o usar una frase) y el
 // worker (antes de hacer su audio).
 //
-// La IA escribe solo el final de cada conversación y las frases sueltas, y la
-// frase con el dato es la de hoy. Por eso aquí la regla es simple y estricta:
-// lo que escribe no puede traer **ningún** dato: ni un nombre, cargo, empresa,
-// número, código de tarea, estado ni cuándo. Tampoco lo que alguien va a hacer
-// («voy a…»), ni nada que no quepa en el globo. Tampoco una palabra que no está
-// en la lista de palabras en español (0.8.1, JST-251: «Espero que se solven.»).
-// Lo que no pasa se bota y queda la frase de siempre. Lo que la revisión no ve es
-// el sentido: eso lo lee la QA.
-import { FRASES_FIJAS, SUELTAS, SUELTAS_CON_DATO, type Linea } from "../charlas.js";
+// Los finales, sueltas, bromas y mascotas no traen datos. Las aperturas solo
+// pueden traer los huecos de su plantilla: el código los rellena con datos reales
+// después de revisar el texto estático. Tampoco se aceptan palabras inexistentes,
+// acciones futuras, textos que no caben ni variantes casi repetidas.
+import { DICEN, FRASES_FIJAS, huecosDe, SUELTAS, SUELTAS_CON_DATO, type IdMascota, type Linea } from "../charlas.js";
 import { anchoTexto } from "../hilo.js";
 import { palabrasRaras } from "./palabras.js";
 
@@ -43,11 +39,11 @@ const GROSERIAS = palabras("cagad~", "cagó", "cago", "weón~", "weon~", "hueón
 const TONO = palabras("ch[eé]vere", "quilombo", "chido", "guay", "[oó]rale", "laburo", "pibe", "che", "cheque~", "cheek~", "chequ~", "tío", "tía");
 /** «todos», «nadie», «cero»: un dato de cuántos. */
 const CUANTOS = palabras("todos", "todas", "nadie", "ninguno", "ninguna", "cero");
-const NUMEROS = palabras("dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "veinte", "treinta");
+const NUMEROS = palabras("dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "veinte", "treinta", "cien(to)?", "mil", "docenas?", "mill[óo]n(es)?");
 /** Un estado de alguien (punto 4: falló, pausa, revisión, en cola, terminó, trabajando, esperando, bloqueado). */
 const ESTADOS = palabras(
   "fall[óoa]~", "error~", "se cay[óo]", "rompi[óo]", "paus~", "revisi[óo]n", "revis(en|ar|ando)", "en cola", "me toca", "te toca", "le toca", "sigues? (con|en)",
-  "termin~", "cerr[éeó]", "acab[éeó]", "list[ao]s?", "sali[óo]", "trabajand~", "esperand~", "espera", "esperan", "bloquead~", "aprobaci[óo]n",
+  "termin~", "cerr[éeó]", "acab[éeó]", "list[ao]s?", "sali[óo]", "trabajand~", "esperand~", "espera", "esperan", "bloquead~", "aprobaci[óo]n", "ya no pued[oe]",
 );
 /** Un cargo o rol (en la v4 la IA no nombra a nadie). */
 const CARGOS = palabras(
@@ -57,10 +53,28 @@ const CARGOS = palabras(
 /** Regla 2 del punto 4: lo que alguien va a hacer. */
 const VA_A = palabras("(voy|vamos|vas|va|van|iba|ibas|íbamos)\\s+a");
 /** Regla 3 del punto 4: cuándo. */
-const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche");
+const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche", "noche");
+/** Al empezar una frase solo se admite mayúscula en una palabra común, no en un nombre propio. */
+const INICIOS_COMUNES = new Set(
+  "a ah ahí ahora aire al algo anímate ánimo aquí así bacán bien buena buenas bueno café caliente casi como completamente cómo con cuánto de del dijo el ella ellas ellos empieza en entiendo es eso esperemos espero está están este estirar fue guau harta hay hola je la las linda lo los mal mmm más me mismo mucho muy nada necesito no nos ojalá otro parece pasado paciencia pausa pensamientos pensando pensar pío por pues pura qué quién regresar se siempre sin solo somos son sí tal también tampoco te todavía todo todos treinta uf un una unos uy va ver vienes volvería y ya"
+    .split(" "),
+);
 
 /** Lo que es «la misma frase»: sin mayúsculas, signos ni espacios de más. */
 export const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
+export const normalizarFrase = plano;
+
+/** Igual o con una coincidencia de palabras muy alta (Jaccard ≥ 0,8). */
+export function casiIgual(a: string, b: string): boolean {
+  const pa = plano(a);
+  const pb = plano(b);
+  if (pa === pb) return true;
+  const wa = new Set(pa.split(" ").filter(Boolean));
+  const wb = new Set(pb.split(" ").filter(Boolean));
+  if (wa.size < 3 || wb.size < 3) return false;
+  const comunes = [...wa].filter((w) => wb.has(w)).length;
+  return comunes / new Set([...wa, ...wb]).size >= 0.8;
+}
 
 export interface OpcionesRevision {
   /** Hasta cuántas letras. */
@@ -84,6 +98,12 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   if (CODIGO.test(texto)) mal.push("código de tarea");
   if (/\d/.test(texto) || NUMEROS.test(texto)) mal.push("número");
   if (!PERMITIDOS.test(texto)) mal.push("signos, comillas o emojis");
+  for (const f of texto.split(/(?<=[.!?…])\s+/)) {
+    if ((f.match(/¡/g)?.length ?? 0) !== (f.match(/!/g)?.length ?? 0) || (f.match(/¿/g)?.length ?? 0) !== (f.match(/\?/g)?.length ?? 0)) {
+      mal.push("signos de apertura");
+      break;
+    }
+  }
   if (INGLES.test(texto)) mal.push("inglés");
   if (GROSERIAS.test(texto)) mal.push("grosería");
   if (TONO.test(texto)) mal.push("no es de Chile");
@@ -97,11 +117,12 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   // que no está en INGLES («run», «backlog»).
   const raras = palabrasRaras(texto);
   if (raras.length) mal.push(`${raras.length === 1 ? "palabra que no existe" : "palabras que no existen"} (${raras.map((w) => `«${w}»`).join(", ")})`);
-  // Un nombre: una palabra con mayúscula que no empieza una frase («Ok» sí).
+  // Un nombre: mayúscula dentro de una frase, o al inicio sin ser una palabra común («Ok» sí).
   for (const f of texto.split(/(?<=[.!?…])\s+/)) {
-    for (const w of f.replace(/^[¿¡\s]+/, "").split(/\s+/).slice(1)) {
+    for (const [i, w] of f.replace(/^[¿¡\s]+/, "").split(/\s+/).entries()) {
       const limpia = w.replace(/[^\p{L}]/gu, "");
-      if (/^\p{Lu}/u.test(limpia) && limpia !== "Ok" && limpia !== "OK") {
+      const inicioComun = i === 0 && INICIOS_COMUNES.has(plano(limpia));
+      if (/^\p{Lu}/u.test(limpia) && limpia !== "Ok" && limpia !== "OK" && !inicioComun) {
         mal.push("un nombre");
         break;
       }
@@ -133,6 +154,7 @@ export function revisarFinal(frases: readonly string[], fijas: readonly Pick<Lin
   const vistas = new Set(fijas.map((l) => plano(l.texto)));
   for (const f of frases) {
     mal.push(...revisarTexto(f, { letras: LETRAS_FINAL, px: MAX_FINAL_PX, nombres }));
+    if (/^¿\s*cu[aá]nt(?:o|a|os|as)\s*\?$/iu.test(f.trim())) mal.push("pregunta sin contexto");
     const p = plano(f);
     if (vistas.has(p)) mal.push("repite una frase");
     else if (FIJAS_PLANAS.has(p)) mal.push("es una de siempre");
@@ -148,11 +170,65 @@ export function revisarSuelta(texto: string, nombres: readonly string[] = []): s
   return mal;
 }
 
+/** Revisa el texto estático de una plantilla, tapando sus huecos con una palabra inocua. */
+export function revisarPlantillaApertura(texto: string, nombres: readonly string[] = []): string[] {
+  const estatico = texto.replace(/\{[a-z]+\}/g, "cosa");
+  return revisarTexto(estatico, { letras: 70, nombres });
+}
+
+const VECINOS = new Set(
+  "a al algo así como con de del desde en entre es está están fin hace hacen hay la las le les lo los más menos muy no o para parece parecen pero por porque qué que queda quedan quedó se si sigue siguen sin son suena suenan tal también tampoco tiene tienen todavía un una va van y ya anda andan dice dicen espera esperan lleva llevan trabaja trabajan pendiente lista"
+    .split(" "),
+);
+
+/** Una apertura con exactamente los huecos de la plantilla original y ningún dato fuera de ellos. */
+export function revisarApertura(texto: string, plantilla: string, nombres: readonly string[] = []): string[] {
+  const esperados = huecosDe(plantilla).sort();
+  const dados = huecosDe(texto).sort();
+  const mal: string[] = [];
+  if (esperados.join(",") !== dados.join(",")) mal.push("huecos distintos de la plantilla");
+  if (normalizarFrase(texto) === normalizarFrase(plantilla)) mal.push("es una de siempre");
+  if (/\b(?:el|la|los|las)\s+\{rol\}/i.test(texto)) mal.push("artículo de más antes de {rol}");
+  if (/,\s*\{rol\}/i.test(texto)) mal.push("{rol} usado como persona");
+  if (texto.includes("{n}") && /\b(?:minutos?|horas?|días?|semanas?|meses?|años?)\b/i.test(texto)) mal.push("unidad de tiempo fuera de {n}");
+  const vecinos = [
+    ...[...texto.matchAll(/([\p{L}]+)\s+\{(agente|empresa|rol|tarea)\}/giu)].map((m) => ({ palabra: m[1]!, hueco: m[2]! })),
+    ...[...texto.matchAll(/\{(agente|empresa|rol|tarea)\}\s+([\p{L}]+)/giu)].map((m) => ({ palabra: m[2]!, hueco: m[1]! })),
+  ];
+  for (const { palabra, hueco } of vecinos) if (!VECINOS.has(plano(palabra))) mal.push(`palabra pegada a {${hueco.toLowerCase()}}`);
+  mal.push(...revisarPlantillaApertura(texto, nombres));
+  return [...new Set(mal)];
+}
+
+/** Una broma completa de dos frases, sin reutilizar las fijas. */
+export function revisarBroma(frases: readonly string[], nombres: readonly string[] = []): string[] {
+  const mal = revisarFinal(frases, [], nombres);
+  if (frases.length !== 2) mal.push("una broma tiene 2 frases");
+  if (frases.some((f) => FRASES_FIJAS.has(f.trim()))) mal.push("es una de siempre");
+  return [...new Set(mal)];
+}
+
+const SONIDOS: ReadonlyArray<readonly [IdMascota | "pájaro", RegExp]> = [
+  ["gato", palabras("miau", "mrrr")],
+  ["perro", palabras("guau")],
+  ["conejo", palabras("snif")],
+  ["robot", palabras("bip", "bup")],
+  ["pájaro", palabras("p[íi]o")],
+];
+
+/** Lo que dice una mascota, sin números, nombres ni las frases fijas de respaldo. */
+export function revisarMascota(id: IdMascota, texto: string, nombres: readonly string[] = []): string[] {
+  const mal = revisarTexto(texto, { letras: LETRAS_SUELTA, px: MAX_SUELTA_PX, nombres });
+  if (Object.values(DICEN).some((frases) => frases.includes(texto.trim()))) mal.push("es una de siempre");
+  if (SONIDOS.some(([animal, re]) => animal !== id && re.test(texto))) mal.push("sonido de otra mascota");
+  return mal;
+}
+
 /**
  * Una frase de la IA que el worker acepta para hacer su audio (punto 7 del
  * spike): las mismas reglas, sin nombres, números ni códigos, solo letras y
  * signos y hasta 50 letras. El worker no sabe los nombres de la oficina: le
- * basta con que no traiga ninguna mayúscula en medio ni un cargo.
+ * basta con revisar las mayúsculas, incluidas las iniciales, y los cargos.
  */
 export function fraseIaParaVoz(texto: string): boolean {
   return typeof texto === "string" && revisarTexto(texto, { letras: LETRAS_VOZ }).length === 0;

@@ -2,7 +2,7 @@
 // (nombres, cargos, empresas, números, códigos, estados, cuándo, «voy a…») y el largo de las frases de hoy. Desde la
 // 0.8.1 (JST-251), tampoco palabras que no existen.
 import { describe, expect, it } from "vitest";
-import { fraseIaParaVoz, LETRAS_FINAL, LETRAS_SUELTA, MAX_FINAL_PX, revisarFinal, revisarSuelta, revisarTexto } from "../src/ia/revision.js";
+import { casiIgual, fraseIaParaVoz, LETRAS_FINAL, LETRAS_SUELTA, MAX_FINAL_PX, revisarApertura, revisarBroma, revisarFinal, revisarMascota, revisarSuelta, revisarTexto } from "../src/ia/revision.js";
 import { anchoTexto } from "../src/hilo.js";
 
 const fijas = [{ texto: "A CEO le falló el run." }, { texto: "¿Qué le pasó?" }, { texto: "Se quedó sin cupo, parece." }];
@@ -139,6 +139,89 @@ describe("el final entero", () => {
 
   it("una frase mala bota el final entero (va la plantilla)", () => {
     expect(revisarFinal(["¡Qué paciencia!", "Ya casi la terminan."], [{ texto: "Esta espera a que termine otra." }]).length).toBeGreaterThan(0);
+  });
+});
+
+describe("aperturas, bromas, mascotas y casi repeticiones (0.13.0)", () => {
+  it("la apertura conserva exactamente los huecos y no admite datos fuera de ellos", () => {
+    const plantilla = "A {agente} le falló el run.";
+    expect(revisarApertura("¡Qué lata por {agente}!", plantilla)).toEqual([]);
+    expect(revisarApertura("¡Qué lata!", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("¡Qué lata por {agente} y {otro}!", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("¡Qué lata por {agente} y Catalina!", plantilla)).toContain("un nombre");
+    expect(revisarApertura("¡Son 4 con {agente}!", plantilla)).toContain("número");
+    expect(revisarApertura(plantilla, plantilla)).toContain("es una de siempre");
+    expect(revisarApertura("Dijo «listo» {agente}.", plantilla)).toContain("signos, comillas o emojis");
+    expect(revisarApertura("Espero que {agente} se solven.", plantilla)).toContain("palabra que no existe («solven»)");
+    expect(revisarApertura("¿Cómo va el {rol}?", "¿Cómo va {rol}?")).toContain("artículo de más antes de {rol}");
+    expect(revisarApertura("¿Qué tal {rol}?", "¿Cómo va {rol}?")).toEqual([]);
+    expect(revisarApertura("Ya lleva {n} con esta.", "{agente} lleva {n} con {tarea}.")).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n} días.", "{agente} lleva {n} con {tarea}.")).toContain("unidad de tiempo fuera de {n}");
+    expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n}.", "{agente} lleva {n} con {tarea}.")).toEqual([]);
+  });
+
+  it("las bromas tienen dos frases y las mascotas no reutilizan el respaldo fijo ni suenan como otra especie", () => {
+    expect(revisarBroma(["¿Café o té?", "Café, por favor."])).toEqual([]);
+    expect(revisarBroma(["Solo una."])).toContain("una broma tiene 2 frases");
+    expect(revisarBroma(["¿Quién rompió el build?", "Café, por favor."])).toContain("es una de siempre");
+    expect(revisarMascota("gato", "Qué rico el sol.")).toEqual([]);
+    expect(revisarMascota("gato", "¡Miau!")).toContain("es una de siempre");
+    expect(revisarMascota("perro", "Somos 4.")).toContain("número");
+    expect(revisarMascota("conejo", "Pío, qué rico el sol.")).toContain("sonido de otra mascota");
+    expect(revisarMascota("gato", "Guau, a jugar!")).toEqual(expect.arrayContaining(["sonido de otra mascota", "signos de apertura"]));
+  });
+
+  it("los signos de cierre necesitan su apertura en cada frase", () => {
+    for (const t of ["Necesito un momento!", "Caliente, para despertar!", "Guau, a jugar!"]) expect(revisarTexto(t, { letras: 45 }), t).toContain("signos de apertura");
+    expect(revisarTexto("¡Necesito un momento! ¿Vienes?", { letras: 45 })).toEqual([]);
+  });
+
+  it("ninguna palabra queda pegada a un dato ni convierte el rol en una persona", () => {
+    const empresa = "¿Cómo están en {empresa}?";
+    expect(revisarApertura("¿Qué onda en {empresa} rara?", empresa)).toContain("palabra pegada a {empresa}");
+    expect(revisarApertura("¿Cómo están en {empresa} rara?", empresa)).toContain("palabra pegada a {empresa}");
+    expect(revisarApertura("¿Qué onda en {empresa}?", empresa)).toEqual([]);
+    expect(revisarApertura("¿Cómo va {rol} definitiva?", "¿Cómo va {rol}?")).toContain("palabra pegada a {rol}");
+    expect(revisarApertura("¿Cómo te encuentras, {rol}?", "¿Cómo va {rol}?")).toContain("{rol} usado como persona");
+    expect(revisarApertura("Todavía queda {tarea} pendiente.", "Acabo de terminar {tarea}.")).toEqual([]);
+  });
+
+  it("una pregunta de cantidad sin referente no sirve de final", () => {
+    const fijas = [{ texto: "Ingeniero Backend lleva 3 horas con esta." }];
+    expect(revisarFinal(["¿Cuánto?"], fijas)).toContain("pregunta sin contexto");
+    expect(revisarFinal(["¿Cuánto falta?"], fijas)).toEqual([]);
+  });
+
+  it("detecta igualdad normalizada y coincidencia de palabras muy alta", () => {
+    expect(casiIgual("¡Qué lata por el café!", "qué lata por el café")).toBe(true);
+    expect(casiIgual("Este café me salva.", "Este café me salva, sí.")).toBe(true);
+    expect(casiIgual("Este café me salva.", "El sofá está muy rico.")).toBe(false);
+  });
+});
+
+describe("nombres y datos al comenzar una frase (0.14.3)", () => {
+  it("un nombre inventado se bota también al inicio de cualquier frase", () => {
+    expect(revisarFinal(["Marta ayudó mucho."], fijas)).toContain("un nombre");
+    expect(revisarTexto("Ah, sí. Marta ayudó mucho.", { letras: 45 })).toContain("un nombre");
+    const plantilla = "{agente} lleva {n} con {tarea}.";
+    expect(revisarApertura("Marta dice que {agente} lleva {n} con {tarea}.", plantilla)).toContain("un nombre");
+    expect(revisarApertura("Luna sabe que {agente} lleva {n} con {tarea}.", plantilla)).toContain("un nombre");
+  });
+
+  it("los inicios comunes siguen pasando", () => {
+    expect(revisarTexto("Espero que se solucionen.", { letras: 45 })).toEqual([]);
+    expect(revisarTexto("Ah, sí. ¡Qué bueno!", { letras: 45 })).toEqual([]);
+  });
+
+  it("mil, cien, docena y millón también son números", () => {
+    for (const t of ["Casi mil veces.", "Casi cien veces.", "Casi una docena.", "Casi un millón."]) {
+      expect(revisarTexto(t, { letras: 45 }), t).toContain("número");
+    }
+  });
+
+  it("noche dice cuándo y ya no puede dice un estado", () => {
+    expect(revisarApertura("De noche {agente} lleva {n} con {tarea}.", "{agente} lleva {n} con {tarea}.")).toContain("dice cuándo");
+    expect(revisarTexto("Ya no puede seguir.", { letras: 45 })).toContain("dice un estado");
   });
 });
 

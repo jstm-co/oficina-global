@@ -376,6 +376,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-leyenda.is-m span span { display: inline; }
 .of-leyenda.is-m b { font-weight: 500; color: var(--of-fg); }
 .of-hint { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: var(--of-muted-fg); }
+.of-version { margin-top: 6px; font-size: 12px; }
 
 /* Celular */
 .of.is-m .of-msgs { padding: 0 12px 8px; }

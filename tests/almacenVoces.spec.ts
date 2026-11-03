@@ -14,7 +14,7 @@ function escribir(dir: string, rel: string, texto: string): void {
 
 describe("la carpeta de datos", () => {
   it("es la del sistema: Mac, Windows y Linux (sin leer variables de entorno)", () => {
-    expect(carpetaDatos("darwin", "/Users/ana")).toBe(join("/Users/ana", "Library", "Application Support", "oficina-global"));
+    expect(carpetaDatos("darwin", "/Users/usuario")).toBe(join("/Users/usuario", "Library", "Application Support", "oficina-global"));
     expect(carpetaDatos("win32", "C:\\Users\\ana")).toBe(join("C:\\Users\\ana", "AppData", "Local", "oficina-global"));
     expect(carpetaDatos("linux", "/home/ana")).toBe(join("/home/ana", ".local", "share", "oficina-global"));
     expect(carpetaDatos("freebsd", "/home/ana")).toBe(join("/home/ana", ".local", "share", "oficina-global"));
