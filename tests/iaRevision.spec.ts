@@ -81,7 +81,7 @@ describe("lo que escribe la IA no trae datos (no inventa)", () => {
       "Qué alivio, ¡sin problemas! / Eso ayuda mucho.", "Un poco complicado, ¿nada? / Sí, pero avanzando.", "Como siempre, avanzando. / No se puede esperar más.",
       "Parece que va lento. / Ojalá mejore pronto.", "Bueno, poco a poco. / Sí, va avanzando.", "De a poco, la integración va. / Como siempre.", "Sí, igual. / Mismo ritmo.",
       "¡Siempre de a poco! / Es la verdad.", "¿Qué más? / Nada especial.", "¡Uf! Qué tiempo. / Ojalá se solucione.", "¡Uf! ¡Qué largas! / Necesito un café urgente.",
-      "Pues ahí va. / Siempre avanzando.", "¡Buena! ¿Qué es? / Una tarea sencilla.", "¡Qué cantidad! / Esperemos que sirvan.", "Mucho trabajo, ¿eh? / Paciencia, ya llegarán.",
+      "Pues ahí va. / Siempre avanzando.", "¡Buena! ¿Qué es? / Una cosa sencilla.", "¡Qué cantidad! / Esperemos que sirvan.", "Mucho trabajo, ¿eh? / Paciencia, ya llegarán.",
       "Así es, nada nuevo.", "Sí, igual. / Otro día normal.",
     ];
     for (const f of finales) for (const t of f.split(" / ")) expect(revisarTexto(t, { letras: LETRAS_FINAL, px: MAX_FINAL_PX, nombres: NOMBRES }), t).toEqual([]);
@@ -222,6 +222,37 @@ describe("nombres y datos al comenzar una frase (0.14.3)", () => {
   it("noche dice cuándo y ya no puede dice un estado", () => {
     expect(revisarApertura("De noche {agente} lleva {n} con {tarea}.", "{agente} lleva {n} con {tarea}.")).toContain("dice cuándo");
     expect(revisarTexto("Ya no puede seguir.", { letras: 45 })).toContain("dice un estado");
+  });
+});
+
+describe("inicios válidos y huecos mal escritos (0.14.4, JST-361)", () => {
+  it("una palabra del diccionario que no es un nombre de persona puede empezar cualquier frase", () => {
+    for (const t of ["Avanzamos sin problemas.", "Avanzamos poco a poco.", "Vamos bien.", "Seguimos en eso.", "Sigo con eso.", "Pendiente todavía.", "¿Robot o perro?", "Vamos avanzando con lo de las revisiones."]) {
+      expect(revisarFinal([t], fijas), t).toEqual([]);
+    }
+    for (const t of ["Tocó esperar.", "Respira hondo.", "¡Excelente!", "¿Cansado?", "Siguiendo el hilo.", "Ojos al techo.", "Necesitaba esto.", "Simplemente, café.", "Tantas tareas…"]) {
+      expect(revisarSuelta(t), t).toEqual([]);
+    }
+  });
+
+  it("los sonidos de la mascota pueden empezar su frase", () => {
+    for (const t of ["Miau.", "Miau, miau.", "Mrrr, qué rico el sol."]) expect(revisarMascota("gato", t), t).toEqual([]);
+    expect(revisarMascota("gato", "Miau, tarea resuelta.")).toEqual(["nombre de hueco"]);
+    expect(revisarMascota("perro", "Guau, guau.")).toEqual([]);
+    expect(revisarMascota("robot", "Bip, bip.")).toEqual([]);
+    expect(revisarMascota("conejo", "Snif, snif.")).toEqual([]);
+  });
+
+  it("sigue botando nombres de persona aunque sean palabras del diccionario", () => {
+    for (const t of ["Marta ayudó mucho.", "Luna sabe harto.", "Catalina saludó."]) expect(revisarTexto(t, { letras: 45 }), t).toContain("un nombre");
+  });
+
+  it("bota los nombres de hueco sueltos y la tilde antigua de solo", () => {
+    expect(revisarSuelta("¿Qué onda rol?")).toContain("nombre de hueco");
+    expect(revisarSuelta("Otra tarea, por favor.")).toContain("nombre de hueco");
+    expect(revisarSuelta("Un agente, por favor.")).not.toEqual([]);
+    expect(revisarTexto("Sin tareas, sólo pensar", { letras: 45 })).toContain("tilde antigua de «solo»");
+    expect(revisarTexto("Sin tareas, solo pensar", { letras: 45 })).toEqual([]);
   });
 });
 
