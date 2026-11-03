@@ -39,11 +39,11 @@ const GROSERIAS = palabras("cagad~", "cagó", "cago", "weón~", "weon~", "hueón
 const TONO = palabras("ch[eé]vere", "quilombo", "chido", "guay", "[oó]rale", "laburo", "pibe", "che", "cheque~", "cheek~", "chequ~", "tío", "tía");
 /** «todos», «nadie», «cero»: un dato de cuántos. */
 const CUANTOS = palabras("todos", "todas", "nadie", "ninguno", "ninguna", "cero");
-const NUMEROS = palabras("dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "veinte", "treinta");
+const NUMEROS = palabras("dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "veinte", "treinta", "cien(to)?", "mil", "docenas?", "mill[óo]n(es)?");
 /** Un estado de alguien (punto 4: falló, pausa, revisión, en cola, terminó, trabajando, esperando, bloqueado). */
 const ESTADOS = palabras(
   "fall[óoa]~", "error~", "se cay[óo]", "rompi[óo]", "paus~", "revisi[óo]n", "revis(en|ar|ando)", "en cola", "me toca", "te toca", "le toca", "sigues? (con|en)",
-  "termin~", "cerr[éeó]", "acab[éeó]", "list[ao]s?", "sali[óo]", "trabajand~", "esperand~", "espera", "esperan", "bloquead~", "aprobaci[óo]n",
+  "termin~", "cerr[éeó]", "acab[éeó]", "list[ao]s?", "sali[óo]", "trabajand~", "esperand~", "espera", "esperan", "bloquead~", "aprobaci[óo]n", "ya no pued[oe]",
 );
 /** Un cargo o rol (en la v4 la IA no nombra a nadie). */
 const CARGOS = palabras(
@@ -53,7 +53,12 @@ const CARGOS = palabras(
 /** Regla 2 del punto 4: lo que alguien va a hacer. */
 const VA_A = palabras("(voy|vamos|vas|va|van|iba|ibas|íbamos)\\s+a");
 /** Regla 3 del punto 4: cuándo. */
-const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche");
+const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche", "noche");
+/** Al empezar una frase solo se admite mayúscula en una palabra común, no en un nombre propio. */
+const INICIOS_COMUNES = new Set(
+  "a ah ahí ahora aire al algo anímate ánimo aquí así bacán bien buena buenas bueno café caliente casi como completamente cómo con cuánto de del dijo el ella ellas ellos empieza en entiendo es eso esperemos espero está están este estirar fue guau harta hay hola je la las linda lo los mal mmm más me mismo mucho muy nada necesito no nos ojalá otro parece pasado paciencia pausa pensamientos pensando pensar pío por pues pura qué quién regresar se siempre sin solo somos son sí tal también tampoco te todavía todo todos treinta uf un una unos uy va ver vienes volvería y ya"
+    .split(" "),
+);
 
 /** Lo que es «la misma frase»: sin mayúsculas, signos ni espacios de más. */
 export const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
@@ -112,11 +117,12 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   // que no está en INGLES («run», «backlog»).
   const raras = palabrasRaras(texto);
   if (raras.length) mal.push(`${raras.length === 1 ? "palabra que no existe" : "palabras que no existen"} (${raras.map((w) => `«${w}»`).join(", ")})`);
-  // Un nombre: una palabra con mayúscula que no empieza una frase («Ok» sí).
+  // Un nombre: mayúscula dentro de una frase, o al inicio sin ser una palabra común («Ok» sí).
   for (const f of texto.split(/(?<=[.!?…])\s+/)) {
-    for (const w of f.replace(/^[¿¡\s]+/, "").split(/\s+/).slice(1)) {
+    for (const [i, w] of f.replace(/^[¿¡\s]+/, "").split(/\s+/).entries()) {
       const limpia = w.replace(/[^\p{L}]/gu, "");
-      if (/^\p{Lu}/u.test(limpia) && limpia !== "Ok" && limpia !== "OK") {
+      const inicioComun = i === 0 && INICIOS_COMUNES.has(plano(limpia));
+      if (/^\p{Lu}/u.test(limpia) && limpia !== "Ok" && limpia !== "OK" && !inicioComun) {
         mal.push("un nombre");
         break;
       }
@@ -222,7 +228,7 @@ export function revisarMascota(id: IdMascota, texto: string, nombres: readonly s
  * Una frase de la IA que el worker acepta para hacer su audio (punto 7 del
  * spike): las mismas reglas, sin nombres, números ni códigos, solo letras y
  * signos y hasta 50 letras. El worker no sabe los nombres de la oficina: le
- * basta con que no traiga ninguna mayúscula en medio ni un cargo.
+ * basta con revisar las mayúsculas, incluidas las iniciales, y los cargos.
  */
 export function fraseIaParaVoz(texto: string): boolean {
   return typeof texto === "string" && revisarTexto(texto, { letras: LETRAS_VOZ }).length === 0;

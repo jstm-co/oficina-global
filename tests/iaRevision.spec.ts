@@ -199,6 +199,32 @@ describe("aperturas, bromas, mascotas y casi repeticiones (0.13.0)", () => {
   });
 });
 
+describe("nombres y datos al comenzar una frase (0.14.3)", () => {
+  it("un nombre inventado se bota también al inicio de cualquier frase", () => {
+    expect(revisarFinal(["Marta ayudó mucho."], fijas)).toContain("un nombre");
+    expect(revisarTexto("Ah, sí. Marta ayudó mucho.", { letras: 45 })).toContain("un nombre");
+    const plantilla = "{agente} lleva {n} con {tarea}.";
+    expect(revisarApertura("Marta dice que {agente} lleva {n} con {tarea}.", plantilla)).toContain("un nombre");
+    expect(revisarApertura("Luna sabe que {agente} lleva {n} con {tarea}.", plantilla)).toContain("un nombre");
+  });
+
+  it("los inicios comunes siguen pasando", () => {
+    expect(revisarTexto("Espero que se solucionen.", { letras: 45 })).toEqual([]);
+    expect(revisarTexto("Ah, sí. ¡Qué bueno!", { letras: 45 })).toEqual([]);
+  });
+
+  it("mil, cien, docena y millón también son números", () => {
+    for (const t of ["Casi mil veces.", "Casi cien veces.", "Casi una docena.", "Casi un millón."]) {
+      expect(revisarTexto(t, { letras: 45 }), t).toContain("número");
+    }
+  });
+
+  it("noche dice cuándo y ya no puede dice un estado", () => {
+    expect(revisarApertura("De noche {agente} lleva {n} con {tarea}.", "{agente} lleva {n} con {tarea}.")).toContain("dice cuándo");
+    expect(revisarTexto("Ya no puede seguir.", { letras: 45 })).toContain("dice un estado");
+  });
+});
+
 describe("el worker acepta para la voz lo que escribió la IA si pasa la misma revisión", () => {
   it("sin nombres, números ni códigos, solo letras y signos y hasta 50 letras", () => {
     expect(fraseIaParaVoz("¡Qué paciencia, eh!")).toBe(true);
