@@ -37,7 +37,7 @@ import type { Sincronizador } from "../sincronizador.js";
 import { entregaDeEvento, ROTULO_PISO, Vida, type AgenteVida, type VistaCharla, type VistaFuera, type VistaJunta, type VistaMascota, type VistaRotulo, type VistaSobre, type VistaSobreMano, type VistaSuelta } from "../vida.js";
 import { ESTADOS, etiqueta, pisoDeAbajo, type AgenteVista, type Dibujo, type PisoAbajo } from "../vista.js";
 import { useAjustes } from "./ajustes.js";
-import { fuenteIa, registrarPisoIa, useIaActiva } from "./ia.js";
+import { fuenteIa, registrarPisoIa, registroUsoIa, useIaActiva } from "./ia.js";
 import { PATHS, type NombreIcono } from "./iconos.js";
 import { registrarVida } from "./reloj.js";
 import { repartirGlobos } from "./repartir.js";
@@ -1270,6 +1270,7 @@ function useVida(
   // 0.8.1 (JST-249): también en pausa (solo se saltan las ráfagas).
   const iaActiva = useIaActiva(conIa);
   vida.fijarIa(conIa && charlas && iaActiva ? fuenteIa(ajustes) : null);
+  vida.fijarRegistroIa(conIa && charlas ? registroUsoIa(ajustes) : null);
   useEffect(() => (conIa ? registrarPisoIa(() => vida.pedidosIa()) : undefined), [conIa, vida]);
   // Los nombres de las tareas para el rótulo (JST-138 §2): los que la página ya leyó, sin lecturas nuevas.
   const titulos = titulosDe(sync);

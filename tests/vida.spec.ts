@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { libre, pasillosDe, piesAsiento, piesPuesto, rejillaDe, salidaPuesto, type Punto } from "../src/caminos.js";
 import { cajaHilo, tamanoHilo, tapaA, type CajaHilo } from "../src/hilo.js";
 import { armarPiso, armarSalaAcercada, type EntradaSala, type PisoPlano } from "../src/plano.js";
-import { DICEN, ENTRE_FRASES_MS, MASCOTA_DICE_MS, PAREJA_MS, PEDIR_TEMAS_MS, PRIMERA_FRASE_MS, SALA_MS, SUELTAS, duracionFrase, type ContextoCharla, type Guion, type Linea, type Tema } from "../src/charlas.js";
+import { DICEN, ENTRE_FRASES_MS, MASCOTA_DICE_MS, PAREJA_MS, PEDIR_TEMAS_MS, PRIMERA_FRASE_MS, SALA_MS, SUELTAS, duracionFrase, type ContextoCharla, type FuenteIa, type Guion, type Linea, type Tema } from "../src/charlas.js";
 import { CACHE_TEMAS_MS, type Temas } from "../src/temas.js";
 import { MAX_PISO, MAX_SALA, MASCOTAS, VELOCIDAD, Vida, type AgenteVida, type FuenteTemas, type OpcionesVida, type VistaCharla } from "../src/vida.js";
 import type { Dibujo } from "../src/vista.js";
@@ -926,7 +926,52 @@ describe("conversaciones en el descanso (0.4.0, JST-162 · B · Pregunta y respu
   }, 30_000);
 
   /** Las conversaciones vivas con su hilo (interno: para medir). */
-  const conCaja = (v: Vida) => charlas(v) as unknown as Array<{ prefijo: string; a: string; b: string; fase: string; caja: CajaHilo; lineas: Linea[] }>;
+  const conCaja = (v: Vida) => charlas(v) as unknown as Array<{ id: number; prefijo: string; a: string; b: string; fase: string; caja: CajaHilo; lineas: Linea[] }>;
+
+  it("las fijas no se repiten al cargar, recargar ni cuando la IA queda lista (JST-369)", async () => {
+    const dichas = new Set<string>();
+    const fuente: FuenteIa = {
+      apertura: () => null,
+      final: () => null,
+      suelta: () => null,
+      broma: () => null,
+      mascota: () => null,
+      dicha: (texto) => dichas.has(texto),
+      usado: (_tipo, lineas) => {
+        for (const l of lineas) dichas.add(l.texto);
+      },
+    };
+    const b = banco(guardados());
+    b.vida.fijarRegistroIa(fuente);
+    b.sync({ op: CON, cambios: Object.fromEntries(todos().map((id) => [id, "libre"])) });
+    const iniciales = new Set<string>();
+    await b.avanzarAsync(20_000, () => {
+      for (const ch of conCaja(b.vida)) for (const l of ch.lineas) iniciales.add(l.texto);
+    });
+    expect(iniciales.size).toBeGreaterThan(0);
+    const conocidas = new Set(conCaja(b.vida).map((ch) => ch.id));
+    b.vida.fijarIa(fuente);
+    const repetidas: string[] = [];
+    await b.avanzarAsync(5 * 60_000, () => {
+      for (const ch of conCaja(b.vida)) {
+        if (conocidas.has(ch.id)) continue;
+        conocidas.add(ch.id);
+        for (const l of ch.lineas) if (iniciales.has(l.texto)) repetidas.push(l.texto);
+      }
+    });
+    expect(repetidas).toEqual([]);
+    b.vida.fijarIa(null);
+    const antesDeRecargar = new Set(dichas);
+    const repetidasRecargando: string[] = [];
+    await b.avanzarAsync(5 * 60_000, () => {
+      for (const ch of conCaja(b.vida)) {
+        if (conocidas.has(ch.id)) continue;
+        conocidas.add(ch.id);
+        for (const l of ch.lineas) if (antesDeRecargar.has(l.texto)) repetidasRecargando.push(l.texto);
+      }
+    });
+    expect(repetidasRecargando).toEqual([]);
+  }, 30_000);
 
   it("el hilo no le tapa la cabeza a quien no conversa: 3 libres en el descanso angosto de JSTM, desde la 2.ª frase (JST-172)", async () => {
     const b = banco(guardados());
