@@ -323,3 +323,62 @@ describe("Sincronizador: con la pestaña oculta (vigía de los avisos, JST-97)",
     sync.detener();
   });
 });
+
+describe("Sincronizador: tarea tomada por un run que partió sin tarea (JST-374)", () => {
+  const TAREA = { id: "i9", identifier: "BET-9", title: "Tarea tomada", status: "in_progress" };
+
+  function oficinaSinTarea(campo: "executionRunId" | "checkoutRunId") {
+    let ahora = Date.parse("2026-11-05T12:00:00Z");
+    let tareas: Array<Record<string, unknown>> = [];
+    const fetch = vi.fn(async (url: string) => {
+      const json = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
+      if (url === "/api/companies") return json([EMPRESAS[0]]);
+      if (url === "/api/companies/c1/agents") return json([{ ...agente("c1-a", "c1"), status: "running" }]);
+      if (url === "/api/companies/c1/live-runs") {
+        return json([{ id: "r0", companyId: "c1", agentId: "c1-a", status: "running", issueId: null, invocationSource: "on_demand", createdAt: "2026-11-05T11:59:00Z", startedAt: "2026-11-05T11:59:01Z" }]);
+      }
+      if (url === "/api/companies/c1/attention") return json({ items: [] });
+      if (url.startsWith("/api/companies/c1/issues?")) return json(tareas);
+      return { ok: false, status: 404, json: async () => ({ error: "no existe" }) };
+    });
+    vi.stubGlobal("fetch", fetch);
+    const sync = new Sincronizador({ cx: { base: "" }, usarCanal: false, ahora: () => ahora, respaldoMs: 600_000, sinCanalMs: 600_000 });
+    const lecturas = () => fetch.mock.calls.filter((c) => c[0].startsWith("/api/companies/c1/issues?")).length;
+    return {
+      sync,
+      lecturas,
+      ponerTarea: () => (tareas = [{ ...TAREA, [campo]: "r0" }]),
+      pasar: (ms: number) => (ahora += ms),
+    };
+  }
+
+  it.each(["executionRunId", "checkoutRunId"] as const)("llena el globo y sus enlaces con la tarea encontrada por %s", async (campo) => {
+    const banco = oficinaSinTarea(campo);
+    banco.ponerTarea();
+    await banco.sync.iniciar();
+    expect(banco.sync.agentes()[0]?.run).toMatchObject({ issueId: "i9", identifier: "BET-9", titulo: "Tarea tomada", tareaHref: "/BET/issues/BET-9", tareaStatus: "in_progress" });
+    expect(banco.lecturas()).toBe(1);
+    banco.pasar(61_000);
+    await banco.sync.recargar("c1", ["atencion"]);
+    expect(banco.lecturas()).toBe(1);
+    banco.sync.detener();
+  });
+
+  it("mientras no la encuentra lee como máximo una vez por minuto; al encontrarla deja de leer", async () => {
+    const banco = oficinaSinTarea("executionRunId");
+    await banco.sync.iniciar();
+    expect(banco.lecturas()).toBe(1);
+    banco.pasar(59_999);
+    await banco.sync.recargar("c1", ["atencion"]);
+    expect(banco.lecturas()).toBe(1);
+    banco.ponerTarea();
+    banco.pasar(1);
+    await banco.sync.recargar("c1", ["atencion"]);
+    expect(banco.lecturas()).toBe(2);
+    expect(banco.sync.agentes()[0]?.run?.identifier).toBe("BET-9");
+    banco.pasar(60_000);
+    await banco.sync.recargar("c1", ["atencion"]);
+    expect(banco.lecturas()).toBe(2);
+    banco.sync.detener();
+  });
+});

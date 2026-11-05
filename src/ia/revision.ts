@@ -9,7 +9,7 @@
 // acciones futuras, textos que no caben ni variantes casi repetidas.
 import { DICEN, FRASES_FIJAS, huecosDe, SUELTAS, SUELTAS_CON_DATO, type IdMascota, type Linea } from "../charlas.js";
 import { anchoTexto } from "../hilo.js";
-import { palabrasRaras } from "./palabras.js";
+import { esPalabra, palabrasRaras } from "./palabras.js";
 
 /** Hasta cuántas letras por frase del final (design-spec de JST-231 §5: la más larga de hoy tiene 45). */
 export const LETRAS_FINAL = 45;
@@ -50,15 +50,19 @@ const CARGOS = palabras(
   "diseñador~", "disenador~", "ingenier~", "qa", "revisor~", "ceo", "cto", "cmo", "cfo", "hermes", "l[íi]der~", "jef[ea]~", "document~", "speckit", "creador~", "chief", "backend",
   "frontend", "usuari[oa]s?", "client[ea]~", "agente~", "empresa~", "equipo",
 );
+/** Nombres de hueco que delatan una plantilla mal rellenada; «agente» ya se bota como cargo. */
+const HUECOS = palabras("rol", "tarea");
+const SOLO_ANTIGUO = palabras("sólo");
 /** Regla 2 del punto 4: lo que alguien va a hacer. */
 const VA_A = palabras("(voy|vamos|vas|va|van|iba|ibas|íbamos)\\s+a");
 /** Regla 3 del punto 4: cuándo. */
 const CUANDO = palabras("hoy", "ayer", "antes", "mañana", "luego", "anoche", "noche");
-/** Al empezar una frase solo se admite mayúscula en una palabra común, no en un nombre propio. */
-const INICIOS_COMUNES = new Set(
-  "a ah ahí ahora aire al algo anímate ánimo aquí así bacán bien buena buenas bueno café caliente casi como completamente cómo con cuánto de del dijo el ella ellas ellos empieza en entiendo es eso esperemos espero está están este estirar fue guau harta hay hola je la las linda lo los mal mmm más me mismo mucho muy nada necesito no nos ojalá otro parece pasado paciencia pausa pensamientos pensando pensar pío por pues pura qué quién regresar se siempre sin solo somos son sí tal también tampoco te todavía todo todos treinta uf un una unos uy va ver vienes volvería y ya"
+/** Nombres de persona que también son palabras del diccionario y no pueden abrir una frase. */
+const NOMBRES_PERSONA = new Set(
+  "adrián agustín alberto alejandro alex alicia alonso amanda ana andrés andrea ángel antonio arturo beatriz benjamín bernardo camila carla carlos carmen carolina catalina cecilia claudia cristina cristóbal daniel daniela david diego eduardo elena elisa emilia emilio enrique esteban fernanda fernando francisco francisca gabriel gabriela gonzalo guillermo gustavo héctor hugo ignacio isabel isidora jaime javier joaquín jorge josé josefina juan juana julio laura leonardo lorena lucas lucía luis luna manuel marcela marco marcos maría mariana marta martín matías mercedes miguel mónica natalia nicolás olivia pablo patricia paula pedro rafael raúl renato ricardo roberto rodrigo rosa salvador samuel santiago sebastián sofía teresa tomás valentina valeria verónica víctor victoria"
     .split(" "),
 );
+const SONIDOS_INICIALES = new Set("miau mrrr guau snif bip bup pío".split(" "));
 
 /** Lo que es «la misma frase»: sin mayúsculas, signos ni espacios de más. */
 export const plano = (t: string) => t.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
@@ -111,17 +115,21 @@ export function revisarTexto(t: string, o: OpcionesRevision): string[] {
   if (CUANTOS.test(texto)) mal.push("dice cuántos");
   if (ESTADOS.test(texto)) mal.push("dice un estado");
   if (CARGOS.test(texto)) mal.push("nombra a alguien por su cargo");
+  if (HUECOS.test(texto)) mal.push("nombre de hueco");
+  if (SOLO_ANTIGUO.test(texto)) mal.push("tilde antigua de «solo»");
   if (VA_A.test(texto)) mal.push("dice lo que alguien va a hacer");
   if (CUANDO.test(texto)) mal.push("dice cuándo");
   // Una palabra inventada o mal escrita («solven», «descanza») o de otro idioma
-  // que no está en INGLES («run», «backlog»).
-  const raras = palabrasRaras(texto);
+  // que no está en INGLES («run», «backlog»). Los sonidos de mascota sí pasan.
+  const raras = palabrasRaras(texto).filter((w) => !SONIDOS_INICIALES.has(plano(w)));
   if (raras.length) mal.push(`${raras.length === 1 ? "palabra que no existe" : "palabras que no existen"} (${raras.map((w) => `«${w}»`).join(", ")})`);
-  // Un nombre: mayúscula dentro de una frase, o al inicio sin ser una palabra común («Ok» sí).
+  // Un nombre: mayúscula dentro de una frase, o al inicio si no es una palabra
+  // del diccionario, un sonido de mascota u «Ok». Los nombres conocidos no pasan.
   for (const f of texto.split(/(?<=[.!?…])\s+/)) {
     for (const [i, w] of f.replace(/^[¿¡\s]+/, "").split(/\s+/).entries()) {
       const limpia = w.replace(/[^\p{L}]/gu, "");
-      const inicioComun = i === 0 && INICIOS_COMUNES.has(plano(limpia));
+      const inicial = plano(limpia);
+      const inicioComun = i === 0 && (SONIDOS_INICIALES.has(inicial) || (esPalabra(limpia) && !NOMBRES_PERSONA.has(inicial)));
       if (/^\p{Lu}/u.test(limpia) && limpia !== "Ok" && limpia !== "OK" && !inicioComun) {
         mal.push("un nombre");
         break;

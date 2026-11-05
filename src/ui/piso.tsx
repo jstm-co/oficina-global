@@ -31,13 +31,14 @@ import { spriteConPies } from "../caminos.js";
 import { CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
 import { lineasDe, nombreQueCabe, tituloDe, unCorteMenos, type Linea } from "../charlas.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
+import { textoRun } from "../estado.js";
 import { textoGlobo, textoTooltip, type Estimacion } from "../hora.js";
 import { cortarNombre, medirConCanvas, type TipoRotulo } from "../rotulo.js";
 import type { Sincronizador } from "../sincronizador.js";
 import { entregaDeEvento, ROTULO_PISO, Vida, type AgenteVida, type VistaCharla, type VistaFuera, type VistaJunta, type VistaMascota, type VistaRotulo, type VistaSobre, type VistaSobreMano, type VistaSuelta } from "../vida.js";
 import { ESTADOS, etiqueta, pisoDeAbajo, type AgenteVista, type Dibujo, type PisoAbajo } from "../vista.js";
 import { useAjustes } from "./ajustes.js";
-import { fuenteIa, registrarPisoIa, useIaActiva } from "./ia.js";
+import { fuenteIa, registrarPisoIa, registroUsoIa, useIaActiva } from "./ia.js";
 import { PATHS, type NombreIcono } from "./iconos.js";
 import { registrarVida } from "./reloj.js";
 import { repartirGlobos } from "./repartir.js";
@@ -349,7 +350,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       st === "trabaja" ? (
         <>
           {agente.run?.enCola ? <Icono nombre="hourglass" tam={12} /> : null}
-          {agente.run?.identifier ?? "run"}
+          {textoRun(agente.run)}
         </>
       ) : (
         <>
@@ -378,7 +379,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
   const clase = (extra: string) => cx("of-bub", `of-st-${st}`, agente.need && "is-need", anillo && "is-anillo", extra);
   const pos = { "--x": x, "--y": y } as CSSProperties;
   if (st === "trabaja") {
-    const codigo = agente.run?.identifier ?? "run";
+    const codigo = textoRun(agente.run);
     return (
       <span ref={refEl} className={clase(cx("of-b-trabaja", agente.run?.enCola && "is-q"))} style={pos}>
         {vz}
@@ -1270,6 +1271,7 @@ function useVida(
   // 0.8.1 (JST-249): también en pausa (solo se saltan las ráfagas).
   const iaActiva = useIaActiva(conIa);
   vida.fijarIa(conIa && charlas && iaActiva ? fuenteIa(ajustes) : null);
+  vida.fijarRegistroIa(conIa && charlas ? registroUsoIa(ajustes) : null);
   useEffect(() => (conIa ? registrarPisoIa(() => vida.pedidosIa()) : undefined), [conIa, vida]);
   // Los nombres de las tareas para el rótulo (JST-138 §2): los que la página ya leyó, sin lecturas nuevas.
   const titulos = titulosDe(sync);
@@ -1291,7 +1293,7 @@ function useVida(
       // Lo que te pide: el título de la tarjeta o de la aprobación; si no hay, el de la tarea (§2).
       espera: e ? { codigo: e.identifier, titulo: e.titulo ?? e.tituloTarea, mas: a.teNecesita.length - 1 } : null,
       // 0.5.0 (JST-163 §9): la hora estimada va en el rótulo, en una pastilla (JST-192: la vida la cambia en el paso del rótulo).
-      run: a.run ? { codigo: a.run.identifier, titulo: a.run.titulo, enCola: a.run.enCola, hora: textoGlobo(horaDe(a), ahoraDe(a)) } : null,
+      run: a.run ? { codigo: a.run.identifier, titulo: a.run.titulo, enCola: a.run.enCola, invocationSource: a.run.invocationSource, hora: textoGlobo(horaDe(a), ahoraDe(a)) } : null,
       runId: a.run?.id ?? null,
       // Para las conversaciones (JST-162 §1.2): lo que la Oficina ya sabe de cada uno.
       empresa: a.empresa,

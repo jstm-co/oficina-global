@@ -102,6 +102,26 @@ describe("armarEmpresa", () => {
     expect(a.teNecesita).toHaveLength(1);
   });
 
+  it("usa la tarea que un run sin issueId tomó después", () => {
+    const sinTareaInicial: DatosEmpresa = {
+      ...datos,
+      agentes: [agente("a")],
+      runs: [run("r0", "a", { issueId: null, invocationSource: "on_demand" })],
+      atencion: [],
+    };
+    const tomada = new Map([["i9", { id: "i9", identifier: "JST-9", title: "Tarea tomada", status: "in_progress" }]]);
+    const [a] = armarEmpresa(sinTareaInicial, tomada, new Map(), new Map([["r0", "i9"]]));
+    expect(a?.run).toMatchObject({
+      id: "r0",
+      issueId: "i9",
+      identifier: "JST-9",
+      titulo: "Tarea tomada",
+      tareaHref: "/JST/issues/JST-9",
+      tareaStatus: "in_progress",
+      invocationSource: "on_demand",
+    });
+  });
+
   it("Hermes sale de los mismos runs que los demás", () => {
     const h = oficina.find((x) => x.id === "h")!;
     expect(h).toMatchObject({ esHermes: true, base: "trabajando" });

@@ -13,7 +13,8 @@
 //   - `GET /api/issues/:id/interactions`       tarjetas de una tarea, al abrir la ventana para responder (0.2.0)
 //   - `GET /api/approvals/:id`                 una aprobación, al abrir la ventana (0.2.0)
 //   - `GET /api/companies/:id/issues`          lo último que terminó y la cola de un agente, para las conversaciones (0.3.0);
-//                                              lo terminado del período y las abiertas, para el Resumen (0.9.0)
+//                                              lo terminado del período y las abiertas, para el Resumen (0.9.0);
+//                                              la tarea que tomó un run sin `issueId` (JST-374)
 //   - `GET /api/issues/:id`                    también la cadena hacia arriba (`ancestors`) de una tarea terminada, para el Resumen
 //   - `ws(s)://…/api/companies/:id/events/ws`  canal en vivo de la empresa
 // El canal en vivo es el mismo que usa la app de Paperclip para refrescarse.
@@ -102,6 +103,16 @@ export async function listarAtencion(cx: Conexion, companyId: string): Promise<I
 export async function leerTarea(cx: Conexion, issueId: string): Promise<TareaRef> {
   const issue = await pedir<TareaRef>(cx, `/issues/${encodeURIComponent(issueId)}`);
   return { id: issue.id, identifier: issue.identifier ?? null, title: issue.title, status: issue.status ?? null };
+}
+
+/** La tarea en curso que tomó un run que partió sin `issueId` (JST-374). */
+export async function tareaDelRun(cx: Conexion, companyId: string, agentId: string, runId: string): Promise<TareaRef | null> {
+  const filas = await pedir<Array<TareaRef & { executionRunId?: string | null; checkoutRunId?: string | null }>>(
+    cx,
+    `/companies/${encodeURIComponent(companyId)}/issues?assigneeAgentId=${encodeURIComponent(agentId)}&status=in_progress`,
+  );
+  const tarea = filas.find((fila) => fila.executionRunId === runId || fila.checkoutRunId === runId);
+  return tarea ? { id: tarea.id, identifier: tarea.identifier ?? null, title: tarea.title, status: tarea.status ?? null } : null;
 }
 
 /** Actividad de una tarea (`GET /api/issues/:id/activity`, la más nueva primero): quién la pasó a revisión (JST-252). */

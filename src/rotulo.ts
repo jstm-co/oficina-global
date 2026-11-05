@@ -9,6 +9,7 @@
 // (el widget y el piso entero del celular) va un solo rótulo bajo el piso, que
 // turna las empresas cada 5 s. Nada de esto lee: los nombres salen de lo que la
 // página ya leyó (§2).
+import { textoSinTarea } from "./estado.js";
 import type { Dibujo } from "./vista.js";
 
 /** Cada cuánto pasa a la siguiente tarea el rótulo de una sala, y el de 1x (§3.4 y §3.6). */
@@ -51,7 +52,7 @@ export interface AgenteRotulo {
   /** Lo primero que te pide (lo más antiguo): el código y lo que te pide; `mas`, cuántas cosas más. */
   espera: { codigo: string | null; titulo: string | null; mas: number } | null;
   /** Su run: el código y el nombre de la tarea, si espera turno y (0.5.0) su hora estimada, ya dicha («≈15:05», «lleva 2 h»). */
-  run: { codigo: string | null; titulo: string | null; enCola: boolean; hora?: string | null } | null;
+  run: { codigo: string | null; titulo: string | null; enCola: boolean; invocationSource?: string | null; hora?: string | null } | null;
 }
 
 /** El nombre del agente sin lo que va entre paréntesis: «Documentación Técnica (Betalandia)» → «Documentación Técnica». */
@@ -111,7 +112,7 @@ export function itemDeAgente(a: AgenteRotulo): ItemRotulo {
   if (lo) return lo;
   const b = { ...base(a), clave: `a:${a.id}:${a.st}` };
   if (a.st === "error") return { ...b, tipo: "error", codigo: a.run?.codigo ?? null, texto: a.run?.titulo ?? ESTADO_SIN_TAREA.error };
-  if (a.st === "trabaja") return { ...b, tipo: "trabaja", codigo: null, texto: ESTADO_SIN_TAREA.trabaja };
+  if (a.st === "trabaja") return { ...b, tipo: "trabaja", codigo: null, texto: a.run ? textoSinTarea(a.run.invocationSource) : ESTADO_SIN_TAREA.trabaja };
   return { ...b, tipo: a.st === "pausa" ? "pausa" : "libre", codigo: null, texto: ESTADO_SIN_TAREA[a.st] };
 }
 
