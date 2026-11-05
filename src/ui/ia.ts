@@ -281,6 +281,11 @@ export function fuenteIa(a: Ajustes = ajustes()): FuenteIa | null {
   return quiere(a) && usaReserva(escritorIa().estado()) ? fuente : null;
 }
 
+/** También registra y frena lo dicho con frases fijas mientras la IA elegida carga o no está disponible (JST-369). */
+export function registroUsoIa(a: Ajustes = ajustes()): Pick<FuenteIa, "dicha" | "usado"> | null {
+  return quiere(a) ? fuente : null;
+}
+
 /** Para la QA y el banco: el estado, lo que hay en la reserva, lo último que pasó y lo último que escribió. */
 export function estadoIaParaPruebas() {
   const e = escritorIa();
