@@ -56,6 +56,8 @@ export interface RunActual {
   titulo: string | null;
   /** `true` si el run espera turno (`queued`) y todavía no arranca. */
   enCola: boolean;
+  /** Por qué partió (`timer`, `on_demand`…), para decir qué hace si no tiene tarea. */
+  invocationSource?: string | null;
   desde: string | null;
   /** `/PREFIJO/agents/:agentId/runs/:runId`, la página nativa del run. */
   href: string;
@@ -465,7 +467,18 @@ export function hrefTarea(prefijo: string, identifier: string): string {
   return `/${encodeURIComponent(prefijo)}/issues/${encodeURIComponent(identifier)}`;
 }
 
-export function armarEmpresa(datos: DatosEmpresa, tareas: ReadonlyMap<string, TareaRef>, entregas: Entregas = new Map()): AgenteOficina[] {
+export function textoSinTarea(invocationSource: string | null | undefined): string {
+  if (invocationSource === "timer") return "Latido";
+  if (invocationSource === "on_demand") return "A pedido";
+  return "Sin tarea";
+}
+
+/** El código de su tarea o, si no tiene, lo que hace el run; nunca el literal «run». */
+export function textoRun(run: Pick<RunActual, "identifier" | "invocationSource"> | null | undefined): string {
+  return run?.identifier ?? textoSinTarea(run?.invocationSource);
+}
+
+export function armarEmpresa(datos: DatosEmpresa, tareas: ReadonlyMap<string, TareaRef>, entregas: Entregas = new Map(), tareasTomadas: ReadonlyMap<string, string> = new Map()): AgenteOficina[] {
   const prefijo = prefijoDe(datos.empresa);
   const visibles = datos.agentes.filter(agenteVisible).sort(porNombre);
   const pc = datos.porConfirmar;
@@ -475,14 +488,16 @@ export function armarEmpresa(datos: DatosEmpresa, tareas: ReadonlyMap<string, Ta
     const runs = datos.runs.filter((run) => run.agentId === agente.id && (run.status === "running" || run.status === "queued"));
     const base = estadoBase(agente, runs);
     const principal = runPrincipal(runs);
-    const tarea = principal?.issueId ? tareas.get(principal.issueId) : undefined;
+    const issueId = principal ? (principal.issueId ?? tareasTomadas.get(principal.id) ?? null) : null;
+    const tarea = issueId ? tareas.get(issueId) : undefined;
     const run: RunActual | null = principal
       ? {
           id: principal.id,
-          issueId: principal.issueId,
+          issueId,
           identifier: tarea?.identifier ?? null,
           titulo: tarea?.title ?? null,
           enCola: principal.status === "queued",
+          invocationSource: principal.invocationSource ?? null,
           desde: principal.startedAt ?? principal.createdAt,
           href: hrefRun(prefijo, agente.id, principal.id),
           tareaHref: tarea?.identifier ? hrefTarea(prefijo, tarea.identifier) : null,

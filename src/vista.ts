@@ -1,7 +1,7 @@
 // Lo que la oficina dibuja de cada agente (design-spec de JST-65 §5), sin React:
 // la pose, la frase para el lector de pantalla, los contadores y los tiempos.
 import { aspectoDe } from "./aspecto.js";
-import type { AgenteOficina, Espera, TipoEspera } from "./estado.js";
+import { textoSinTarea, type AgenteOficina, type Espera, type TipoEspera } from "./estado.js";
 import { textoGlobo, type Estimacion } from "./hora.js";
 
 /** Lo que se dibuja: el estado base, salvo que esté libre y te necesite (vuelve a su puesto y levanta la mano). */
@@ -81,7 +81,11 @@ export function etiqueta(a: AgenteVista, extra: ExtraEtiqueta = {}): string {
   if (extra.listo && a.st === "libre") return `${a.nombre}, ${a.empresa}: terminó ${conNombre(extra.listo.codigo, extra.listo.titulo)}; ahora va al descanso`;
   const estado = ESTADOS[a.st].corto;
   let detalle = "";
-  if (a.st === "trabaja") detalle = `${a.run?.enCola ? " (en cola)" : ""}${a.run?.identifier ? ` en ${conNombre(a.run.identifier, a.run.titulo)}` : ""}`;
+  if (a.st === "trabaja" && a.run) {
+    const reserva = a.run.identifier ? [] : [textoSinTarea(a.run.invocationSource).toLocaleLowerCase("es")];
+    if (a.run.enCola) reserva.unshift("en cola");
+    detalle = `${reserva.length ? ` (${reserva.join(", ")})` : ""}${a.run.identifier ? ` en ${conNombre(a.run.identifier, a.run.titulo)}` : ""}`;
+  }
   if (a.st === "toca") detalle = ` en ${codigos(a.teNecesita)}`;
   const hora = a.st === "trabaja" && !a.run?.enCola && extra.hora ? `; ${extra.hora}` : "";
   const ademas = a.need && a.st !== "toca" ? `; además te necesita en ${codigos(a.teNecesita)}` : "";
@@ -185,7 +189,7 @@ export interface Pantalla {
 export function pantallaDe(a: Pick<AgenteVista, "st" | "need" | "teNecesita" | "run" | "motivo">): Pantalla | null {
   const e = a.need ? a.teNecesita[0] : undefined;
   if (e) return { tono: "toca", codigo: e.identifier, estado: "te espera", texto: e.titulo ?? e.tituloTarea };
-  if (a.st === "trabaja") return { tono: "trabaja", codigo: a.run?.identifier ?? null, estado: a.run?.enCola ? "en cola" : "trabajando", texto: a.run?.titulo ?? null };
+  if (a.st === "trabaja") return { tono: "trabaja", codigo: a.run?.identifier ?? null, estado: a.run?.enCola ? "en cola" : "trabajando", texto: a.run?.titulo ?? (a.run ? textoSinTarea(a.run.invocationSource) : null) };
   if (a.st === "error") return { tono: "error", codigo: a.run?.identifier ?? null, estado: "con error", texto: a.motivo };
   if (a.st === "pausa") return { tono: "pausa", codigo: null, estado: "en pausa", texto: a.motivo ? motivoPausa(a.motivo) : null };
   return null;

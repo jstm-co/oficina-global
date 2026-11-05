@@ -25,7 +25,7 @@
 //    empresa sigue «cargando» hasta que el canal abre (JST-131): antes, una
 //    entrega no llega y la página diría «En vivo» sin sacar su sobre.
 import { agenteQuePasoARevision, agenteVisible, armarEmpresa, contar, pasoARevision, revisionesSinAgente, seguirSinCamino, tareasEnRevision, tareasFaltantes, type AgenteOficina, type DatosEmpresa, type Entregas, type VistaSinCamino } from "./estado.js";
-import { abrirCanal, ErrorHttp, leerActividad, leerEmpresa, leerLog, leerTarea, listarAgentes, listarAtencion, listarEmpresas, listarRunsVivos, runsDelAgente, ultimoRun, type Canal, type Conexion } from "./fuentes.js";
+import { abrirCanal, ErrorHttp, leerActividad, leerEmpresa, leerLog, leerTarea, listarAgentes, listarAtencion, listarEmpresas, listarRunsVivos, runsDelAgente, tareaDelRun, ultimoRun, type Canal, type Conexion } from "./fuentes.js";
 import { lineasDelLog, type LineaLog } from "./log.js";
 import type { Empresa, EventoVivo, ItemAtencion, RunResumen, TareaRef } from "./shared.js";
 
@@ -155,6 +155,15 @@ interface Pendiente {
   cambios: Cambio[];
 }
 
+export const RELECTURA_RUN_SIN_TAREA_MS = 60_000;
+
+interface BusquedaRun {
+  companyId: string;
+  leida: number;
+  promesa: Promise<void> | null;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
 export class Sincronizador {
   empresas: Empresa[] = [];
   /** Error al listar las empresas (sin eso no hay oficina). */
@@ -162,6 +171,9 @@ export class Sincronizador {
   readonly datos = new Map<string, DatosEmpresa>();
   readonly estados = new Map<string, EstadoCarga>();
   readonly tareas = new Map<string, TareaRef>();
+  /** Tarea encontrada después para cada run que partió sin `issueId` (JST-374). */
+  private readonly tareasTomadas = new Map<string, string>();
+  private readonly busquedasRuns = new Map<string, BusquedaRun>();
   /**
    * Quién pasó cada tarea a revisión, por empresa (JST-252): del evento en vivo
    * o, para una revisión sin agente que llega en «Te toca», de la actividad de
@@ -260,7 +272,7 @@ export class Sincronizador {
   agentes(): AgenteOficina[] {
     return this.empresas.flatMap((empresa) => {
       const datos = this.datos.get(empresa.id);
-      return datos && !this.estados.get(empresa.id)?.error ? armarEmpresa(datos, this.tareas, this.entregasDe(empresa.id)) : [];
+      return datos && !this.estados.get(empresa.id)?.error ? armarEmpresa(datos, this.tareas, this.entregasDe(empresa.id), this.tareasTomadas) : [];
     });
   }
 
@@ -401,6 +413,10 @@ export class Sincronizador {
     for (const timer of this.releerSinCamino.values()) clearTimeout(timer);
     this.releerSinCamino.clear();
     this.sinCamino.clear();
+    for (const busqueda of this.busquedasRuns.values()) {
+      if (busqueda.timer) clearTimeout(busqueda.timer);
+      busqueda.timer = null;
+    }
     if (this.respaldo) clearInterval(this.respaldo);
     if (this.sinCanal) clearInterval(this.sinCanal);
     this.respaldo = this.sinCanal = null;
@@ -524,8 +540,80 @@ export class Sincronizador {
     const [leidas] = await Promise.all([
       Promise.all(faltan.map((id) => leerTarea(this.cx, id).catch(() => null))),
       Promise.all(sinQuien.map((id) => this.leerEntrega(companyId, id))),
+      this.buscarTareasTardias(companyId, datos),
     ]);
     for (const tarea of leidas) if (tarea) this.tareas.set(tarea.id, tarea);
+  }
+
+  /** Busca la tarea de cada run vivo sin `issueId`, como máximo una vez por minuto y run (JST-374). */
+  private buscarTareasTardias(companyId: string, datos: DatosEmpresa): Promise<void> {
+    const runs = datos.runs.filter((run) => run.status === "running" || run.status === "queued");
+    const vivos = new Set(runs.map((run) => run.id));
+    for (const [id, busqueda] of this.busquedasRuns) if (busqueda.companyId === companyId && !vivos.has(id)) this.olvidarBusquedaRun(id);
+    const lecturas: Promise<void>[] = [];
+    for (const run of runs) {
+      if (run.issueId) {
+        this.olvidarBusquedaRun(run.id);
+        continue;
+      }
+      if (this.tareasTomadas.has(run.id)) continue;
+      const lectura = this.buscarTareaTardia(run);
+      if (lectura) lecturas.push(lectura);
+    }
+    return Promise.all(lecturas).then(() => undefined);
+  }
+
+  private buscarTareaTardia(run: DatosEmpresa["runs"][number]): Promise<void> | null {
+    const ahora = this.op.ahora();
+    const previa = this.busquedasRuns.get(run.id);
+    if (previa?.promesa) return previa.promesa;
+    const busqueda = previa ?? { companyId: run.companyId, leida: -Infinity, promesa: null, timer: null };
+    const espera = busqueda.leida + RELECTURA_RUN_SIN_TAREA_MS - ahora;
+    if (espera > 0) {
+      this.programarBusquedaRun(run, busqueda);
+      return null;
+    }
+    if (busqueda.timer) clearTimeout(busqueda.timer);
+    busqueda.timer = null;
+    busqueda.leida = ahora;
+    this.busquedasRuns.set(run.id, busqueda);
+    const promesa = tareaDelRun(this.cx, run.companyId, run.agentId, run.id)
+      .then((tarea) => {
+        const actual = this.datos.get(run.companyId)?.runs.find((item) => item.id === run.id && (item.status === "running" || item.status === "queued"));
+        if (!actual || actual.issueId) return;
+        if (tarea) {
+          this.tareas.set(tarea.id, tarea);
+          this.tareasTomadas.set(run.id, tarea.id);
+        } else {
+          this.programarBusquedaRun(run, busqueda);
+        }
+      })
+      .catch(() => this.programarBusquedaRun(run, busqueda))
+      .finally(() => {
+        busqueda.promesa = null;
+      });
+    busqueda.promesa = promesa;
+    return promesa;
+  }
+
+  private programarBusquedaRun(run: DatosEmpresa["runs"][number], busqueda: BusquedaRun): void {
+    if (!this.activo || busqueda.timer || this.busquedasRuns.get(run.id) !== busqueda || this.tareasTomadas.has(run.id)) return;
+    const actual = this.datos.get(run.companyId)?.runs.find((item) => item.id === run.id && (item.status === "running" || item.status === "queued"));
+    if (!actual || actual.issueId) return;
+    busqueda.timer = setTimeout(() => {
+      busqueda.timer = null;
+      if (this.busquedasRuns.get(run.id) !== busqueda || this.tareasTomadas.has(run.id)) return;
+      const vigente = this.datos.get(run.companyId)?.runs.find((item) => item.id === run.id && (item.status === "running" || item.status === "queued"));
+      if (!vigente || vigente.issueId) return;
+      void this.buscarTareaTardia(vigente)?.then(() => this.notificar());
+    }, Math.max(0, busqueda.leida + RELECTURA_RUN_SIN_TAREA_MS - this.op.ahora()));
+  }
+
+  private olvidarBusquedaRun(runId: string): void {
+    const busqueda = this.busquedasRuns.get(runId);
+    if (busqueda?.timer) clearTimeout(busqueda.timer);
+    this.busquedasRuns.delete(runId);
+    this.tareasTomadas.delete(runId);
   }
 
   /**

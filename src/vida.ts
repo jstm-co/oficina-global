@@ -3166,7 +3166,7 @@ function destino(p: Persona): Destino {
 
 /** Lo que el rótulo cuenta de un agente (sin los nombres): si cambia, cambia su vuelta. */
 function firmaAgenteRotulo(a: { espera?: AgenteRotulo["espera"]; run?: AgenteRotulo["run"] }): string {
-  return `${a.espera?.codigo ?? ""}:${a.espera?.mas ?? ""}|${a.run?.codigo ?? ""}:${a.run?.enCola ? 1 : 0}:${a.run?.hora ?? ""}`;
+  return `${a.espera?.codigo ?? ""}:${a.espera?.mas ?? ""}|${a.run?.codigo ?? ""}:${a.run?.enCola ? 1 : 0}:${a.run?.invocationSource ?? ""}:${a.run?.hora ?? ""}`;
 }
 
 /** Lo que se ve de un rótulo: si cambia, se vuelve a dibujar. */

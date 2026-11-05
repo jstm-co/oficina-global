@@ -144,6 +144,16 @@ describe("la vuelta de la sala (§3.3)", () => {
     expect(itemDeAgente(SALA[1]!)).toMatchObject({ tipo: "libre", codigo: null, texto: "Libre" });
     expect(itemDeAgente(SALA[4]!)).toMatchObject({ tipo: "pausa", codigo: null, texto: "En pausa" });
   });
+
+  it.each([
+    ["timer", "Latido"],
+    ["on_demand", "A pedido"],
+    ["issue_assigned", "Sin tarea"],
+  ])("un run sin tarea con origen %s cuenta «%s», nunca «run»", (invocationSource, texto) => {
+    const a = ag("BET-9", "trabaja");
+    a.run = { codigo: null, titulo: null, enCola: false, invocationSource };
+    expect(itemDeAgente(a)).toMatchObject({ tipo: "trabaja", codigo: null, texto });
+  });
 });
 
 describe("cada cuánto cambia (§3.4)", () => {

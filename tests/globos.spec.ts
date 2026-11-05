@@ -1,6 +1,6 @@
 // El globo de dos pisos (0.5.0, design-spec de JST-163 §8 y §9): arriba lo que hace; abajo la mano o la hora.
 import { describe, expect, it } from "vitest";
-import type { Espera, RunActual } from "../src/estado.js";
+import { textoRun, type Espera, type RunActual } from "../src/estado.js";
 import type { Estimacion } from "../src/hora.js";
 import { etiqueta, pisoDeAbajo, type AgenteVista } from "../src/vista.js";
 
@@ -63,5 +63,15 @@ describe("la frase del tooltip con la hora y el «✓ listo»", () => {
 
   it("«✓ listo»: terminó y ahora va al descanso", () => {
     expect(etiqueta(vista({ st: "libre", run: null }), { listo: { codigo: "BET-414", titulo: "QA — login en el celular" } })).toBe("QA, Betalandia: terminó BET-414 · QA — login en el celular; ahora va al descanso");
+  });
+
+  it.each([
+    ["timer", "Latido", "trabajando (latido)"],
+    ["on_demand", "A pedido", "trabajando (a pedido)"],
+    ["issue_assigned", "Sin tarea", "trabajando (sin tarea)"],
+  ])("sin tarea, el globo y la accesibilidad dicen qué hace el run %s", (invocationSource, texto, accesible) => {
+    const actual = run({ issueId: null, identifier: null, titulo: null, invocationSource });
+    expect(textoRun(actual)).toBe(texto);
+    expect(etiqueta(vista({ run: actual }))).toBe(`QA, Betalandia: ${accesible}`);
   });
 });
