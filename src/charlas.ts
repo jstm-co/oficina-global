@@ -955,11 +955,21 @@ export class Guionista {
   private readonly mascotas = new Map<IdMascota, number>();
   /** 0.7.0: la reserva de la IA de Chrome (`null`: las frases de siempre) y el último final dicho de cada clave. */
   private ia: FuenteIa | null = null;
+  /** Con la IA elegida, lo ya dicho también frena las fijas mientras el modelo carga (JST-369). */
+  private memoriaIa: FuenteIa["dicha"] | null = null;
   private readonly ultimoFinal = new Map<string, string>();
 
-  /** Con la IA lista y elegida se usan primero sus variantes; `null`, las frases de siempre sin memoria persistente. */
+  /** Con la IA lista y elegida se usan primero sus variantes; `null`, no genera con IA. La memoria se configura aparte. */
   fijarIa(fuente: FuenteIa | null): void {
     this.ia = fuente;
+  }
+
+  fijarMemoriaIa(dicha: FuenteIa["dicha"] | null): void {
+    this.memoriaIa = dicha;
+  }
+
+  private fueDicha(texto: string): boolean {
+    return this.ia ? this.ia.dicha(texto) : (this.memoriaIa?.(texto) ?? false);
   }
 
   /** Si se contó hace menos de 10 min (§1.7). */
@@ -1009,7 +1019,7 @@ export class Guionista {
       if (!d) continue;
       if (!forzar && claves(x, d).some((k) => this.dicho(k, c.ahora))) continue;
       const lineas = this.lineasDe(x, d, c);
-      if (this.ia && lineas.some((l) => this.ia!.dicha(l.texto))) continue;
+      if (lineas.some((l) => this.fueDicha(l.texto))) continue;
       out.push({ x, d });
     }
     return out;
@@ -1198,7 +1208,7 @@ export class Guionista {
       ];
       for (const [texto, codigo, nombre] of conDato) {
         const clave = `${texto}:${codigo}`;
-        if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave) || this.ia?.dicha(texto)) continue;
+        if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave) || this.fueDicha(texto)) continue;
         this.sueltasDichas.push(clave);
         return { quien, texto, codigo, titulo: nombre ?? titulo(codigo) };
       }
@@ -1206,12 +1216,12 @@ export class Guionista {
     for (let k = 0; k < SUELTAS.length * 3; k++) {
       if (this.mazoSueltas.length === 0) this.mazoSueltas = barajar(SUELTAS, azar);
       const s = this.mazoSueltas.shift()!;
-      if (this.sueltasDichas.slice(-NO_SUELTA).includes(s) || this.ia?.dicha(s)) continue;
+      if (this.sueltasDichas.slice(-NO_SUELTA).includes(s) || this.fueDicha(s)) continue;
       this.sueltasDichas.push(s);
       if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
       return { quien, texto: s, codigo: null, titulo: null };
     }
-    return this.ia ? null : { quien, texto: "☕", codigo: null, titulo: null };
+    return this.ia || this.memoriaIa ? null : { quien, texto: "☕", codigo: null, titulo: null };
   }
 
   /** Lo que dice una mascota: con la IA elegida tampoco repite una fija dicha en la hora. */
@@ -1222,7 +1232,7 @@ export class Guionista {
     const i = ((this.mascotas.get(id) ?? -1) + 1) % l.length;
     this.mascotas.set(id, i);
     const fija = l[i]!;
-    return this.ia?.dicha(fija) ? null : fija;
+    return this.fueDicha(fija) ? null : fija;
   }
 
   /**
