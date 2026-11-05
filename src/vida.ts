@@ -688,10 +688,8 @@ export class Vida {
   private proxPreparar = -Infinity;
   /** Las parejas de una conversación con voz descartada: no se vuelven a preparar en 2 min. */
   private readonly descartadas = new Map<string, number>();
-  /** 0.7.0: la reserva de la IA de Chrome que usa el Guionista (o `null`). */
+  /** 0.7.0: la reserva de la IA de Chrome que usa el Guionista (o `null`), para contarle lo que se mostró. */
   private fuenteIa: FuenteIa | null = null;
-  /** Con la IA elegida, también registra y frena lo dicho con frases fijas mientras carga o no está disponible. */
-  private registroIa: Pick<FuenteIa, "dicha" | "usado"> | null = null;
 
   constructor(o: OpcionesConstructor = {}) {
     this.ahora = o.ahora ?? (() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
@@ -710,24 +708,13 @@ export class Vida {
   }
 
   /**
-   * 0.7.0 (JST-232): la reserva de la IA de Chrome (con la IA elegida, lista o
-   * en pausa), o `null` (las frases de siempre: el celular, el widget, el enlace
-   * para un TV, la IA sin bajar o «Frases de siempre»).
+   * 0.7.0 (JST-232): la reserva de la IA de Chrome (con la IA elegida y lista),
+   * o `null` (las frases de siempre: el celular, el widget, el enlace para un TV,
+   * la IA sin bajar, en pausa o «Frases de siempre»).
    */
   fijarIa(fuente: FuenteIa | null): void {
     this.fuenteIa = fuente;
     this.guionista.fijarIa(fuente);
-  }
-
-  /** Con la IA elegida se anota todo desde el principio, no solo cuando el modelo ya puede generar (JST-369). */
-  fijarRegistroIa(registro: Pick<FuenteIa, "dicha" | "usado"> | null): void {
-    this.registroIa = registro;
-    this.guionista.fijarMemoriaIa(registro?.dicha ?? null);
-  }
-
-  private anotarUsoIa(...args: Parameters<NonNullable<FuenteIa["usado"]>>): void {
-    if (this.fuenteIa) this.fuenteIa.usado?.(...args);
-    else this.registroIa?.usado?.(...args);
   }
 
   /**
@@ -1858,7 +1845,7 @@ export class Vida {
     a.charla = ch;
     b.charla = ch;
     this.charlas.push(ch);
-    this.anotarUsoIa("final", g.lineas, g.variante, ch.prefijo, g.ia);
+    this.fuenteIa?.usado?.("final", g.lineas, g.variante, ch.prefijo, g.ia);
     // 0.6.0: el turno de la voz, desde que salen a juntarse hasta la última frase.
     if (ch.voz) {
       const camino = caminos ? Math.max(...caminos.map((c) => recorrido(c!).largo)) / VELOCIDAD * 1000 : 0;
@@ -2154,7 +2141,7 @@ export class Vida {
         if (!linea) continue;
         const su: Suelta = { id: this.sigId++, prefijo: pre, quien: a.id, linea, t0: ahora, dur: duracionFrase(linea, true) };
         this.sueltas.push(su);
-        this.anotarUsoIa("suelta", [linea], null, pre);
+        this.fuenteIa?.usado?.("suelta", [linea], null, pre);
         // 0.6.0: la voz ve si le toca (solo en un hueco y una por minuto).
         if (this.voz?.lee("sueltas")) this.voz.hecho({ tipo: "suelta", id: su.id, quien: a.id, companyId: a.companyId, linea, ms: su.dur });
         this.tocar(pre);
@@ -2241,7 +2228,7 @@ export class Vida {
     const texto = this.guionista.mascota(m.id, this.azar);
     if (!texto) return;
     m.dice = { texto, hasta: ahora + MASCOTA_DICE_MS };
-    this.anotarUsoIa("mascota", [{ quien: m.id, texto, codigo: null, titulo: null }], m.id, "pasillo");
+    this.fuenteIa?.usado?.("mascota", [{ quien: m.id, texto, codigo: null, titulo: null }], m.id, "pasillo");
   }
 
   /**

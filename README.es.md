@@ -152,7 +152,7 @@ El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`)
 
 ## Contribuir y versiones
 
-Los pull requests son bienvenidos: ver [CONTRIBUTING.es.md](CONTRIBUTING.es.md). Cada pull request corre las pruebas, los tipos y el build en GitHub Actions. Cuando un mantenedor fusiona uno que sube la versión de `package.json`, GitHub Actions publica esa versión en npm por su cuenta, con [procedencia](https://docs.npmjs.com/generating-provenance-statements) (provenance), y crea su Release en GitHub. Nadie publica desde su computador.
+Los pull requests son bienvenidos: ver [CONTRIBUTING.es.md](CONTRIBUTING.es.md). Cada pull request corre las pruebas, los tipos y el build en GitHub Actions. Cuando un mantenedor fusiona cambios del paquete, GitHub Actions calcula una versión por fecha en UTC (`AAAA.MDD.N`), la publica en npm con [procedencia](https://docs.npmjs.com/generating-provenance-statements) (provenance) y crea su Release en GitHub. Nadie sube una versión a mano ni publica desde su computador.
 
 ## Licencia y atribuciones
 

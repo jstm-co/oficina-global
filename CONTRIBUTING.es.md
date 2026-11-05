@@ -16,19 +16,14 @@ Gracias por ayudar. Los issues y pull requests pueden ir en español o en inglé
    npm run build
    ```
 
-3. Si tu cambio toca el plugin (cualquier cosa fuera de textos, pruebas o `.github/`), sube la versión de `package.json` en el mismo pull request:
-
-   ```sh
-   npm version patch --no-git-tag-version   # un arreglo
-   npm version minor --no-git-tag-version   # algo nuevo
-   ```
-
-4. Abre un pull request contra `main`. GitHub Actions corre las pruebas, los tipos y el build, y revisa la versión. La primera vez que contribuyes, un mantenedor tiene que autorizar que corran.
-5. Un mantenedor lo revisa. Nada llega a `main` sin pull request, y solo los mantenedores fusionan.
+3. Abre un pull request contra `main`. No subas `package.json.version`: las versiones se calculan solas. GitHub Actions corre las pruebas, los tipos y el build, e informa si fusionar publicará una versión. La primera vez que contribuyes, un mantenedor tiene que autorizar que corran.
+4. Un mantenedor lo revisa. Nada llega a `main` sin pull request, y solo los mantenedores fusionan.
 
 ## Versiones
 
-Fusionar un pull request en `main` es publicar: si `package.json` trae una versión que todavía no está en npm, el workflow [Publish to npm](.github/workflows/publish.yml) la arma, la prueba y la publica en npm con procedencia (trusted publishing de npm, sin tokens), y crea el Release `vX.Y.Z` en GitHub. Si la versión no cambió, no publica nada.
+Los builds locales usan `AAAA.MDD.0-dev+<sha7>` en UTC, con `.dirty` si hay cambios sin commit. El pie muestra esa versión y el commit corto.
+
+Fusionar cambios del paquete en `main` es publicar: el workflow [Publish to npm](.github/workflows/publish.yml) calcula `AAAA.MDD.N` en UTC, donde N es la cantidad de versiones ya publicadas ese día. Pone esa versión solo dentro del runner, arma y prueba el paquete, lo publica con procedencia (trusted publishing de npm, sin tokens) y crea el Release `vAAAA.MDD.N` en GitHub. Los cambios solo de textos, pruebas o CI no publican nada.
 
 ## Para saber
 

@@ -16,19 +16,14 @@ Thanks for helping. Issues and pull requests can be in English or Spanish.
    npm run build
    ```
 
-3. If your change touches the plugin (anything besides docs, tests or `.github/`), bump the version in `package.json` in the same pull request:
-
-   ```sh
-   npm version patch --no-git-tag-version   # a fix
-   npm version minor --no-git-tag-version   # something new
-   ```
-
-4. Open a pull request against `main`. GitHub Actions runs the tests, the type check, the build and checks the version. The first time you contribute, a maintainer has to allow the checks to run.
-5. A maintainer reviews it. Nothing reaches `main` without a pull request, and only maintainers merge.
+3. Open a pull request against `main`. Do not bump `package.json.version`: releases are calculated automatically. GitHub Actions runs the tests, the type check and the build, and reports whether merging will publish. The first time you contribute, a maintainer has to allow the checks to run.
+4. A maintainer reviews it. Nothing reaches `main` without a pull request, and only maintainers merge.
 
 ## Releases
 
-Merging a pull request into `main` is the release: if `package.json` has a version that is not on npm yet, the [Publish to npm](.github/workflows/publish.yml) workflow builds it, tests it and publishes it to npm with provenance (npm trusted publishing, no tokens), then creates the `vX.Y.Z` GitHub Release. If the version did not change, it publishes nothing.
+Local builds use `YYYY.MDD.0-dev+<sha7>` in UTC, plus `.dirty` when the worktree has uncommitted changes. The footer shows that version and the short commit hash.
+
+Merging package changes into `main` is the release: the [Publish to npm](.github/workflows/publish.yml) workflow calculates `YYYY.MDD.N` in UTC, where N is the number of versions already published that day. It sets that version only inside the runner, builds and tests the package, publishes it with provenance (npm trusted publishing, no tokens), and creates the `vYYYY.MDD.N` GitHub Release. Changes only to docs, tests or CI publish nothing.
 
 ## Good to know
 
