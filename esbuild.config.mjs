@@ -1,8 +1,15 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import esbuild from "esbuild";
 import { createPluginBundlerPresets } from "@paperclipai/plugin-sdk/bundlers";
+import { versionDeBuild } from "./scripts/version.mjs";
 
 const presets = createPluginBundlerPresets({ uiEntry: "src/ui/index.tsx" });
+const datosVersion = versionDeBuild();
+const defineVersion = {
+  __OFICINA_VERSION__: JSON.stringify(datosVersion.version),
+  __OFICINA_SHA__: JSON.stringify(datosVersion.sha),
+};
+const conVersion = (config) => ({ ...config, define: { ...config.define, ...defineVersion } });
 
 // Los sprites y el sonido del aviso (JST-95) van dentro del bundle como data-URL (ver src/ui/sprites.ts).
 const loader = { ".png": "dataurl", ".mp3": "dataurl" };
@@ -72,9 +79,9 @@ const sonda = {
 };
 
 await Promise.all([
-  esbuild.build(presets.esbuild.worker),
-  esbuild.build(presets.esbuild.manifest),
-  esbuild.build({ ...presets.esbuild.ui, loader: { ...presets.esbuild.ui.loader, ...loader } }),
+  esbuild.build(conVersion(presets.esbuild.worker)),
+  esbuild.build(conVersion(presets.esbuild.manifest)),
+  esbuild.build(conVersion({ ...presets.esbuild.ui, loader: { ...presets.esbuild.ui.loader, ...loader } })),
   esbuild.build(tv),
   esbuild.build(oficina3d),
   esbuild.build(voces),
@@ -83,3 +90,7 @@ await Promise.all([
 ]);
 mkdirSync("dist/ui", { recursive: true });
 copyFileSync("static/tv.html", "dist/ui/tv.html");
+if (!readFileSync("dist/ui/index.js", "utf8").includes("data-oficina-version")) {
+  throw new Error("The UI bundle does not contain the version footer.");
+}
+console.log(`Build: ${datosVersion.version} · ${datosVersion.sha}`);

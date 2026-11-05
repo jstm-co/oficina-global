@@ -32,6 +32,7 @@ import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCe
 import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
+import { PieVersion } from "./pieVersion.js";
 import { ReproductorResumen } from "./reproductorResumen.js";
 import { useVocesAlDia } from "./prepararVoces.js";
 import { resumen, useResumenAbierto } from "./resumen.js";
@@ -493,6 +494,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           <p className="of-hint">Toca a alguien para ver su ficha.</p>
           <Leyenda celular />
           {listaDe(salaAcercada.prefijo)}
+          <PieVersion />
         </div>
       </>
     );
@@ -534,6 +536,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           </p>
           <Leyenda celular />
           {listaDe(null)}
+          <PieVersion />
         </div>
       </>
     );
@@ -588,6 +591,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           />
           <Leyenda celular={false} />
           {listaDe(null)}
+          <PieVersion />
         </div>
       </>
     );

@@ -7,6 +7,6 @@
 - [ ] `npm test`, `npm run typecheck` and `npm run build` pass
 - [ ] I tried it in a Paperclip instance (if it changes what you see or hear)
 
-## Version / Versión
+## Release / Publicación
 
-- [ ] If this changes the plugin, I bumped `version` in `package.json` (`npm version patch --no-git-tag-version`). Merging publishes that version to npm.
+Do not bump `package.json.version`. Merging package changes publishes a new UTC date-based version (`YYYY.MDD.N`); docs, tests and CI-only changes publish nothing.
