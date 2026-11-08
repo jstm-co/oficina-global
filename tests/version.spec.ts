@@ -56,4 +56,33 @@ describe("versión por fecha", () => {
       rmSync(carpeta, { recursive: true, force: true });
     }
   });
+
+  it("usa la versión exacta solo en un tag de release y -dev+sha fuera de él", () => {
+    const repo = mkdtempSync(join(tmpdir(), "oficina-version-tag-"));
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+    try {
+      git("init", "-b", "develop");
+      git("config", "user.name", "Prueba");
+      git("config", "user.email", "prueba@example.invalid");
+      writeFileSync(join(repo, "archivo.txt"), "base\n");
+      git("add", "archivo.txt");
+      git("commit", "-m", "base");
+      const sha = git("rev-parse", "--short=7", "HEAD");
+      const fecha = new Date("2026-11-07T12:00:00Z");
+      expect(versionDeBuild({ cwd: repo, env: {}, fecha }).version).toBe(`2026.1107.0-dev+${sha}`);
+
+      git("tag", "v2026.1107.2");
+      expect(versionDeBuild({ cwd: repo, env: {}, fecha })).toMatchObject({ version: "2026.1107.2", dirty: false });
+      git("tag", "-d", "v2026.1107.2");
+      git("tag", "oficina-pixel-v2026.1107.2");
+      expect(versionDeBuild({ cwd: repo, env: {}, fecha }).version).toBe("2026.1107.2");
+
+      writeFileSync(join(repo, "archivo.txt"), "después del tag\n");
+      git("commit", "-am", "después");
+      const nuevoSha = git("rev-parse", "--short=7", "HEAD");
+      expect(versionDeBuild({ cwd: repo, env: {}, fecha }).version).toBe(`2026.1107.0-dev+${nuevoSha}`);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
 });

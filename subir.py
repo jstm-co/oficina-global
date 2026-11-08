@@ -12,22 +12,22 @@ Uso, desde la carpeta del repo y con el cambio ya commiteado (es pesado: va por 
   --seco    hace todo menos subir: muestra la rama, el título y el texto del PR.
   --resolver-local
             si ya trajiste y resolviste a mano un merge de GitHub, conserva el árbol exportado
-            y crea el commit con origin/main como segundo padre (sin esto, se detiene al chocar).
+            y crea el commit con origin/develop como segundo padre (sin esto, se detiene al chocar).
 
 Qué hace:
-  1. Exige que HEAD sea el commit de la rama local main; así una rama vieja no puede borrar
-     arreglos que ya están en GitHub. Exporta ese HEAD con publico/exportar.py, que revisa
+  1. Exige que la rama de la tarea contenga el develop actual; así una rama vieja no puede
+     borrar arreglos que ya están en GitHub. Exporta HEAD con publico/exportar.py, que revisa
      que no haya nada privado (y, sin --rapido, corre pruebas, tipos y build, y revisa el paquete).
   2. Arma un commit en ../_publico encima de la rama local `exportado` (la exportación
      anterior), con la cuenta y el correo noreply configurados en el repo interno, en UTC.
-  3. Lo junta con main de GitHub (`git merge-tree`). Si en GitHub se fusionó algo que este
+  3. Lo junta con develop de GitHub (`git merge-tree`). Si en GitHub se fusionó algo que este
      repo no tiene (el PR de otra persona), primero lo trae aquí en un commit
      «JST-NN: trae lo que se fusionó en GitHub (#N)» y vuelve a exportar.
-  4. Lo sube a la rama `jst-NN` de la tarea y abre o actualiza su pull request. Si cambió
-     el paquete, fusionarlo calcula y publica una versión por fecha en npm (GitHub Actions,
-     .github/workflows/publish.yml); no hay que subir ninguna versión a mano.
+  4. Sube `jst-NN` al repo interno y al público, y abre o actualiza el PR público a develop.
+     El release posterior develop → main calcula y publica una versión por fecha en npm
+     (GitHub Actions, .github/workflows/publish.yml); no hay que subir ninguna versión a mano.
 
-Nunca hace push a main ni fusiona: el merge es la aprobación del usuario.
+Nunca hace push a main ni fusiona: los merges conservan sus aprobaciones.
 """
 import fcntl
 import importlib.util
@@ -45,6 +45,7 @@ REPO = Path(__file__).resolve().parent
 PUBLICO = REPO / "publico"
 PUB = REPO.parent / "_publico"
 GH_REPO = "jstm-co/oficina-global"
+BASE_PUBLICA = "develop"
 AUTOR = None
 GH_CUENTA = None
 COAUTOR = None
@@ -54,15 +55,21 @@ exp = None
 
 def revisar_rama_actual() -> None:
     actual = git("rev-parse", "HEAD", cwd=REPO)
-    principal = git("rev-parse", "refs/heads/main", cwd=REPO)
-    if actual != principal:
-        raise Alto(f"Solo se puede exportar desde la rama local main; HEAD es {actual[:12]} y main es {principal[:12]}. "
-                   "Cambia a main, trae o reintegra el cambio allí y vuelve a intentarlo.")
+    desarrollo = git("rev-parse", "--verify", "-q", "refs/remotes/origin/develop", cwd=REPO, ok=(0, 1))
+    ref = "origin/develop"
+    if not desarrollo:
+        ref = "refs/heads/develop"
+        desarrollo = git("rev-parse", "--verify", "-q", ref, cwd=REPO, ok=(0, 1))
+    if not desarrollo:
+        raise Alto("No encuentro develop. Tráelo con `git fetch origin develop` y vuelve a intentarlo.")
+    if correr(["git", "merge-base", "--is-ancestor", desarrollo, actual], cwd=REPO, ok=(0, 1)).returncode != 0:
+        raise Alto(f"La rama de la tarea no contiene el develop actual ({desarrollo[:12]}). "
+                   "Tráelo con `git fetch origin develop && git merge origin/develop` "
+                   "(o `git rebase origin/develop`), resuelve los choques y vuelve a intentarlo.")
 
 
 def inicializar() -> None:
     global exp, AUTOR, GH_CUENTA, COAUTOR
-    revisar_rama_actual()
     if exp is not None:
         return
     ruta_config = PUBLICO / "configuracion_subir.py"
@@ -198,13 +205,18 @@ def traer_de_github(tarea: str, arbol: str, junto: str, base: str) -> str:
             archivo.parent.mkdir(parents=True, exist_ok=True)
             archivo.write_bytes(datos)
         rutas.append(destino)
-    prs = sorted({int(n) for n in re.findall(r"#(\d+)", git("log", "--format=%s", f"{base}..origin/main"))})
+    prs = sorted({int(n) for n in re.findall(r"#(\d+)", git("log", "--format=%s", f"{base}..origin/develop"))})
     de = f" ({', '.join(f'#{n}' for n in prs)})" if prs else ""
     mensaje = f"{tarea}: trae a este repo lo que se fusionó en GitHub{de}"
     git("add", "-A", "--", *rutas, cwd=REPO)
     git("commit", "-m", mensaje, "-m", COAUTOR, "--", *rutas, cwd=REPO)
     print(f"Traje de GitHub {len(rutas)} archivo(s): {', '.join(rutas)}\n  commit: {mensaje}")
     return mensaje
+
+
+def comando_pr_publico(rama: str, titulo: str, cuerpo: Path, listo: bool) -> list[str]:
+    return ["gh", "pr", "create", "--repo", GH_REPO, "--base", BASE_PUBLICA, "--head", rama,
+            "--title", titulo, "--body-file", str(cuerpo)] + ([] if listo else ["--draft"])
 
 
 def subir(args: list[str]) -> int:
@@ -229,6 +241,8 @@ def subir(args: list[str]) -> int:
 
     token = correr(["gh", "auth", "token", "--user", GH_CUENTA], cwd=REPO).stdout.decode().strip()
     env_gh = {**os.environ, "GH_TOKEN": token}
+    git("fetch", "origin", "develop", cwd=REPO, env=env_gh)
+    revisar_rama_actual()
 
     with open(PUB / ".git" / "subir.lock", "w") as candado:
         fcntl.flock(candado, fcntl.LOCK_EX)
@@ -253,14 +267,14 @@ def subir(args: list[str]) -> int:
                              "GIT_COMMITTER_NAME": AUTOR[0], "GIT_COMMITTER_EMAIL": AUTOR[1], "GIT_COMMITTER_DATE": fecha}
                 commit = correr(["git", "commit-tree", arbol, "-p", anterior, "-F", "-"], env=env_autor,
                                 entrada=(mensaje + "\n\n" + COAUTOR + "\n").encode()).stdout.decode().strip()
-                r = correr(["git", "merge-tree", "--write-tree", "--name-only", "origin/main", commit], ok=(0, 1))
+                r = correr(["git", "merge-tree", "--write-tree", "--name-only", "origin/develop", commit], ok=(0, 1))
                 lineas = r.stdout.decode().splitlines()
                 if r.returncode == 1:
                     if not resolver_local:
                         choques = lineas[1:lineas.index("")] if "" in lineas else lineas[1:]
                         raise Alto("Lo de GitHub choca con este cambio en: " + ", ".join(choques) +
                                    "\nHay que resolverlo a mano (README interno › Publicación).")
-                    commit = correr(["git", "commit-tree", arbol, "-p", anterior, "-p", "origin/main", "-F", "-"], env=env_autor,
+                    commit = correr(["git", "commit-tree", arbol, "-p", anterior, "-p", "origin/develop", "-F", "-"], env=env_autor,
                                     entrada=(mensaje + "\n\n" + COAUTOR + "\n").encode()).stdout.decode().strip()
                     break
                 junto = lineas[0]
@@ -272,9 +286,15 @@ def subir(args: list[str]) -> int:
                     break
                 if vuelta == 1:
                     raise Alto("Después de traer lo de GitHub la exportación sigue sin cuadrar: " + ", ".join(r for _, r in difs))
-                traido = traer_de_github(tarea, arbol, junto, git("merge-base", "origin/main", commit))
+                traido = traer_de_github(tarea, arbol, junto, git("merge-base", "origin/develop", commit))
             else:
                 raise Alto("No cuadró.")
+
+            rama = tarea.lower()
+            if not seco:
+                git("push", "origin", f"HEAD:refs/heads/{rama}", cwd=REPO, env=env_gh)
+                SUBIDO.append(f"{rama} interna")
+                print(f"Rama interna: {rama}")
 
             if arbol == git("rev-parse", f"{anterior}^{{tree}}"):
                 if not listo:
@@ -282,17 +302,15 @@ def subir(args: list[str]) -> int:
                     return 0
                 commit = anterior  # solo marcar el PR como listo
 
-            del_paquete = [ruta for _, ruta in diferencias("origin/main", arbol) if not sin_version(ruta)]
-            rama = tarea.lower()
-
+            del_paquete = [ruta for _, ruta in diferencias("origin/develop", arbol) if not sin_version(ruta)]
             hay_remota = git("ls-remote", "--heads", "origin", rama, env=env_gh)
-            subidos = git("log", "--no-merges", "--reverse", "--format=%s", f"origin/main..{commit}").splitlines()
+            subidos = git("log", "--no-merges", "--reverse", "--format=%s", f"origin/develop..{commit}").splitlines()
             titulo = mensaje
             cuerpo = "\n".join([
                 "Changes to Oficina global from the internal workspace.",
                 "",
-                ("**Release:** merging publishes a new UTC date-based version (`YYYY.MDD.N`) to npm." if del_paquete else
-                 "**Release:** only docs, tests or CI changed; merging publishes nothing."),
+                ("**Release:** the next develop → main release publishes a new UTC date-based version (`YYYY.MDD.N`) to npm." if del_paquete else
+                 "**Release:** only docs, tests or CI changed; the next release publishes nothing for this pull request."),
                 ("**Status:** ready for approval." if listo else
                  "**Status:** draft: QA is still pending. Do not merge yet."),
                 "",
@@ -303,23 +321,24 @@ def subir(args: list[str]) -> int:
             revisar_textos({"titulo.txt": titulo, "cuerpo.md": cuerpo}, real)
 
             if seco:
-                print(f"\n[seco] rama {rama} ({'existe' if hay_remota else 'nueva'}), commit {commit[:7]}"
+                print(f"\n[seco] ramas interna y pública {rama}; PR {rama} → {BASE_PUBLICA} "
+                      f"({'existe' if hay_remota else 'nueva'}), commit {commit[:7]}"
                       f"\n[seco] título: {titulo}\n{cuerpo}")
-                print(git("diff", "--stat", "origin/main", commit))
+                print(git("diff", "--stat", "origin/develop", commit))
                 return 0
 
             empuje = ["push", "origin", f"{commit}:refs/heads/{rama}"]
             if hay_remota:
                 remota = hay_remota.split()[0]
                 if correr(["git", "merge-base", "--is-ancestor", remota, commit], ok=(0, 1)).returncode == 1:
-                    # Si alguien tocó «Update branch» en GitHub, la rama trae un merge de main que ya está en este commit.
+                    # Si alguien tocó «Update branch» en GitHub, la rama trae un merge de develop que ya está en este commit.
                     extra = git("rev-list", f"{commit}..{remota}").split()
                     if not all(len(git("rev-list", "--parents", "-n", "1", c).split()) > 2 for c in extra):
                         raise Alto(f"La rama {rama} en GitHub tiene commits que no salieron de aquí: revísala a mano.")
                     empuje = ["push", f"--force-with-lease=refs/heads/{rama}:{remota}", "origin", f"{commit}:refs/heads/{rama}"]
             git(*empuje, env=env_gh)
             git("update-ref", f"refs/heads/{EXPORTADO}", commit, anterior)
-            SUBIDO.append(f"{rama} ({commit[:7]})")
+            SUBIDO.append(f"{rama} pública ({commit[:7]})")
 
             abiertos = json.loads(correr(["gh", "pr", "list", "--repo", GH_REPO, "--head", rama, "--state", "open",
                                           "--json", "number,url,isDraft"], env=env_gh).stdout)
@@ -337,11 +356,10 @@ def subir(args: list[str]) -> int:
                     correr(["gh", "pr", "ready", str(pr["number"]), "--repo", GH_REPO, "--undo"], env=env_gh)
                 url = pr["url"]
             else:
-                crear = ["gh", "pr", "create", "--repo", GH_REPO, "--base", "main", "--head", rama,
-                         "--title", titulo, "--body-file", str(cuerpo_f)] + ([] if listo else ["--draft"])
+                crear = comando_pr_publico(rama, titulo, cuerpo_f, listo)
                 url = correr(crear, env=env_gh).stdout.decode().strip().splitlines()[-1]
-            print(f"\nPR: {url}\n  rama {rama}, commit {commit[:7]}, "
-                  f"{'publica una versión por fecha al fusionar' if del_paquete else 'no publica al fusionar'}, "
+            print(f"\nPR: {url}\n  rama {rama} → {BASE_PUBLICA}, commit {commit[:7]}, "
+                  f"{'entra al próximo release con versión por fecha' if del_paquete else 'no cambia el paquete'}, "
                   f"{'listo para aprobar' if listo else 'borrador (falta QA)'}")
             if traido:
                 print(f"  antes traje de GitHub: {traido}")
@@ -355,7 +373,7 @@ def main() -> int:
         return subir(sys.argv[1:])
     except Alto as e:
         if SUBIDO:
-            print(f"\nSubí la rama {SUBIDO[0]}, pero después falló el PR: hay que revisarlo a mano. {e}")
+            print(f"\nSubí {', '.join(SUBIDO)}, pero después falló el PR: hay que revisarlo a mano. {e}")
         else:
             print(f"\nNo subí nada. {e}")
         return 1
