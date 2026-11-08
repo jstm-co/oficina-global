@@ -24,15 +24,29 @@ export function archivosQuePublican(rutas) {
   );
 }
 
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" }).trim();
+function git(args, cwd = process.cwd()) {
+  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
-export function versionDeBuild({ env = process.env, fecha = new Date() } = {}) {
-  const sha = env.OFICINA_SHA || git(["rev-parse", "--short=7", "HEAD"]);
-  const dirty = env.OFICINA_DIRTY === undefined ? Boolean(git(["status", "--porcelain"])) : env.OFICINA_DIRTY === "1";
+export function versionEnTag(cwd = process.cwd()) {
+  try {
+    const tag = execFileSync("git", ["describe", "--exact-match", "--tags", "--match", "v*", "--match", "oficina-pixel-v*", "HEAD"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    }).trim();
+    const version = tag.match(/^(?:oficina-pixel-)?v(\d{4}\.\d{3,4}\.\d+)$/)?.[1];
+    return version || null;
+  } catch {
+    return null;
+  }
+}
+
+export function versionDeBuild({ env = process.env, fecha = new Date(), cwd = process.cwd() } = {}) {
+  const sha = env.OFICINA_SHA || git(["rev-parse", "--short=7", "HEAD"], cwd);
+  const dirty = env.OFICINA_DIRTY === undefined ? Boolean(git(["status", "--porcelain"], cwd)) : env.OFICINA_DIRTY === "1";
   return {
-    version: env.OFICINA_VERSION || versionLocal({ fecha, sha, dirty }),
+    version: env.OFICINA_VERSION || versionEnTag(cwd) || versionLocal({ fecha, sha, dirty }),
     sha,
     dirty,
   };

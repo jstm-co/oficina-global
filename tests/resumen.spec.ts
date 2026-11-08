@@ -684,7 +684,7 @@ describe("la IA de Chrome no cambia el sentido (JST-258: QA de la 0.9.0 con Gemi
 
 describe("la IA de Chrome no escribe palabras que no existen (JST-307: re-QA JST-280 con Gemini Nano)", () => {
   const nombres = ["QA", "Líder técnico", "Integración y CI", "Betalandia", "JSTM"];
-  const titulo = "«commit y PR a develop del respaldo de cada lunes»";
+  const titulo = "«respaldo semanal de ejemplo»";
 
   it("bota «Concluímos» y «Progremamos» (de la QA y de la medición), y deja «concluimos»", () => {
     expect(revisarFraseIa(`Se terminó una tarea de un pedido: ${titulo}.`, `Concluímos una tarea de un pedido: ${titulo}.`, nombres, "hecho")).toEqual(["palabra que no existe («Concluímos»)"]);
