@@ -1,7 +1,8 @@
 // Encabezado de la oficina (design-spec de JST-65 §9, §10 y §12): estado en
 // vivo, contadores que resaltan, filtro por empresa, banners y leyenda. La
 // 0.3.0 (JST-96 §8) suma el botón «Mascotas» y el sobre en la leyenda. La
-// 0.4.0 (JST-162 §4) suma «Conversaciones», a la derecha de «Mascotas».
+// 0.4.0 (JST-162 §4) suma «Conversaciones», a la derecha de «Mascotas». JST-410: en computador, «Mascotas» y «Conversaciones»
+// van dentro del menú «Ambiente» (`menuAmbiente.tsx`); aquí quedan para el celular.
 import { useId, useState, type FocusEvent, type MouseEvent } from "react";
 import { ESTADOS, ORDEN_LEYENDA, type ContadoresVista, type Dibujo } from "../vista.js";
 import { cambiarAjustes, useAjustes } from "./ajustes.js";
@@ -56,7 +57,7 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        {corto ? "Sin conexión" : "No pude leer las empresas, reintento en 20 s"}
+        <span className="of-lt">{corto ? "Sin conexión" : "No pude leer las empresas, reintento en 20 s"}</span>
       </span>
     );
   }
@@ -64,7 +65,7 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live">
         <Icono nombre="loader" tam={12} className="of-spin" />
-        {total ? `Leyendo las ${total} empresas…` : "Leyendo las empresas…"}
+        <span className="of-lt">{total ? `Leyendo las ${total} empresas…` : "Leyendo las empresas…"}</span>
       </span>
     );
   }
@@ -75,7 +76,7 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        {corto ? `En vivo · ${ok} de ${total}` : `En vivo en ${ok} de ${total} · ${nombres(caidas)} ${verbo}, reintento en 20 s`}
+        <span className="of-lt">{corto ? `En vivo · ${ok} de ${total}` : `En vivo en ${ok} de ${total} · ${nombres(caidas)} ${verbo}, reintento en 20 s`}</span>
       </span>
     );
   }
@@ -83,14 +84,14 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        {corto ? "En vivo · sin «Te toca»" : "En vivo · sin «Te toca», reintento en 20 s"}
+        <span className="of-lt">{corto ? "En vivo · sin «Te toca»" : "En vivo · sin «Te toca», reintento en 20 s"}</span>
       </span>
     );
   }
   return (
     <span className="of-live" title="Cada cambio llega en 1 s por el canal en vivo de cada empresa">
       <i className="of-pulse" />
-      {corto ? "En vivo" : `En vivo · ${total} de ${total} empresas`}
+      <span className="of-lt">{corto ? "En vivo" : `En vivo · ${total} de ${total} empresas`}</span>
     </span>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALTO_PISO_TV, ANCHO_TV, ANCHO_WIDGET, anchoCelular, anchoComputador, anchoWidgetCelular, armarPiso, armarPisoComputador, armarPisoTv, armarSalaAcercada, filasDeSalas, RESERVA_PAGINA, type EntradaSala, type PisoPlano } from "../src/plano.js";
+import { ALTO_PISO_TV, ANCHO_TV, ANCHO_WIDGET, anchoCelular, anchoComputador, anchoWidgetCelular, armarPiso, armarPisoComputador, armarPisoTv, armarSalaAcercada, claseEscala, escalasComputador, filasDeSalas, RESERVA_PAGINA, type EntradaSala, type PisoPlano } from "../src/plano.js";
 
 // Las 4 empresas de hoy (BET 9, ELM 4, JST 5, MIG 8), en desorden: el plano las ordena.
 const HOY: EntradaSala[] = [
@@ -176,51 +176,93 @@ describe("5 o más empresas (JST-77)", () => {
   });
 });
 
-describe("escala del computador (JST-86)", () => {
-  // Página del host (sin el menú lateral ni la barra de arriba), ancho × alto visible. En 2026.824.1 la cabecera de la
-  // oficina termina 150 más abajo: 52 que deja el host sobre la página y 98 de la cabecera (16 + 28 + 10 + 32 + 12).
-  const pagina = (salas: readonly EntradaSala[], ancho: number, alto: number) => armarPisoComputador(salas, ancho, alto - 150);
+describe("piso del computador: la escala más grande con la que cabe entero (JST-410)", () => {
+  // Página del host (sin el menú lateral ni la barra de arriba), ancho × alto visible. La cabecera de la oficina
+  // termina unos 150 más abajo de donde empieza la página.
+  const pagina = (salas: readonly EntradaSala[], ancho: number, alto: number, dpr = 1, previas?: readonly EntradaSala[]) =>
+    armarPisoComputador(salas, ancho, alto - 150, previas, dpr);
+  const cabe = (piso: PisoPlano, ancho: number, alto: number) => piso.w * piso.escala <= ancho - 48 && piso.h * piso.escala + RESERVA_PAGINA <= alto - 150;
+  // Las salas de cada fila, con sus columnas de escritorios: «BET 3 · ELM 2 / JST 3 · MIG 4».
+  const forma = (piso: PisoPlano) => {
+    const filas = new Map<number, string[]>();
+    for (const s of piso.salas) filas.set(s.y, [...(filas.get(s.y) ?? []), `${s.prefijo} ${s.cols}`]);
+    return [...filas.values()].map((f) => f.join(" · ")).join(" / ");
+  };
 
-  it("2750 × 1490 (la pantalla del usuario) y 2560 × 1300 → 3x, con el piso de 640: 1920 × 1008 en pantalla", () => {
-    for (const [ancho, alto] of [[2750, 1490], [2560, 1300]] as const) {
-      const piso = pagina(HOY, ancho, alto);
-      expect(piso.escala, `${ancho} × ${alto}`).toBe(3);
-      expect([piso.w * 3, piso.h * 3]).toEqual([1920, 1008]);
+  it("de un notebook a una pantalla grande, el piso cabe entero a lo ancho y a lo alto", () => {
+    for (const salas of [HOY, CINCO]) {
+      for (const [ancho, alto] of [[1200, 844], [1440, 900], [1920, 930], [1920, 1080], [2560, 1300], [2750, 1490], [3600, 2000], [5000, 2800]] as const) {
+        expect(cabe(pagina(salas, ancho, alto), ancho, alto), `${salas.length} empresas en ${ancho} × ${alto}`).toBe(true);
+      }
     }
   });
 
-  it("1920 × 1080 y 1440 × 900 → 2x, como siempre", () => {
-    expect([pagina(HOY, 1920, 1080).escala, pagina(HOY, 1440, 900).escala]).toEqual([2, 2]);
-    // 1440 de ventana con el menú abierto: la página de 1200 de siempre.
-    const piso = pagina(HOY, 1200, 900 - 56);
-    expect([piso.escala, piso.w * 2, piso.h * 2]).toEqual([2, 1152, 672]);
+  it("la escala sube con la pantalla: 1,5x · 2x · 3x · 4x · 6x", () => {
+    const escala = (salas: readonly EntradaSala[], ancho: number, alto: number) => pagina(salas, ancho, alto).escala;
+    expect([[1200, 844], [1920, 1080], [2560, 1300], [2750, 1490], [5000, 2800]].map(([a, h]) => escala(HOY, a!, h!))).toEqual([1.5, 2, 3, 4, 6]);
+    expect([[1440, 900], [1920, 1080], [2750, 1490], [3600, 2000], [5000, 2800]].map(([a, h]) => escala(CINCO, a!, h!))).toEqual([1.5, 2, 3, 4, 6]);
   });
 
-  it("ancha pero baja (2750 × 1100): a 3x no cabe a lo alto → 2x", () => {
-    expect(pagina(HOY, 2750, 1100).escala).toBe(2);
+  it("2750 × 1490 (la pantalla del usuario) con 5 empresas: 3x en dos filas, 2700 × 1008 en pantalla", () => {
+    const piso = pagina(CINCO, 2750, 1490);
+    expect([piso.escala, piso.w * 3, piso.h * 3]).toEqual([3, 2700, 1008]);
+    expect(forma(piso)).toBe("BET 3 · ELM 2 · JST 2 / MIG 4 · PER 2");
   });
 
-  it("3x pide 1968 de ancho (1920 + 24 a cada lado) y 1228 de alto (150 + 1008 + 70 reservados)", () => {
-    expect(pagina(HOY, 1967, 1490).escala).toBe(2);
-    expect(pagina(HOY, 1968, 1490).escala).toBe(3);
-    expect(pagina(HOY, 2750, 1227).escala).toBe(2);
-    expect(pagina(HOY, 2750, 1228).escala).toBe(3);
-    expect(1008 + RESERVA_PAGINA).toBe(1078);
+  it("las salas van siempre en orden de prefijo, de izquierda a derecha y de arriba abajo", () => {
+    for (const [ancho, alto] of [[1000, 700], [1440, 900], [2750, 1490], [5000, 2800]] as const) {
+      const piso = pagina(CINCO, ancho, alto);
+      const leidas = [...piso.salas].sort((a, b) => a.y - b.y || a.x - b.x).map((s) => s.prefijo);
+      expect(leidas, `${ancho} × ${alto}`).toEqual(["BET", "ELM", "JST", "MIG", "PER"]);
+    }
   });
 
-  it("con 5 empresas o más agentes el piso crece: 2x si a 3x no cabe, 3x si la pantalla da", () => {
-    expect(pagina(CINCO, 2750, 1490).escala).toBe(2);
-    expect(pagina(CINCO, 2750, 1700).escala).toBe(3);
-    const masAgentes = HOY.map((s) => (s.prefijo === "BET" ? { ...s, agentes: 12 } : s));
-    expect(pagina(masAgentes, 2560, 1300).escala).toBe(2);
-    expect(pagina(masAgentes, 2750, 1490).escala).toBe(3);
+  it("si la pantalla es baja, las salas llevan más columnas y menos filas de escritorios", () => {
+    expect(forma(pagina(HOY, 1200, 844))).toBe("BET 3 · ELM 2 / JST 3 · MIG 4");
+    const baja = pagina(HOY, 1200, 700);
+    expect(forma(baja)).toBe("BET 5 · ELM 2 / JST 3 · MIG 4");
+    expect(cabe(baja, 1200, 700)).toBe(true);
   });
 
-  it("a 3x el plano es el mismo que a 2x en 640: solo cambia la escala, nunca más de 3x", () => {
-    const x3 = pagina(HOY, 4000, 3000);
-    const x2 = armarPiso(HOY, 640, "computador");
-    expect(x3.escala).toBe(3);
-    expect({ ...x3, escala: 2 }).toEqual(x2);
+  it("las escalas medias solo se eligen donde caen en pixeles enteros; con densidad 1, 1,5x es el último recurso", () => {
+    expect(escalasComputador(1)).toEqual([6, 5, 4, 3, 2]);
+    expect(escalasComputador(2)).toEqual([6, 5, 4, 3.5, 3, 2.5, 2, 1.5]);
+    expect(escalasComputador(1.25)).toEqual([6, 5, 4, 3, 2]);
+    // 2560 × 1300 con las 5: a 3x cabe con densidad 1 y con 2; nunca se elige una media si la entera de arriba cabe.
+    expect([pagina(CINCO, 2560, 1300, 1).escala, pagina(CINCO, 2560, 1300, 2).escala]).toEqual([3, 3]);
+    // 1440 × 900 con las 5: a 2x no cabe; a 1,5x sí, también en una pantalla de densidad 1.
+    expect([pagina(CINCO, 1440, 900, 1).escala, pagina(CINCO, 1440, 900, 2).escala]).toEqual([1.5, 1.5]);
+  });
+
+  it("si ni a 1,5x cabe a lo alto, queda a 1,5x con una forma baja y la página se baja para verlo", () => {
+    const piso = pagina(CINCO, 1000, 700);
+    expect(piso.escala).toBe(1.5);
+    expect(piso.w * piso.escala).toBeLessThanOrEqual(1000 - 48);
+    expect(cabe(piso, 1000, 700)).toBe(false);
+    expect(piso.salas.map((s) => s.prefijo)).toEqual(["BET", "ELM", "JST", "MIG", "PER"]);
+  });
+
+  it("«todos libres» cabe en cualquier pantalla: cada sala tiene al menos un asiento por agente, y tu escritorio", () => {
+    const muchas: EntradaSala[] = [...CINCO, { prefijo: "ZZZ", agentes: 14 }, { prefijo: "AAA", agentes: 1 }];
+    for (const salas of [HOY, CINCO, muchas]) {
+      for (const [ancho, alto] of [[1000, 700], [1200, 844], [1440, 900], [1920, 1080], [2750, 1490], [3440, 1300], [5000, 2800]] as const) {
+        for (const sala of pagina(salas, ancho, alto, 2).salas) {
+          expect(sala.asientos.length, `${sala.prefijo} en ${ancho} × ${alto}`).toBeGreaterThanOrEqual(sala.puestos.length);
+          expect(sala.escritorio, `tu escritorio en ${sala.prefijo}, ${ancho} × ${alto}`).not.toBeNull();
+        }
+      }
+    }
+  });
+
+  it("los libres se reparten por el descanso: donde hay espacio, nadie queda pegado ni le tapa la cabeza al de atrás", () => {
+    const bet = pagina(CINCO, 2750, 1490).salas[0]!;
+    const dePie = bet.asientos.filter((a) => !a.sofa);
+    expect(dePie.length).toBeGreaterThanOrEqual(bet.puestos.length);
+    for (const a of dePie) for (const b of dePie) if (a !== b) expect(Math.abs(a.x - b.x) >= 34 || Math.abs(a.y - b.y) >= 32, `${a.x},${a.y} y ${b.x},${b.y}`).toBe(true);
+  });
+
+  it("los tamaños de letra del piso van por tramos: 1,5x y 2x como 2x; de 2,5x para arriba, como 3x", () => {
+    expect([1, 1.5, 2, 2.5, 3, 3.5, 4, 6].map(claseEscala)).toEqual([1, 2, 2, 3, 3, 3, 3, 3]);
   });
 });
 
@@ -228,22 +270,23 @@ describe("escala del piso vacío, mientras se leen las empresas (JST-89)", () =>
   const pagina = (salas: readonly EntradaSala[], ancho: number, alto: number, previas?: readonly EntradaSala[]) =>
     armarPisoComputador(salas, ancho, alto - 150, previas);
 
-  it("con las salas de la última vez sale a la escala que tendrá cuando lleguen", () => {
-    for (const [ancho, alto, salas] of [[2560, 1080, HOY], [2750, 1490, HOY], [2976, 1498, CINCO], [2750, 1700, CINCO], [1920, 1080, HOY]] as const) {
+  it("con las salas de la última vez sale a la escala y con el ancho que tendrá cuando lleguen", () => {
+    for (const [ancho, alto, salas] of [[2560, 1080, HOY], [2750, 1490, HOY], [2976, 1498, CINCO], [2750, 1700, CINCO], [1920, 1080, HOY], [1440, 900, CINCO]] as const) {
       const vacio = pagina([], ancho, alto, salas);
-      expect(vacio.escala, `${ancho} × ${alto}, ${salas.length} empresas`).toBe(pagina(salas, ancho, alto).escala);
-      expect([vacio.w, vacio.h, vacio.salas]).toEqual([640, 16, []]);
+      const lleno = pagina(salas, ancho, alto);
+      expect([vacio.escala, vacio.w], `${ancho} × ${alto}, ${salas.length} empresas`).toEqual([lleno.escala, lleno.w]);
+      expect([vacio.h, vacio.salas]).toEqual([16, []]);
     }
   });
 
-  it("sin nada guardado queda a 2x, como la 0.1.3, aunque a 3x quepa", () => {
+  it("sin nada guardado queda a 2x, como la 0.1.3, aunque a más escala quepa", () => {
     expect(pagina([], 4000, 3000).escala).toBe(2);
     expect(pagina([], 4000, 3000, []).escala).toBe(2);
   });
 
   it("con salas, las de la última vez no cuentan", () => {
-    expect(pagina(HOY, 2750, 1490, CINCO).escala).toBe(3);
-    expect(pagina(CINCO, 2750, 1490, HOY).escala).toBe(2);
+    expect(pagina(HOY, 2750, 1490, CINCO)).toEqual(pagina(HOY, 2750, 1490));
+    expect(pagina(CINCO, 2750, 1490, HOY)).toEqual(pagina(CINCO, 2750, 1490));
   });
 
   it("el TV vacío también elige con las de la última vez; sin ellas, 3x como siempre", () => {

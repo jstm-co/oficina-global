@@ -57,7 +57,7 @@ describe("cortar un nombre largo (§5)", () => {
   });
 
   it("un nombre que entra se deja entero, sin «…»", () => {
-    expect(corta("Aplicaciones en la tablet de la sala", 40)).toBe("Aplicaciones en la tablet de la sala");
+    expect(corta("Aplicaciones en la tableta del salón", 40)).toBe("Aplicaciones en la tableta del salón");
     expect(corta("  Espacios   de   más  ", 40)).toBe("Espacios de más");
     expect(corta("", 40)).toBe("");
   });

@@ -3,10 +3,12 @@
 // libres), con una fila por agente. Tocar una fila hace lo mismo que tocar al
 // personaje en el piso. La lógica (grupos, orden, textos) está en `src/lista.ts`;
 // no hace llamadas: usa lo que ya leyó el piso.
-import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { agrupar, chipsDe, cuandoFila, GRUPOS, grupoDe, lineaDe, notaGrupo, PLEGADOS_CELULAR, type Grupo, type GrupoLista, type TareaFila } from "../lista.js";
+import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { esErrorViejo, type Silenciados } from "../erroresViejos.js";
+import { agrupar, alternarPlegado, chipsDe, CLAVE_PLEGADOS, cuandoFila, escribirPlegados, estaAbierto, GRUPOS, grupoDe, leerPlegados, lineaDe, notaGrupo, type Grupo, type GrupoLista, type Plegados, type TareaFila } from "../lista.js";
 import { ESTADOS, etiqueta, type AgenteVista } from "../vista.js";
 import type { Resaltado } from "./encabezado.js";
+import { limpiarErrores, useErroresSilenciados } from "./erroresSilenciados.js";
 import { CajaPersonaje, cx, EtiquetaEmpresa, Icono } from "./piso.js";
 import type { EmpresaVista, Oficina } from "./useOficina.js";
 
@@ -37,20 +39,38 @@ export interface PropsLista {
 }
 
 /**
- * Lo que el usuario plegó o desplegó, al revés de como viene (en computador
- * todo abierto; en el celular, «En pausa» y «Libres» plegados). Se recuerda
- * mientras la página esté abierta y no se guarda (§3).
+ * Lo que el usuario abrió o plegó (JST-410): se recuerda en este navegador
+ * (`localStorage`, por vista: computador y celular no se pisan). Sin
+ * almacenamiento, vale mientras la página esté abierta.
  */
-const alternados = new Set<Grupo>();
-
-const abiertoPorOmision = (k: Grupo, celular: boolean) => !(celular && PLEGADOS_CELULAR.includes(k));
+let plegados: Plegados | null = null;
+function plegadosActuales(): Plegados {
+  if (!plegados) {
+    try {
+      plegados = leerPlegados(localStorage.getItem(CLAVE_PLEGADOS));
+    } catch {
+      plegados = leerPlegados(null);
+    }
+  }
+  return plegados;
+}
+function guardarPlegados(p: Plegados): void {
+  plegados = p;
+  try {
+    localStorage.setItem(CLAVE_PLEGADOS, escribirPlegados(p));
+  } catch {
+    // Sin almacenamiento local, vale solo para esta pestaña.
+  }
+}
 
 const nombres = (lista: readonly { nombre: string }[]) =>
   lista.length <= 1 ? (lista[0]?.nombre ?? "") : `${lista.slice(0, -1).map((e) => e.nombre).join(", ")} y ${lista.at(-1)!.nombre}`;
 
 /** El contador resaltado deja a todos, pero los que no calzan bajan a .35 (§3). */
-function calza(a: AgenteVista, hl: Resaltado): boolean {
+function calza(a: AgenteVista, hl: Resaltado, viejo: boolean): boolean {
   if (!hl) return true;
+  // El error viejo ya no cuenta en «con error» (JST-410): no se resalta con ese contador.
+  if (hl === "error" && viejo) return false;
   return hl === "toca" ? a.need : a.st === hl;
 }
 
@@ -65,11 +85,12 @@ function teclaFila(abrir: (el: HTMLElement) => void) {
   };
 }
 
-function Fila({ a, p }: { a: AgenteVista; p: PropsLista }) {
+function Fila({ a, p, silenciados }: { a: AgenteVista; p: PropsLista; silenciados: Silenciados }) {
+  const viejo = esErrorViejo(a, p.ahora, silenciados);
   const tono = (t: string | null) => (t ? `is-${t}` : null);
   const ultima = a.st === "libre" || a.st === "pausa" || a.st === "error" ? p.ultima(a.id) : null;
-  const l = lineaDe(a, p.ahora, ultima, a.st === "error" ? (p.codigoError?.(a.id) ?? null) : null);
-  const clase = cx("of-alr", p.celular && "is-m", p.seleccionado === a.id && "is-sel", !calza(a, p.hl) && "is-dim");
+  const l = lineaDe(a, p.ahora, ultima, a.st === "error" ? (p.codigoError?.(a.id) ?? null) : null, viejo);
+  const clase = cx("of-alr", p.celular && "is-m", p.seleccionado === a.id && "is-sel", !calza(a, p.hl, viejo) && "is-dim", viejo && "is-viejo");
   const abrir = (el: HTMLElement) => p.onAbrir(a.id, el);
   const comun = {
     role: "button",
@@ -82,7 +103,7 @@ function Fila({ a, p }: { a: AgenteVista; p: PropsLista }) {
   const n = a.teNecesita.length;
 
   if (p.celular) {
-    const g = grupoDe(a);
+    const g = grupoDe(a, p.ahora, silenciados);
     const texto = a.need ? (a.teNecesita[0]?.titulo ?? l.contexto) : (l.tarea?.titulo ?? l.contexto);
     return (
       <div className={clase} {...comun}>
@@ -96,6 +117,7 @@ function Fila({ a, p }: { a: AgenteVista; p: PropsLista }) {
             <Icono nombre={GRUPOS.find((x) => x.k === g)!.icono} tam={12} />
             {l.tarea ? <span className="of-tid">{l.tarea.identifier}</span> : null}
             <span className="of-al-ctx">{texto}</span>
+            {l.sinUso ? <span className="of-al-sinuso">{l.sinUso}</span> : null}
           </span>
         </span>
         {a.need ? (
@@ -131,7 +153,7 @@ function Fila({ a, p }: { a: AgenteVista; p: PropsLista }) {
     );
   } else if (a.st === "error") {
     accion = (
-      <span className="of-al-when is-error">
+      <span className={cx("of-al-when", !viejo && "is-error")}>
         <Icono nombre="triangle-alert" tam={12} />
         {cuandoFila(a, p.ahora)}
       </span>
@@ -169,13 +191,14 @@ function Fila({ a, p }: { a: AgenteVista; p: PropsLista }) {
           ) : null}
         </span>
         <span className={cx("of-al-ctx", tono(l.tono))}>{l.contexto}</span>
+        {l.sinUso ? <span className="of-al-sinuso">{l.sinUso}</span> : null}
       </span>
       <span className="of-al-act">{accion}</span>
     </div>
   );
 }
 
-function Seccion({ g, p, sinToca, abierto, onAlternar }: { g: GrupoLista; p: PropsLista; sinToca: boolean; abierto: boolean; onAlternar: () => void }) {
+function Seccion({ g, p, silenciados, sinToca, abierto, onAlternar }: { g: GrupoLista; p: PropsLista; silenciados: Silenciados; sinToca: boolean; abierto: boolean; onAlternar: () => void }) {
   const nota = notaGrupo(g, p.celular);
   return (
     <div className={cx("of-als", `is-${g.k}`)}>
@@ -194,7 +217,7 @@ function Seccion({ g, p, sinToca, abierto, onAlternar }: { g: GrupoLista; p: Pro
           No pude leer «Te toca»: por ahora no sé quién te necesita.
         </div>
       ) : null}
-      {abierto ? g.agentes.map((a) => <Fila key={a.id} a={a} p={p} />) : null}
+      {abierto ? g.agentes.map((a) => <Fila key={a.id} a={a} p={p} silenciados={silenciados} />) : null}
     </div>
   );
 }
@@ -202,6 +225,11 @@ function Seccion({ g, p, sinToca, abierto, onAlternar }: { g: GrupoLista; p: Pro
 export function ListaAgentes(p: PropsLista) {
   const [, setVersion] = useState(0);
   const { oficina, celular } = p;
+  const silenciados = useErroresSilenciados();
+  // JST-410: lo silenciado que ya no aplica (el error se arregló o cambió) se limpia solo.
+  useEffect(() => {
+    if (!oficina.cargando) limpiarErrores(oficina.agentes);
+  }, [oficina.agentes, oficina.cargando]);
   const enFiltro = (e: EmpresaVista) => p.filtro.length === 0 || p.filtro.some((f) => f.id === e.id);
   const caidas = oficina.caidas.filter(enFiltro);
   const sumar = (lista: readonly EmpresaVista[]) => lista.reduce((n, e) => n + (e.conocidos ? e.agentes : 0), 0);
@@ -231,12 +259,11 @@ export function ListaAgentes(p: PropsLista) {
     );
   }
 
-  const grupos = agrupar(p.agentes, oficina.sinAtencion);
+  const grupos = agrupar(p.agentes, oficina.sinAtencion, p.ahora, silenciados);
   const conteo = caidas.length > 0 ? `${n} de ${n + sumar(caidas)}` : `${n}`;
   const totalTodas = p.total + sumar(oficina.caidas);
   const alternar = (k: Grupo) => {
-    if (alternados.has(k)) alternados.delete(k);
-    else alternados.add(k);
+    guardarPlegados(alternarPlegado(plegadosActuales(), k, celular));
     setVersion((v) => v + 1);
   };
 
@@ -267,8 +294,8 @@ export function ListaAgentes(p: PropsLista) {
         </div>
       )}
       {grupos.map((g) => {
-        const abierto = abiertoPorOmision(g.k, celular) !== alternados.has(g.k);
-        return <Seccion key={g.k} g={g} p={p} sinToca={g.k === "toca" && oficina.sinAtencion} abierto={abierto} onAlternar={() => alternar(g.k)} />;
+        const abierto = estaAbierto(plegadosActuales(), g.k, celular);
+        return <Seccion key={g.k} g={g} p={p} silenciados={silenciados} sinToca={g.k === "toca" && oficina.sinAtencion} abierto={abierto} onAlternar={() => alternar(g.k)} />;
       })}
       {caidas.length > 0 ? (
         <div className="of-als is-off">

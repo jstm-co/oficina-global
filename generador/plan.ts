@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { FRASES, MOTIVOS_ERROR, MUESTRA_PREGUNTA, nombreCorto, TEXTO_MUESTRA, textoVoz, type Frase, type Presentacion } from "../src/avisos.js";
 import { textosAvisosJuntos } from "../src/eleccionVoces.js";
-import { claveAudio, extensionDe, VOCES, VOZ_RESUMEN, vozPorId, type Voz, type VozId } from "../src/voces.js";
+import { claveAudio, extensionDe, VOCES_REPARTO, VOZ_RESUMEN, vozPorId, type Voz, type VozId } from "../src/voces.js";
 import { VERSION_PRONUNCIACION } from "./pronunciar.js";
 
 export interface AgentePlan {
@@ -25,7 +25,7 @@ const sha1 = (t: string) => createHash("sha1").update(t).digest("hex");
  * 0.13.0 (issue #9): los nuevos reciben solo voces de `entre` (las de los
  * motores elegidos); quien ya tiene una de otro motor se queda con ella.
  */
-export function asignarVoces(previas: Readonly<Record<string, VozId>>, agentes: readonly AgentePlan[], entre: readonly Voz[] = VOCES): Record<string, VozId> {
+export function asignarVoces(previas: Readonly<Record<string, VozId>>, agentes: readonly AgentePlan[], entre: readonly Voz[] = VOCES_REPARTO): Record<string, VozId> {
   const asignadas: Record<string, VozId> = {};
   const cuenta = new Map<VozId, number>(entre.map((v) => [v.id, 0]));
   const vivos = new Set(agentes.map((a) => a.id));
@@ -77,7 +77,7 @@ export function archivoDe(voz: VozId, texto: string): string {
  * motores elegidos), y los resúmenes hasta `totalAgentes` (el worker no recibe
  * siempre a todos los agentes: solo los que ve quien abre la oficina).
  */
-export function plan(agentes: readonly AgentePlan[], voces: Readonly<Record<string, VozId>>, vozResumen: VozId = VOZ_RESUMEN, sueltas: readonly Voz[] = VOCES, totalAgentes = agentes.length): Trabajo[] {
+export function plan(agentes: readonly AgentePlan[], voces: Readonly<Record<string, VozId>>, vozResumen: VozId = VOZ_RESUMEN, sueltas: readonly Voz[] = VOCES_REPARTO, totalAgentes = agentes.length): Trabajo[] {
   const lista: Trabajo[] = [];
   const vistas = new Set<string>();
   const poner = (voz: Voz, texto: string) => {

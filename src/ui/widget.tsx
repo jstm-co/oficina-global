@@ -13,6 +13,7 @@ import { abreVentana } from "../lista.js";
 import { ANCHO_WIDGET, anchoWidgetCelular, armarPiso } from "../plano.js";
 import { PAGE_ROUTE } from "../shared.js";
 import { contarVista } from "../vista.js";
+import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
 import { Contadores, ContadoresCelular, ConteoEmpresas, type Resaltado } from "./encabezado.js";
 import { asegurarEstilos } from "./estilos.js";
@@ -68,7 +69,9 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clave, ancho, celular],
   );
-  const c = contarVista(oficina.agentes);
+  // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
+  const silenciados = useErroresSilenciados();
+  const c = contarVista(oficina.agentes, ahora, silenciados);
   const pCont = {
     c,
     hl,

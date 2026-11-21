@@ -316,7 +316,7 @@ function FilasOficina() {
   );
 }
 
-function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
+export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
   // 0.11.0 (JST-325): «Cada agente ›» abre una página dentro del mismo panel.
   const [pagina, setPagina] = useState<"voces" | "agentes">("voces");
   const aj = useAjustes();
@@ -430,7 +430,7 @@ function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
         <span className="of-avp-l">
           <Icono nombre="volume-2" tam={14} />
           <span>
-            <b>19 voces: 10 de Supertonic, Lorenzo, Catalina, Alex, Dora, Santa y 4 clones chilenos</b>
+            <b>35 voces: 10 de Supertonic, 18 de Edge (Lorenzo, Catalina y 16 de otros países), Alex, Dora, Santa y 4 clones chilenos</b>
             <em>{hayVoces ? "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez habla la del navegador" : "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez solo se verá el subtítulo"}</em>
           </span>
         </span>
@@ -471,7 +471,7 @@ function MasVoces({ sinMac, motivo }: { sinMac: boolean; motivo: string | null }
         <span>
           Habla uno por vez y los avisos pasan primero. Se oye una conversación por minuto como mucho; las demás, y lo que llega mientras alguien habla, se ven sin voz. «✓ listo» y la mano con su tarea van con «Terminé» y «Te necesito». Al abrir o recargar Paperclip, empiezan con tu primer clic. Voces clonadas a partir de Google Crowdsourced Chilean Spanish (OpenSLR 71), CC BY-SA 4.0.
           <br />
-          <b>De qué se trata:</b> «Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Lorenzo y Catalina lo piden a Microsoft (va el nombre de la tarea o la pregunta).
+          <b>De qué se trata:</b> «Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Las voces de Edge (Lorenzo, Catalina y las de otros países) lo piden a Microsoft (va el nombre de la tarea o la pregunta).
           {sinMac ? (
             <>
               <br />
@@ -491,7 +491,7 @@ function MasVoces({ sinMac, motivo }: { sinMac: boolean; motivo: string | null }
 type Panel = "avisos" | "voces";
 
 /** Los menús del encabezado: uno abierto a la vez (0.7.0, JST-231 §3: abrir «Conversaciones» cierra «Voces» y al revés). 0.9.0: también «Resumen». */
-export type MenuEncabezado = Panel | "charlas" | "resumen";
+export type MenuEncabezado = Panel | "charlas" | "resumen" | "ambiente";
 let menuAbierto: MenuEncabezado | null = null;
 const oyentesMenu = new Set<() => void>();
 
@@ -516,7 +516,7 @@ export function useMenuAbierto(): MenuEncabezado | null {
  * El de «Voces» (0.5.0, JST-163) mide 392 y va a 6 px: suma la columna «Y de qué se trata». El de «Conversaciones»
  * (0.7.0, JST-231 §3), 360 a 6 px.
  */
-export function Popover({ ancla, onCerrar, botones, children, voces = false, charlas = false, resumen = false }: { ancla: HTMLElement | null; onCerrar: () => void; botones: HTMLElement | null; children: ReactNode; voces?: boolean; charlas?: boolean; resumen?: boolean }) {
+export function Popover({ ancla, onCerrar, botones, children, voces = false, charlas = false, resumen = false, ambiente = false }: { ancla: HTMLElement | null; onCerrar: () => void; botones: HTMLElement | null; children: ReactNode; voces?: boolean; charlas?: boolean; resumen?: boolean; ambiente?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -527,7 +527,7 @@ export function Popover({ ancla, onCerrar, botones, children, voces = false, cha
       if (!r) return;
       const w = el.offsetWidth;
       const left = Math.max(12, Math.min(innerWidth - w - 12, r.right - w));
-      const top = r.bottom + (voces || charlas || resumen ? 6 : 8);
+      const top = r.bottom + (voces || charlas || resumen || ambiente ? 6 : 8);
       setPos((p) => (p && p.left === left && p.top === top ? p : { left, top }));
     };
     ubicar();
@@ -537,7 +537,7 @@ export function Popover({ ancla, onCerrar, botones, children, voces = false, cha
       window.removeEventListener("resize", ubicar);
       window.removeEventListener("scroll", ubicar, true);
     };
-  }, [ancla, voces, charlas, resumen]);
+  }, [ancla, voces, charlas, resumen, ambiente]);
   useEffect(() => {
     // Tocar afuera cierra (tocar otra vez el botón lo maneja el botón).
     const fuera = (e: PointerEvent) => {
@@ -549,7 +549,7 @@ export function Popover({ ancla, onCerrar, botones, children, voces = false, cha
     return () => document.removeEventListener("pointerdown", fuera);
   }, [botones, onCerrar]);
   return (
-    <div ref={ref} className={cx("of-hpop", voces && "is-voces", charlas && "is-charlas", resumen && "is-resumen")} role="dialog" aria-label={charlas ? "Conversaciones" : resumen ? "Resumen" : undefined} style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0 }}>
+    <div ref={ref} className={cx("of-hpop", voces && "is-voces", charlas && "is-charlas", resumen && "is-resumen", ambiente && "is-ambiente")} role="dialog" aria-label={charlas ? "Conversaciones" : resumen ? "Resumen" : ambiente ? "Ambiente" : undefined} style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0 }}>
       {children}
     </div>
   );
@@ -565,7 +565,8 @@ export function BotonesAvisos({ celular, agentes, rm: _rm }: {
   const aj = useAjustes();
   // 0.7.0: el menú abierto es uno para todo el encabezado (abrir «Conversaciones» cierra este y al revés).
   const menu = useMenuAbierto();
-  const abierto: Panel | null = menu === "avisos" || menu === "voces" ? menu : null;
+  // JST-410: en computador «Voces» va en el menú «Ambiente» (`menuAmbiente.tsx`); aquí solo «Avisos».
+  const abierto: Panel | null = menu === "avisos" || (celular && menu === "voces") ? menu : null;
   const setAbierto = (p: Panel | null) => abrirMenu(p);
   const grupo = useRef<HTMLSpanElement>(null);
   const bAvisos = useRef<HTMLButtonElement>(null);
@@ -602,18 +603,11 @@ export function BotonesAvisos({ celular, agentes, rm: _rm }: {
       </button>
     </>
   ) : (
-    <>
-      <button ref={bAvisos} type="button" className={cx("of-btn is-sm of-hbtn", aj.avisos && "is-on", abierto === "avisos" && "is-open")} title={tAvisos} aria-expanded={abierto === "avisos"} onClick={() => alternar("avisos")}>
-        <Icono nombre={iAvisos} tam={14} />
-        Avisos
-        {punto}
-      </button>
-      <button ref={bVoces} type="button" className={cx("of-btn is-sm of-hbtn", aj.voces && "is-on", abierto === "voces" && "is-open")} title={tVoces} aria-expanded={abierto === "voces"} onClick={() => alternar("voces")}>
-        <Icono nombre={iVoces} tam={14} />
-        Voces
-        {puntoVz}
-      </button>
-    </>
+    <button ref={bAvisos} type="button" className={cx("of-btn is-sm of-hbtn", aj.avisos && "is-on", abierto === "avisos" && "is-open")} title={tAvisos} aria-expanded={abierto === "avisos"} onClick={() => alternar("avisos")}>
+      <Icono nombre={iAvisos} tam={14} />
+      Avisos
+      {punto}
+    </button>
   );
 
   const contenido = abierto === "avisos" ? <PanelAvisos agentes={agentes} /> : abierto === "voces" ? <PanelVoces agentes={agentes} /> : null;

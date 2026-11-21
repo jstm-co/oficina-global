@@ -3,8 +3,10 @@ import { asignarVoces, archivoDe, plan, type AgentePlan } from "../generador/pla
 import { enPalabras, paraDecir } from "../generador/pronunciar.js";
 import { PRONUNCIAR_KOKORO_INSTANCIA } from "../src/instancia.js";
 import { vocesDe } from "../src/eleccionVoces.js";
-import { archivoVivo, audioDe, claveAudio, duracionAudio, extensionDe, leerIndice, VOCES, VOZ_RESUMEN, vozDeAgente, vozPorId, type IndiceVoces, type VozId } from "../src/voces.js";
+import { archivoVivo, audioDe, claveAudio, duracionAudio, extensionDe, leerIndice, NOMBRE_PAIS, paisesEdge, VOCES, VOCES_REPARTO, VOZ_RESUMEN, vozDeAgente, vozPorId, type IndiceVoces, type VozId } from "../src/voces.js";
 import { wavPcm16 } from "../src/audio.js";
+import { TEXTO_MUESTRA } from "../src/avisos.js";
+import { fraseResumenValida, leerPedidoResumen, vozParaResumen } from "../src/resumen/voz.js";
 
 /** Las 9 de hasta la 0.12 (Edge, Kokoro y los clones). */
 const DE_SIEMPRE = vocesDe(["edge", "kokoro", "clones"]);
@@ -181,8 +183,8 @@ describe("la página busca el audio en el índice", () => {
     expect(leerIndice(null)).toBeNull();
   });
 
-  it("las 19 voces tienen nombre y motor: las 9 de siempre y, desde la 0.13.0, las 10 de Supertonic", () => {
-    expect(VOCES.length).toBe(19);
+  it("las 35 voces tienen nombre y motor: las 9 de siempre, las 10 de Supertonic (0.13.0) y las 16 de Edge de otros países (JST-412)", () => {
+    expect(VOCES.length).toBe(35);
     expect(new Set(VOCES.map((v) => v.motor))).toEqual(new Set(["edge", "kokoro", "chatterbox", "qwen3", "supertonic"]));
     expect(vozPorId("qwen3-mujer")?.clave).toBe("ref_mujer_cl");
     const st = VOCES.filter((v) => v.motor === "supertonic");
@@ -204,5 +206,91 @@ describe("la página busca el audio en el índice", () => {
   it("0.13.0: la duración de un audio, sea WAV o MP3", () => {
     expect(duracionAudio(wavPcm16(new Float32Array(22_050 * 2), 22_050))).toBe(2_000);
     expect(duracionAudio(new Uint8Array([1, 2, 3]))).toBeNull();
+  });
+});
+
+// JST-412: voces de Edge en español de otros países.
+describe("voces de Edge de otros países (JST-412)", () => {
+  const edge = VOCES.filter((v) => v.motor === "edge");
+  const nuevas = edge.filter((v) => v.pais !== "cl");
+
+  it("hay 18 de Edge: Lorenzo y Catalina (Chile) y una mujer y un hombre de cada uno de 8 países", () => {
+    expect(edge).toHaveLength(18);
+    expect(edge.filter((v) => v.pais === "cl").map((v) => v.id)).toEqual(["lorenzo", "catalina"]);
+    expect(nuevas).toHaveLength(16);
+    expect(nuevas.map((v) => [v.id, v.nombre, v.clave])).toEqual([
+      ["edge-es-mx-dalia", "Dalia", "es-MX-DaliaNeural"],
+      ["edge-es-mx-jorge", "Jorge", "es-MX-JorgeNeural"],
+      ["edge-es-es-elvira", "Elvira", "es-ES-ElviraNeural"],
+      ["edge-es-es-alvaro", "Álvaro", "es-ES-AlvaroNeural"],
+      ["edge-es-ar-elena", "Elena", "es-AR-ElenaNeural"],
+      ["edge-es-ar-tomas", "Tomás", "es-AR-TomasNeural"],
+      ["edge-es-co-salome", "Salomé", "es-CO-SalomeNeural"],
+      ["edge-es-co-gonzalo", "Gonzalo", "es-CO-GonzaloNeural"],
+      ["edge-es-pe-camila", "Camila", "es-PE-CamilaNeural"],
+      ["edge-es-pe-alex", "Alex (Perú)", "es-PE-AlexNeural"],
+      ["edge-es-us-paloma", "Paloma", "es-US-PalomaNeural"],
+      ["edge-es-us-alonso", "Alonso", "es-US-AlonsoNeural"],
+      ["edge-es-ve-paola", "Paola", "es-VE-PaolaNeural"],
+      ["edge-es-ve-sebastian", "Sebastián", "es-VE-SebastianNeural"],
+      ["edge-es-uy-valentina", "Valentina", "es-UY-ValentinaNeural"],
+      ["edge-es-uy-mateo", "Mateo", "es-UY-MateoNeural"],
+    ]);
+  });
+
+  it("todas las claves de Edge tienen la forma es-XX-NombreNeural y su país coincide con el de la clave", () => {
+    for (const v of edge) {
+      expect(v.clave).toMatch(/^es-[A-Z]{2}-[A-Za-z]+Neural$/);
+      expect(v.clave.slice(3, 5).toLowerCase()).toBe(v.pais);
+    }
+  });
+
+  it("los ids y los nombres visibles no se repiten (la peruana es «Alex (Perú)», no la Alex de Kokoro)", () => {
+    expect(new Set(VOCES.map((v) => v.id)).size).toBe(VOCES.length);
+    expect(new Set(VOCES.map((v) => v.nombre)).size).toBe(VOCES.length);
+    expect(vozPorId("alex")).toMatchObject({ nombre: "Alex", motor: "kokoro" });
+    expect(vozPorId("edge-es-pe-alex")).toMatchObject({ nombre: "Alex (Perú)", detalle: "hombre, peruano · Edge" });
+    expect(vozPorId("edge-es-mx-dalia")!.detalle).toBe("mujer, mexicana · Edge");
+  });
+
+  it("los países salen con Chile primero y los demás por orden alfabético", () => {
+    expect(paisesEdge().map((p) => NOMBRE_PAIS[p])).toEqual(["Chile", "Argentina", "Colombia", "España", "Estados Unidos", "México", "Perú", "Uruguay", "Venezuela"]);
+  });
+
+  it("no entran al reparto: el de hoy no cambia, y cualquier lista de agentes sigue repartiéndose entre las 19 de siempre", () => {
+    expect(VOCES_REPARTO).toHaveLength(19);
+    expect(VOCES_REPARTO.some((v) => v.soloEleccion || v.id.startsWith("edge-es-"))).toBe(false);
+    expect(VOCES_REPARTO.map((v) => v.id)).toEqual(VOCES.slice(0, 19).map((v) => v.id));
+    expect(vocesDe(["edge"]).map((v) => v.id)).toEqual(["lorenzo", "catalina"]);
+    // El reparto de 6 agentes, igual al de antes de agregar las voces nuevas.
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `id-${i}`, nombre: `A${i}`, empresa: "E", creado: `2026-01-0${i + 1}` }));
+    expect(asignarVoces({}, seis)).toEqual({ "id-0": "qwen3-mujer", "id-1": "supertonic-f5", "id-2": "qwen3-hombre", "id-3": "santa", "id-4": "dora", "id-5": "supertonic-f1" });
+    const muchos = Array.from({ length: 60 }, (_, i) => agente(i));
+    expect(Object.values(asignarVoces({}, muchos)).every((id) => VOCES_REPARTO.some((v) => v.id === id))).toBe(true);
+    // Quien ya tiene una nueva (la eligió el usuario) se queda con ella.
+    expect(asignarVoces({ [muchos[0]!.id]: "edge-es-mx-dalia" }, muchos)[muchos[0]!.id]).toBe("edge-es-mx-dalia");
+  });
+
+  it("el plan no graba frases sueltas de las nuevas (solo las de los agentes que las eligen), y sus audios son MP3", () => {
+    const trabajos = plan([agente(1)], { [agente(1).id]: "edge-es-mx-dalia" });
+    expect(trabajos.some((t) => t.voz.id === "edge-es-mx-dalia")).toBe(true);
+    expect(trabajos.filter((t) => t.voz.id === "edge-es-mx-dalia").every((t) => t.archivo.endsWith(".mp3"))).toBe(true);
+    expect(plan([], {}).some((t) => t.voz.id.startsWith("edge-es-"))).toBe(false);
+    expect(extensionDe("edge-es-ar-elena")).toBe("mp3");
+  });
+
+  it("las reglas por motor aplican solas: Edge (Lorenzo y las nuevas) dice «JSTM» tal cual, que es lo que lee bien; Kokoro lo deletrea", () => {
+    expect(vozPorId("edge-es-mx-dalia")!.motor).toBe("edge");
+    expect(paraDecir("Listo JSTM", vozPorId("edge-es-mx-dalia")!.motor)).toBe("Listo JSTM");
+    expect(paraDecir("Listo JSTM", "kokoro")).toBe("Listo jota ese te eme");
+  });
+
+  it("la muestra de una voz sin audios pregrabados se pide al worker como una frase del Resumen: la frase y la voz pasan sus reglas", () => {
+    expect(fraseResumenValida(TEXTO_MUESTRA)).toBe(true);
+    for (const v of nuevas) {
+      expect(vozParaResumen(v.id)).toBe(v.id);
+      expect(leerPedidoResumen({ voz: v.id, resumen: "muestra-voz", frases: [TEXTO_MUESTRA] })).toMatchObject({ voz: v.id });
+      expect(archivoVivo(v.id, TEXTO_MUESTRA)).toMatch(new RegExp(`^vivo/${v.id}-[0-9a-z]+\\.mp3$`));
+    }
   });
 });

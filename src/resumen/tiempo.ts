@@ -115,7 +115,7 @@ export function explicacionDesde(desde: Desde, ahora: number, ultima: number | n
 /**
  * El período al comienzo de la primera frase (§3.2.1): «Desde las 8:12, la
  * última vez que lo escuchaste», «Hoy», «En las últimas 24 horas», «En los
- * últimos 7 días». La primera vez cuenta lo de hoy y, de hace más de una
+ * últimos 7 días». La primera vez toma lo de hoy y, de hace más de una
  * semana, los últimos 7 días.
  */
 export function periodoFrase(desde: Desde, ahora: number, ultima: number | null): string {

@@ -10,8 +10,10 @@ Plugin para [Paperclip](https://github.com/paperclipai/paperclip) que dibuja a l
 ## Qué hace
 
 - **Un piso con una sala por empresa.** Cada agente tiene su escritorio y su personaje. Trabajando teclea con el código de su tarea en un globo; si te necesita, levanta la mano y hace fila frente a tu escritorio; con error se pone rojo; en pausa duerme; libre va a la sala de descanso.
+- **Todo en una pantalla.** En el computador el piso entero cabe bajo la cabecera, desde un notebook hasta un monitor 4K: la oficina elige la escala más grande que cabe y acomoda las salas a la forma de la pantalla. Una franja arriba muestra quién te necesita, cada uno con su botón «Responder». Un error de hace más de un día, o uno que silencias desde la ficha del agente, deja de contar en el contador rojo y baja a «Errores antiguos» en la lista.
 - **Se mueve.** Los agentes caminan entre su escritorio y el descanso. Una tarea que pasa de un agente a otro viaja en un sobre o se entrega en la mesa. Los libres conversan sobre lo que de verdad pasa en la oficina, y hay mascotas en el pasillo que responden al clic.
 - **Responder sin salir.** Las preguntas, confirmaciones, tareas sugeridas y aprobaciones que te dejan los agentes («Te toca») se responden en una ventana de la oficina, con tu sesión. La oficina solo escribe cuando tú envías una respuesta.
+- **Abrir una tarea sin salir.** «Abrir tarea» en la ficha de un agente abre la tarea en una ventana de la oficina: su descripción, sus comentarios con una caja para escribir el tuyo y su estado, que puedes cambiar ahí. Ctrl o ⌘ + clic, o «Página completa», van a la página de la tarea. Abrirla la marca como leída, igual que abrir su página.
 - **Avisos y voces** (apagados hasta que los actives). Cuando un agente empieza a necesitarte suena una campanita y su voz dice qué necesita («te necesito», «tengo un error», «terminé», «empecé»), con una voz distinta por agente.
 - **Elegir las voces** (0.11.0). En «Voces», «Quién habla» define la voz del **Resumen**, la de **«Leer contexto»** (lee una tarea en voz alta) y, en su propia página, la de **cada agente**, con un ▶ para oír cada una antes. Las dos que leen al momento solo aceptan voces que responden en pocos segundos (Lorenzo, Catalina, Alex, Dora, Santa) o la del navegador; los 4 clones solo se pueden elegir para los agentes. Cambiar la voz de un agente graba sus frases en segundo plano y cambia cuando están todas, así que nunca queda mudo en el intertanto.
 - **Rótulo de la sala.** Bajo cada sala, un rótulo cuenta de qué se trata cada tarea, una a la vez.
@@ -95,11 +97,12 @@ En la oficina, abre el panel «Voces», elige los motores y aprieta **Preparar v
 |---|---|---|---|
 | 10 voces (5 de mujer y 5 de hombre) | Supertonic 3 (int8, con `sherpa-onnx-node`) | Viene con el plugin: baja 145 MB una vez y usa ~0,5 GB de memoria al grabar. Mac, Linux y Windows | OpenRAIL-M (el modelo); Apache 2.0 (`sherpa-onnx`) |
 | Lorenzo y Catalina (chilenos) | Edge TTS de Microsoft (`edge-tts`) | `uv`, `ffmpeg` e internet. Servicio gratuito no oficial: **a Microsoft le llega el texto de cada frase** (nombres de agentes y de tareas) | LGPL-3.0 (la biblioteca) |
+| 16 voces más de Edge en español de otros países, una mujer y un hombre de cada uno: Dalia y Jorge (México), Elvira y Álvaro (España), Elena y Tomás (Argentina), Salomé y Gonzalo (Colombia), Camila y Alex (Perú, «Alex (Perú)» en el panel), Paloma y Alonso (Estados Unidos), Paola y Sebastián (Venezuela), Valentina y Mateo (Uruguay) | Edge TTS de Microsoft (`es-MX-DaliaNeural`, `es-ES-AlvaroNeural`, …) | Igual que Lorenzo y Catalina: **a Microsoft le llega el texto**. Son solo por elección (no se reparten solas entre los agentes); su ▶ de muestra se graba al momento | LGPL-3.0 (la biblioteca) |
 | Alex, Dora y Santa | Kokoro-82M (`kokoro-onnx`) | `uv` y `ffmpeg`; baja 354 MB una vez | Apache 2.0 |
 | 2 clones chilenos | Chatterbox Multilingual (`chatterbox-tts`) | `uv` y `ffmpeg`; 4 a 5 GB de memoria y ~10 min por agente | MIT |
 | 2 clones chilenos | Qwen3-TTS 0.6B (`qwen-tts`) | Igual que Chatterbox | Apache 2.0 |
 
-- Solo se usan los motores que elijas. Edge no se usa si no lo eliges: así ningún texto sale a Microsoft.
+- Solo se usan los motores que elijas. Edge (Lorenzo, Catalina y las voces de otros países) no se usa si no lo eliges: así ningún texto sale a Microsoft.
 - Supertonic no necesita `uv` ni `ffmpeg`. Los demás corren con `uv run --with <paquete>` y necesitan `uv` y `ffmpeg` en el `PATH` con que arranca Paperclip; el panel dice cuál no se puede usar y por qué.
 - Los modelos quedan en `~/.cache/oficina-voces/` y se revisan con su SHA-256 al bajarlos.
 - Los audios quedan **fuera del plugin**, así que una actualización no los borra: en `~/Library/Application Support/oficina-global/voces/` en la Mac, `~/.local/share/oficina-global/voces/` en Linux y `%LOCALAPPDATA%\oficina-global\voces\` en Windows, en una carpeta por instalación del plugin. Al arrancar, el plugin los copia (o enlaza) a `dist/ui/voces/` para servirlos. La primera vez adopta los que ya estaban ahí.
@@ -148,7 +151,7 @@ El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`)
 - El sonido y las voces empiezan con tu primer clic en la pestaña después de abrirla.
 - En iPhone no hay pantalla completa para una página: el modo TV explica cómo agregarla a la pantalla de inicio. No se probó en Safari ni en un iPhone real.
 - La vista 3D necesita WebGL 2 y es solo para el computador (no en el celular ni en el modo TV).
-- Edge TTS es un servicio no oficial: si Microsoft lo cambia, las voces de Lorenzo y Catalina dejan de generarse hasta actualizar `edge-tts`.
+- Edge TTS es un servicio no oficial: si Microsoft lo cambia, las voces de Edge (Lorenzo, Catalina y las de otros países) dejan de generarse hasta actualizar `edge-tts`.
 
 ## Contribuir y versiones
 

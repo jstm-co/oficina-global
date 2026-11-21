@@ -67,7 +67,7 @@ describe("pose y frase (design-spec §5 y §11)", () => {
       vistaDe(agente({ id: "4", base: "pausa" }), "B"),
       vistaDe(agente({ id: "5" }), "B"),
     ];
-    expect(contarVista(lista)).toEqual({ trabaja: 1, toca: 3, error: 1, pausa: 1, libre: 1 });
+    expect(contarVista(lista)).toEqual({ trabaja: 1, toca: 3, error: 1, pausa: 1, libre: 1, erroresViejos: 0 });
   });
 });
 

@@ -2,7 +2,7 @@
 // con los textos que cambió la elección del spike de JST-230): el botón del
 // encabezado ya no muestra u oculta con un clic, abre un menú como el de
 // «Voces» con el interruptor de siempre (`charlas`), quién las escribe (la IA
-// de Chrome o las frases de siempre) y el estado de la IA dentro de su tarjeta.
+// de Chrome o las frases de siempre) y cómo está la IA dentro de su tarjeta.
 // En el botón, el estado: ✦ lista, «42 %» y una línea mientras baja, ⏸ en
 // pausa, ⚠ si no se pudo bajar; y un punto violeta hasta abrir el menú la
 // primera vez. En el celular, la hoja inferior, con la IA deshabilitada.
@@ -105,7 +105,7 @@ function EstadoTarjeta({ e }: { e: EstadoIa }): ReactNode {
 }
 
 /** El menú (§3): mostrar u ocultar, «Quién las escribe» con 2 tarjetas y la nota. */
-function PanelConversaciones({ e, celular }: { e: EstadoIa; celular: boolean }) {
+export function PanelConversaciones({ e, celular }: { e: EstadoIa; celular: boolean }) {
   const aj = useAjustes();
   const k = useId();
   const contador = useContadorIa(!celular);
@@ -230,6 +230,48 @@ function estadoBoton(charlas: boolean, fuente: "ia" | "hoy", e: EstadoIa): { ext
 }
 
 /**
+ * Lo que hace vivo al botón, esté donde esté (JST-410: en computador lo lleva «Ambiente»): al abrir el menú la
+ * primera vez se apaga el punto violeta (§7), y al terminar la bajada pedida aquí sale el toast de la página (§4).
+ */
+export function useEfectosConversaciones(abierto: boolean, celular: boolean): void {
+  const aj = useAjustes();
+  const toast = usePluginToast();
+  useEffect(() => {
+    if (abierto && !aj.iaVisto) cambiarAjustes({ iaVisto: true });
+  }, [abierto, aj.iaVisto]);
+  useEffect(() => {
+    if (celular) return;
+    return escritorIa().alLista(() =>
+      toast({ id: "oficina:ia-lista", title: `✦ La ${NOMBRE_IA} está lista.`, body: "Desde ahora escribe las conversaciones.", tone: "success", ttlMs: 8_000 }),
+    );
+  }, [celular, toast]);
+}
+
+/** Lo que dice la fila «Conversaciones» del menú «Ambiente» (JST-410): lo mismo que resume hoy su botón, en pocas palabras. */
+export function resumenConversaciones(charlas: boolean, fuente: "ia" | "hoy", e: EstadoIa): string {
+  if (!charlas) return "Ocultas";
+  if (fuente === "hoy") return "Frases de siempre";
+  switch (e.k) {
+    case "lista":
+      return "Con la IA";
+    case "bajando": {
+      const p = pct(e.avance);
+      return p === null ? "Bajando la IA" : `Bajando · ${p} %`;
+    }
+    case "pausa":
+      return "IA en pausa";
+    case "fallo":
+      return "IA sin bajar";
+    case "bajar":
+      return "Falta bajar la IA";
+    case "sin":
+      return "Frases de siempre";
+    case "revisando":
+      return "Visibles";
+  }
+}
+
+/**
  * «Conversaciones» (§2): mismo lugar y estilo que hoy, entre «Mascotas» y «Modo
  * TV». Abre el menú; en el celular, solo el ícono y la hoja inferior.
  */
@@ -239,19 +281,8 @@ export function BotonConversaciones({ celular }: { celular: boolean }) {
   const abierto = useMenuAbierto() === "charlas";
   const boton = useRef<HTMLButtonElement>(null);
   const grupo = useRef<HTMLSpanElement>(null);
-  const toast = usePluginToast();
   const cerrar = () => abrirMenu(null);
-  // §7: al abrir el menú la primera vez se apaga el punto violeta, para siempre.
-  useEffect(() => {
-    if (abierto && !aj.iaVisto) cambiarAjustes({ iaVisto: true });
-  }, [abierto, aj.iaVisto]);
-  // §4: al terminar la bajada pedida aquí, el toast de la página.
-  useEffect(() => {
-    if (celular) return;
-    return escritorIa().alLista(() =>
-      toast({ id: "oficina:ia-lista", title: `✦ La ${NOMBRE_IA} está lista.`, body: "Desde ahora escribe las conversaciones.", tone: "success", ttlMs: 8_000 }),
-    );
-  }, [celular, toast]);
+  useEfectosConversaciones(abierto, celular);
   useEsc(abierto, () => {
     cerrar();
     boton.current?.focus();
