@@ -341,6 +341,20 @@ export class ControlResumen {
     return !!a && ahora - a.en < FRESCO_MS;
   }
 
+  /**
+   * JST-415: cuántas tareas se terminaron desde `inicio` en las empresas que responden, con la misma capa de datos del
+   * Resumen (sin IA; una lectura de lo terminado y otra de lo abierto por empresa, que el menú reutiliza si abres el
+   * Resumen). `null` si todavía no hay Oficina o no respondió ninguna empresa.
+   */
+  async hechasDesde(inicio: number): Promise<number | null> {
+    const o = this.oficina;
+    if (!o) return null;
+    const empresas = empresasDe(o);
+    await this.pedirDatos(empresas, inicio);
+    const d = armarDatos(this.insumos(o, empresas, this.arbolDeCarga(), inicio), []);
+    return d.empresas.length > 0 ? d.hechas.length : null;
+  }
+
   /** Pide lo que falte de esas empresas (una lectura por empresa a la vez). */
   async pedirDatos(empresas: readonly EmpresaRes[], inicio: number, forzar = false): Promise<void> {
     await Promise.all(empresas.map((e) => this.pedirEmpresa(e.id, inicio, forzar)));

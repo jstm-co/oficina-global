@@ -79,6 +79,14 @@ export const pagina: Record<string, string> = {
   Ocultas: "Hidden",
   Novedad: "New",
   "Ambiente: voces, mascotas y conversaciones": "Ambience: voices, pets and chats",
+  // JST-415: cuánto habla la oficina
+  "Cuánto habla": "How much it talks",
+  Tranquilo: "Quiet",
+  Normal: "Normal",
+  Conversador: "Chatty",
+  "Solo lo importante: «te necesito», errores y «terminé».": "Only what matters: “te necesito” (I need you), errors and “terminé” (I'm done).",
+  "Lo de siempre, más bloqueos, un recordatorio por hora, el resumen al volver y las rachas.": "The usual, plus blocks, an hourly reminder, the summary when you come back and streaks.",
+  "Todo lo de Normal, con recordatorios cada 20 min.": "Everything in Normal, with reminders every 20 min.",
   // Barra lateral
   "{n} te necesita": "{n} needs you",
   "{n} te necesitan": "{n} need you",

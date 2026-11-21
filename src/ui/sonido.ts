@@ -36,6 +36,7 @@ import { useSyncExternalStore } from "react";
 import { cadenaDetalle, ColaVoces, DESPUES_DEL_SONIDO_MS, ENTRE_FRASES_MS, textoPendiente, textoVoz, vocesEspanol, vozDe, type DetalleVoz, type Frase, type Presentacion } from "../avisos.js";
 import campana from "./assets/aviso-campana.mp3";
 import { pedidoDesde, pedirAudio, pedirAudioDetalle } from "./audiosVoces.js";
+import { audioDeFraseLibre, ESPERA_VOZ_LIBRE_MS, generacionDeAvisos } from "./libreVoz.js";
 
 /** La campanita dura 0,94 s; se toca a volumen 0,8. */
 export const DURACION_CAMPANA_MS = 940;
@@ -243,6 +244,8 @@ export interface AgenteVoz {
   corto: string;
   empresa: string;
   aspecto: string;
+  /** JST-415: su empresa, para pedirle al worker el audio de una frase libre (el host revisa que el usuario la vea). */
+  companyId?: string | null;
 }
 
 /**
@@ -332,6 +335,37 @@ export function decir(texto: string, agente: AgenteVoz | null, alHablar?: AlHabl
     else hablarConElNavegador(texto, agente, alHablar, frase, sub);
     revisarAvisos();
   });
+}
+
+/**
+ * JST-415: una frase armada al momento (el recordatorio, «mientras no estabas», «ya no queda nadie trabajando», la racha
+ * de errores): suena con la voz elegida para el Resumen, grabada por el worker como las frases libres del Resumen y de
+ * «Leer contexto»; si ese audio no llega en `ESPERA_VOZ_LIBRE_MS`, con la voz del navegador, como antes.
+ */
+/** Cambia cuando se callan los avisos: una frase libre que esperaba su audio y ve otra generación ya no suena (JST-415). */
+const generacionLibre = generacionDeAvisos();
+
+export function decirLibre(texto: string, agente: AgenteVoz | null, alHablar?: AlHablar): void {
+  if (!desbloqueado || typeof window === "undefined") {
+    mostrarFrase(texto, agente, alHablar, null);
+    return;
+  }
+  esperandoAudio++;
+  const generacion = generacionLibre.actual();
+  // El audio se pidió al ponerla en la cola; aquí se le da un respiro más y, si no llegó, habla el navegador.
+  const plazo = new Promise<null>((ok) => setTimeout(() => ok(null), ESPERA_VOZ_LIBRE_MS));
+  void Promise.race([audioDeFraseLibre(texto, agente?.companyId ?? null, ESPERA_VOZ_LIBRE_MS * 2).catch(() => null), plazo])
+    .then((blobs) => {
+      esperandoAudio--;
+      // Si mientras esperaba empezó el Resumen o «Leer contexto» (se callaron los avisos), ya no suena encima.
+      if (!generacionLibre.vigente(generacion) || resumenSonando()) {
+        revisarAvisos();
+        return;
+      }
+      if (blobs && blobs.length > 0) tocarVoz(blobs, texto, agente, alHablar, null, null);
+      else hablarConElNavegador(texto, agente, alHablar, null, null);
+      revisarAvisos();
+    });
 }
 
 /**
@@ -535,9 +569,11 @@ function siguiente(): void {
   ultimaFrase = ahora;
   const uno = p.agentes.length === 1 ? (agentesCola.get(p.agentes[0]!.id) ?? null) : null;
   // El 🔊 va en el globo de quien lo dice: con un resumen («3 agentes terminaron») no hay uno.
-  const frase = uno ? p.frase : null;
+  // JST-415: una frase libre (recordatorio, «mientras no estabas», hitos) no es «✓ listo» ni la mano: sin 🔊 en el globo.
+  const frase = uno && !p.libre ? p.frase : null;
   const det = cadenaDetalle(p, presentacionCola);
-  if (det) decirConDetalle(det.cadena, textoPendiente(p, presentacionCola), uno, alHablarCola, frase, det.subtitulo);
+  if (p.libre) decirLibre(textoPendiente(p, presentacionCola), uno, alHablarCola);
+  else if (det) decirConDetalle(det.cadena, textoPendiente(p, presentacionCola), uno, alHablarCola, frase, det.subtitulo);
   else decir(textoPendiente(p, presentacionCola), uno, alHablarCola, frase);
   if (cola.largo > 0) timerCola = setTimeout(siguiente, ENTRE_FRASES_MS);
 }
@@ -562,6 +598,24 @@ export function ponerFrase(frase: Frase, agente: AgenteVoz, presentacion: Presen
   revisarAvisos();
   // Un resumen («3 agentes te necesitan.») recién existe al juntarse: su audio también se pide ahí.
   if (desbloqueado) for (const p of cola.pendientes) if (p.agentes.length > 1) void pedirAudio(null, textoPendiente(p, presentacion));
+  if (!timerCola) timerCola = setTimeout(siguiente, 0);
+}
+
+/**
+ * JST-415: pone en la cola una frase ya armada (el recordatorio de espera, «mientras no estabas», «ya no queda nadie
+ * trabajando»), con la voz de `agente`. Pasa por la misma cola y los mismos límites que las demás (3 como mucho,
+ * 3 s entre una y otra, no se junta con otras). Suena con la voz elegida para el Resumen (`decirLibre`); si su audio no
+ * llega en unos segundos, habla la voz del navegador.
+ */
+export function ponerLibre(texto: string, agente: AgenteVoz, presentacion: Presentacion, alHablar?: AlHablar): void {
+  if (resumenSonando()) return;
+  presentacionCola = presentacion;
+  alHablarCola = alHablar;
+  agentesCola.set(agente.id, agente);
+  // Su audio se pide ahora, mientras espera su turno: llega antes de que le toque (JST-415).
+  if (desbloqueado) void audioDeFraseLibre(texto, agente.companyId ?? null, ESPERA_VOZ_LIBRE_MS * 2);
+  cola.poner("fin", agente, relojCola(), null, texto);
+  revisarAvisos();
   if (!timerCola) timerCola = setTimeout(siguiente, 0);
 }
 
@@ -633,6 +687,7 @@ export function resumenAjeno(hasta: number): void {
 
 /** Corta el aviso que suena (su audio o la voz del navegador) y bota los que esperan. */
 function callarAvisos(): void {
+  generacionLibre.cancelar();
   cola.vaciar();
   if (timerCola) clearTimeout(timerCola);
   timerCola = null;

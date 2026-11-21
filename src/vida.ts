@@ -96,6 +96,7 @@ import {
   PRIMERA_FRASE_MS,
   fraseEn,
   Guionista,
+  ENTREGA_RECIENTE_MS,
   MASCOTA_DICE_MS,
   MAX_CHARLAS,
   PAREJA_MS,
@@ -106,11 +107,14 @@ import {
   nombreDeCharla,
   type AgenteCharla,
   type ContextoCharla,
+  type EstadoSuelta,
   type FuenteIa,
   type Guion,
   type Linea,
   type MuestraFinal,
+  type Reaccion,
 } from "./charlas.js";
+import { escalarIntervalo, intervaloReaccionMascotaMs, NIVEL_POR_OMISION, type Nivel } from "./nivel.js";
 import { nombreCorto as nombreCortoVoz } from "./avisos.js";
 import type { TipoEspera } from "./estado.js";
 import { filaDeSalas } from "./escritorio.js";
@@ -173,6 +177,14 @@ export const GRACIA_PREPARADA_MS = 30_000;
 export const VOZ_EXTRA_MS = 400;
 /** Un audio de más de 8 s: esa conversación no se lee (punto 5 del spike). */
 export const MAX_AUDIO_MS = 8_000;
+/** JST-415: cuánto lleva libre «hace mucho», cuánto es «recién terminó» y cuánto esperando es «hace rato» (para las frases sueltas y el gato). */
+const LIBRE_MUCHO_MS = 20 * 60_000;
+const RECIEN_MS = 20 * 60_000;
+const ESPERA_RATO_MS = 30 * 60_000;
+/** Una espera de más de 24 h es parte del paisaje (con esperas de semanas): ya no cuenta para las frases sueltas. */
+const ESPERA_VIEJA_MS = 24 * 60 * 60_000;
+/** Un evento de «tarea terminada» más viejo que esto no hace celebrar al perro (llegó tarde o se repitió). */
+const TAREA_TERMINADA_VIGENTE_MS = 10 * 60_000;
 /** Sin con quién preparar una (nadie libre en el descanso), se vuelve a mirar a los 5 s. */
 const REINTENTO_PREPARAR_MS = 5_000;
 
@@ -198,6 +210,11 @@ export type HechoVoz =
 export interface VozVida {
   /** Ese tipo se lee (su casilla prendida y a la vista). */
   lee(t: "charlas" | "entregas" | "mascotas" | "sueltas"): boolean;
+  /**
+   * JST-415: `true` si esta pestaña es la que habla de esto (una sola pestaña por clave y minuto, como `reclamar` de `vigia.ts`).
+   * Lo usan las reacciones de las mascotas: el globo se ve en todas, la voz suena en una. Sin darlo, suena siempre.
+   */
+  reclamar?(clave: string): boolean;
   /** Ya puede empezar una conversación con voz: una por minuto, 10 s después de un aviso y nadie hablando. */
   libreParaCharla(): boolean;
   hecho(h: HechoVoz): void;
@@ -239,6 +256,8 @@ export interface OpcionesVida {
   cargando: boolean;
   /** Pestaña oculta: todo en pausa; al volver, cada uno aparece donde iba. */
   oculta: boolean;
+  /** JST-415: cuánto habla la oficina (`src/nivel.ts`): escala los intervalos de las conversaciones y las frases sueltas, y manda las reacciones de las mascotas. Sin dar, «normal». */
+  nivel?: Nivel;
   /** Al volver a la pestaña, el sincronizador todavía relee todo (`Sincronizador.releyendo`). */
   releyendo?: boolean;
   /** Prefijos del filtro por empresa (vacío: todas). El rótulo va solo en las salas que se ven (JST-138 §7). */
@@ -339,6 +358,8 @@ interface Persona {
   esperaTipo: TipoEspera | null;
   esperaDesde: string | null;
   runDesde: string | null;
+  /** JST-415: desde cuándo (hora de verdad) está libre sin interrupción, que la página sepa (`null`: no está libre). */
+  libreDesde: number | null;
   runId: string | null;
   lugar: Lugar;
   /** En la fila o en la mesa: en qué lugar (`fila:1`, `mesa:7`). */
@@ -683,6 +704,13 @@ export class Vida {
   private readonly listosVistos = new Set<string>();
   /** El instante del último paso de las entregas (para ver cuándo cambian de etapa). */
   private ultimoPaso = 0;
+  /** JST-415: las entregas que vio esta página (de quién a quién, qué tarea y cuándo, en la hora de verdad): de ahí sale el tema «entrega». */
+  private entregasVistas: Array<{ de: string; a: string; codigo: string; en: number }> = [];
+  /** JST-415: cuándo reaccionó una mascota por última vez (en el reloj de la vida) y las esperas que el gato ya comentó. */
+  private ultimaReaccion = -Infinity;
+  private readonly esperasComentadas = new Set<string>();
+  /** Cuánto llevaba esperando cada «agente:desde» la primera vez que esta página lo vio: el gato solo comenta las que vio cruzar los 30 min. */
+  private readonly esperasVistas = new Map<string, number>();
   /** 0.6.0: la voz (o `null`: no se lee nada), la conversación preparada y cuándo preparar otra. */
   private voz: VozVida | null = null;
   private preparada: Preparada | null = null;
@@ -892,6 +920,7 @@ export class Vida {
         datosDeCharla(p, a);
         if (st !== a.st) {
           p.st = a.st;
+          p.libreDesde = a.st === "libre" ? this.reloj() : null;
           this.tocar(p.prefijo);
           cambio = true;
         }
@@ -925,6 +954,7 @@ export class Vida {
     if ((antes.cargando && !op.cargando) || (!antes.charlas && op.charlas)) this.abrir(ahora);
     // La relectura de la vuelta ya está en lo que se acaba de aplicar: desde ahora, quien cambia camina.
     if (this.trasVolver && !op.releyendo) this.trasVolver = false;
+    this.revisarEsperas();
     if (cambio) {
       // Se llama mientras React dibuja el piso: las salas se dibujan en esta misma pasada con lo nuevo.
       for (const p of this.salas.keys()) this.tocar(p);
@@ -989,6 +1019,7 @@ export class Vida {
       esperaTipo: null,
       esperaDesde: null,
       runDesde: null,
+      libreDesde: a.st === "libre" ? this.reloj() : null,
       runId: a.runId ?? null,
       lugar: "escritorio",
       en: null,
@@ -1370,10 +1401,12 @@ export class Vida {
     const decir = (como: "mesa" | "sobre", id: number) => {
       if (this.voz?.lee("entregas")) this.voz.hecho({ tipo: "entrega", id, como, fase: "sale", de, a, companyId: pd.companyId, para: nombreCortoVoz(pa.nombre), titulo: this.titulos?.titulo(codigo) ?? null });
     };
+    this.anotarEntrega(de, a, codigo);
     if (this.juntar(pd, pa, codigo, sala, ahora)) {
       decir("mesa", this.juntas.at(-1)!.id);
       this.tocar(pa.prefijo);
       this.avisar();
+      this.reaccionar("entrega");
       return true;
     }
     const desde = sala.plano.puestos[pd.i]!;
@@ -1389,7 +1422,14 @@ export class Vida {
     decir("sobre", base.id);
     this.tocar(pa.prefijo);
     this.avisar();
+    this.reaccionar("entrega");
     return true;
+  }
+
+  /** Recuerda una entrega para que las conversaciones hablen de ella un rato (como mucho 20, y solo las de los últimos 30 min). */
+  private anotarEntrega(de: string, a: string, codigo: string): void {
+    const en = this.reloj();
+    this.entregasVistas = [...this.entregasVistas.filter((e) => en - e.en <= 2 * ENTREGA_RECIENTE_MS), { de, a, codigo, en }].slice(-20);
   }
 
   /** Libre en el descanso: sentado, de pie, conversando o caminando hacia allá (no de pie junto a su escritorio). */
@@ -1581,6 +1621,8 @@ export class Vida {
     const p = this.personas.get(agenteId);
     if (!p || this.op.oculta || this.op.cargando) return;
     const ahora = this.ahora();
+    // JST-415: el robot avisa del error. El perro NO celebra aquí: un run exitoso puede ser un latido sin tarea (`tareaTerminada`).
+    if (status === "failed" || status === "timed_out") this.reaccionar("error");
     if (status !== "succeeded") {
       if (this.listos.delete(agenteId)) {
         this.tocar(p.prefijo);
@@ -1592,6 +1634,15 @@ export class Vida {
     this.listos.set(agenteId, { t0: ahora, codigo: p.codigo ?? p.run?.codigo ?? null, runId });
     this.tocar(p.prefijo);
     this.avisar();
+  }
+
+  /**
+   * Una TAREA pasó a terminada (el evento `issue.updated` con estado `done`, `terminadaDeEvento` de `temas.ts`): el perro
+   * celebra. `en`: cuándo ocurrió (hora de verdad); uno viejo no celebra. Un run exitoso, sin tarea terminada, no celebra (JST-415).
+   */
+  tareaTerminada(en?: number): void {
+    if (en !== undefined && this.reloj() - en > TAREA_TERMINADA_VIGENTE_MS) return;
+    this.reaccionar("termina");
   }
 
   /**
@@ -1667,11 +1718,11 @@ export class Vida {
       for (const a of this.candidatos(sala)) {
         const t = this.busca.get(a.id);
         if (t === undefined) {
-          this.busca.set(a.id, ahora + this.entre(ahora - this.abierta < ABRIR_MS ? PRIMERA_MS : BUSCA_MS));
+          this.busca.set(a.id, ahora + this.entreN(ahora - this.abierta < ABRIR_MS ? PRIMERA_MS : BUSCA_MS));
           continue;
         }
         if (ahora < t) continue;
-        this.busca.set(a.id, ahora + this.entre(BUSCA_MS));
+        this.busca.set(a.id, ahora + this.entreN(BUSCA_MS));
         if (this.charlas.length >= MAX_CHARLAS || this.charlas.some((c) => c.prefijo === pre) || (this.salaLibre.get(pre) ?? -Infinity) > ahora) continue;
         // 0.6.0: la pareja de la conversación con voz espera su turno, y con sus audios listos su sala también.
         if (this.reservado(a.id) || (this.preparada?.ms && this.preparada.prefijo === pre)) continue;
@@ -1729,6 +1780,7 @@ export class Vida {
       temas: (id) => this.temas?.guardado(id) ?? null,
       titulo: (codigo) => this.titulos?.titulo(codigo) ?? null,
       reloj: this.reloj(),
+      entregas: this.entregasVistas,
       ahora,
       azar: this.azar,
     };
@@ -1899,7 +1951,7 @@ export class Vida {
       const p = this.personas.get(id);
       if (!p || p.charla !== ch) continue;
       p.charla = null;
-      this.busca.set(id, ahora + this.entre(BUSCA_MS));
+      this.busca.set(id, ahora + this.entreN(BUSCA_MS));
       if (ch.quieta) continue;
       const volverA = p.volverA;
       p.volverA = null;
@@ -2146,13 +2198,14 @@ export class Vida {
       for (const a of this.candidatos(sala)) {
         const t = this.proxSuelta.get(a.id);
         if (t === undefined) {
-          this.proxSuelta.set(a.id, ahora + this.entre(SUELTA_MS));
+          this.proxSuelta.set(a.id, ahora + this.entreN(SUELTA_MS));
           continue;
         }
         if (ahora < t) continue;
-        this.proxSuelta.set(a.id, ahora + this.entre(SUELTA_MS));
+        this.proxSuelta.set(a.id, ahora + this.entreN(SUELTA_MS));
         if (this.charlas.some((c) => c.prefijo === pre) || this.sueltas.some((s) => s.prefijo === pre) || this.juntas.some((j) => j.prefijo === pre)) continue;
-        const linea = this.guionista.suelta(a.id, this.temas?.guardado(a.id) ?? null, this.azar, (codigo) => this.titulos?.titulo(codigo) ?? null);
+        const temas = this.temas?.guardado(a.id) ?? null;
+        const linea = this.guionista.suelta(a.id, temas, this.azar, (codigo) => this.titulos?.titulo(codigo) ?? null, this.estadosSuelta(a, temas));
         if (!linea) continue;
         const su: Suelta = { id: this.sigId++, prefijo: pre, quien: a.id, linea, t0: ahora, dur: duracionFrase(linea, true) };
         this.sueltas.push(su);
@@ -2194,6 +2247,75 @@ export class Vida {
         dice: null,
       };
     });
+  }
+
+  /**
+   * JST-415: una mascota comenta lo que pasa cerca, con su globo corto: alguien termina (el perro), un error (el robot),
+   * alguien espera a la persona hace rato (el gato) o una entrega (el conejo). A lo más una cada 2 minutos en nivel
+   * normal, una por minuto en conversador y ninguna en tranquilo; nunca encima de otra mascota que habla. En voz, solo
+   * con «Mascotas» prendido (`VozVida.lee`). `dibujando`: se llama mientras React dibuja (no avisa a la UI). `true` si dijo algo.
+   */
+  reaccionar(tipo: Reaccion, dibujando = false): boolean {
+    const cada = intervaloReaccionMascotaMs(this.nivel());
+    const ahora = this.ahora();
+    if (cada === null || !this.op.mascotas || this.op.cargando || this.op.oculta) return false;
+    if (ahora - this.ultimaReaccion < cada || this.mascotasVivas.some((x) => x.dice)) return false;
+    const r = this.guionista.reaccion(tipo, this.azar);
+    const m = r && this.mascotasVivas.find((x) => x.id === r.id);
+    if (!r || !m) return false;
+    this.ultimaReaccion = ahora;
+    m.dice = { texto: r.texto, hasta: ahora + MASCOTA_DICE_MS };
+    if (!this.op.rm) {
+      m.modo = "gesto";
+      m.hasta = ahora + MASCOTA_DICE_MS;
+    }
+    // El globo se ve en todas las pestañas; la voz, en una sola (un reclamo por reacción y minuto, JST-415).
+    if (this.voz?.lee("mascotas") && (this.voz.reclamar?.(`voz:reaccion:${tipo}:${Math.floor(this.reloj() / 60_000)}`) ?? true)) this.voz.hecho({ tipo: "mascota", id: m.id, texto: r.texto, sola: true });
+    this.versionMascotas += 1;
+    // Desde `sincronizar` (que corre mientras React dibuja) no se avisa a la UI: basta con despertar el bucle.
+    if (dibujando) this.despertador?.();
+    else this.avisar();
+    return true;
+  }
+
+  /**
+   * El gato nota a quien espera a la persona hace más de 30 min, pero solo si esta página vio cruzar los 30 min (la primera
+   * vez que la vio tenía menos), una vez por espera: con esperas de semanas, no comenta cada una en cada carga (JST-415).
+   * Se mira con cada lectura de la página.
+   */
+  private revisarEsperas(): void {
+    const reloj = this.reloj();
+    const vigentes: Array<{ clave: string; desde: number }> = [];
+    for (const p of this.personas.values()) {
+      if (!p.need || !p.esperaDesde) continue;
+      const desde = Date.parse(p.esperaDesde);
+      if (Number.isNaN(desde)) continue;
+      const clave = `${p.id}:${p.esperaDesde}`;
+      if (!this.esperasVistas.has(clave)) this.esperasVistas.set(clave, Math.max(0, reloj - desde));
+      vigentes.push({ clave, desde });
+    }
+    const claves = new Set(vigentes.map((x) => x.clave));
+    for (const k of this.esperasVistas.keys()) if (!claves.has(k)) this.esperasVistas.delete(k);
+    for (const { clave, desde } of vigentes) {
+      if (reloj - desde < ESPERA_RATO_MS || this.esperasVistas.get(clave)! >= ESPERA_RATO_MS || this.esperasComentadas.has(clave)) continue;
+      if (this.reaccionar("espera", true)) {
+        this.esperasComentadas.add(clave);
+        if (this.esperasComentadas.size > 200) this.esperasComentadas.clear();
+      }
+      return;
+    }
+  }
+
+  /** Cómo está quien dice una frase suelta (JST-415): libre hace mucho, recién terminó, hay quien espera a la persona hace rato, o tiene cola. */
+  private estadosSuelta(p: Persona, temas: Temas | null): ReadonlySet<EstadoSuelta> {
+    const e = new Set<EstadoSuelta>();
+    const reloj = this.reloj();
+    if (p.libreDesde !== null && reloj - p.libreDesde >= LIBRE_MUCHO_MS) e.add("libre");
+    if (temas?.hecho && temas.hechoEn != null && reloj >= temas.hechoEn && reloj - temas.hechoEn <= RECIEN_MS) e.add("recien");
+    if (temas?.sigue?.estado === "todo") e.add("cola");
+    // Entre 30 min y 24 h: una espera de semanas no deja el estado «espera» prendido todo el día.
+    if (this.agentesCharla().some((x) => x.need && x.espera?.desde && reloj - Date.parse(x.espera.desde) >= ESPERA_RATO_MS && reloj - Date.parse(x.espera.desde) < ESPERA_VIEJA_MS)) e.add("espera");
+    return e;
   }
 
   /**
@@ -3153,6 +3275,16 @@ export class Vida {
 
   private entre([a, b]: readonly [number, number]): number {
     return a + this.azar() * (b - a);
+  }
+
+  /** El nivel de cuánto habla la oficina (JST-415). */
+  private nivel(): Nivel {
+    return this.op.nivel ?? NIVEL_POR_OMISION;
+  }
+
+  /** Un intervalo al azar escalado por el nivel: tranquilo, el doble de largo; conversador, la mitad. Los topes (conversaciones a la vez, pausas por sala) no cambian. */
+  private entreN(rango: readonly [number, number]): number {
+    return this.entre(escalarIntervalo(rango, this.nivel()));
   }
 }
 

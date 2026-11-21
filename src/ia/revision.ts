@@ -7,7 +7,7 @@
 // pueden traer los huecos de su plantilla: el código los rellena con datos reales
 // después de revisar el texto estático. Tampoco se aceptan palabras inexistentes,
 // acciones futuras, textos que no caben ni variantes casi repetidas.
-import { DICEN, FRASES_FIJAS, huecosDe, SUELTAS, SUELTAS_CON_DATO, type IdMascota, type Linea } from "../charlas.js";
+import { FRASES_FIJAS, fraseDeMascota, huecosDe, SUELTAS, SUELTAS_CON_DATO, type IdMascota, type Linea } from "../charlas.js";
 import { anchoTexto } from "../hilo.js";
 import { esPalabra, palabrasRaras } from "./palabras.js";
 
@@ -198,7 +198,8 @@ export function revisarApertura(texto: string, plantilla: string, nombres: reado
   if (normalizarFrase(texto) === normalizarFrase(plantilla)) mal.push("es una de siempre");
   if (/\b(?:el|la|los|las)\s+\{rol\}/i.test(texto)) mal.push("artículo de más antes de {rol}");
   if (/,\s*\{rol\}/i.test(texto)) mal.push("{rol} usado como persona");
-  if (texto.includes("{n}") && /\b(?:minutos?|horas?|días?|semanas?|meses?|años?)\b/i.test(texto)) mal.push("unidad de tiempo fuera de {n}");
+  // `{n}` es una cantidad y `{tiempo}` una duración con su unidad («2 horas»): ninguno lleva la unidad escrita al lado.
+  if ((texto.includes("{n}") || texto.includes("{tiempo}")) && /\b(?:minutos?|horas?|días?|semanas?|meses?|años?)\b/i.test(texto)) mal.push("unidad de tiempo fuera de {n}");
   const vecinos = [
     ...[...texto.matchAll(/([\p{L}]+)\s+\{(agente|empresa|rol|tarea)\}/giu)].map((m) => ({ palabra: m[1]!, hueco: m[2]! })),
     ...[...texto.matchAll(/\{(agente|empresa|rol|tarea)\}\s+([\p{L}]+)/giu)].map((m) => ({ palabra: m[2]!, hueco: m[1]! })),
@@ -227,7 +228,7 @@ const SONIDOS: ReadonlyArray<readonly [IdMascota | "pájaro", RegExp]> = [
 /** Lo que dice una mascota, sin números, nombres ni las frases fijas de respaldo. */
 export function revisarMascota(id: IdMascota, texto: string, nombres: readonly string[] = []): string[] {
   const mal = revisarTexto(texto, { letras: LETRAS_SUELTA, px: MAX_SUELTA_PX, nombres });
-  if (Object.values(DICEN).some((frases) => frases.includes(texto.trim()))) mal.push("es una de siempre");
+  if (fraseDeMascota(id, texto.trim()) !== "ninguna") mal.push("es una de siempre");
   if (SONIDOS.some(([animal, re]) => animal !== id && re.test(texto))) mal.push("sonido de otra mascota");
   return mal;
 }

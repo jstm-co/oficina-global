@@ -15,8 +15,18 @@
 // de Chrome por omisión) y si ya se abrió el menú «Conversaciones» (`iaVisto`,
 // apaga su punto violeta): lo que guardó la 0.6.0 se lee igual y queda con la IA
 // elegida y el punto prendido. El mostrar u ocultar sigue en `charlas`.
+// JST-415: `nivel` (cuánto habla la oficina: tranquilo, normal o conversador) y las frases nuevas
+// `frases.bloq` («quedé bloqueado»), `frases.recordar`, `frases.volver` y `frases.hitos`, todas
+// encendidas; `detalle.bloq` (la tarea). Lo que guardó una versión anterior se lee igual.
 import { useSyncExternalStore } from "react";
-import type { Frase, Presentacion } from "../avisos.js";
+import { claveDeFrase, type ClaveFrase, type Frase, type Presentacion } from "../avisos.js";
+import { leerNivel, NIVEL_POR_OMISION, permiteExtras, permiteFrase, type Nivel } from "../nivel.js";
+
+/** Las frases extras (JST-415) que solo suenan en los niveles «normal» y «conversador», cada una con su casilla. */
+export type FraseExtra = "recordar" | "volver" | "hitos";
+export const FRASES_EXTRA: readonly FraseExtra[] = ["recordar", "volver", "hitos"];
+/** Lo que tiene casilla en `frases`: las frases de siempre y las extras. */
+export type ClaveCasilla = ClaveFrase | FraseExtra;
 
 /** Lo de la oficina que la voz puede leer (0.6.0, JST-225 §4): cada tipo con su casilla. */
 export type TipoLeer = "charlas" | "entregas" | "mascotas" | "sueltas" | "hora";
@@ -29,8 +39,10 @@ export interface Ajustes {
   sonido: boolean;
   /** Voces (apagadas por omisión). */
   voces: boolean;
-  /** Qué frases dicen: las 3 primeras vienen marcadas y «empecé» no. */
-  frases: Record<Frase, boolean>;
+  /** Qué frases dicen: todas vienen marcadas menos «empecé». JST-415: «quedé bloqueado», el recordatorio, «mientras no estabas» y las rachas e hitos. */
+  frases: Record<ClaveCasilla, boolean>;
+  /** JST-415: cuánto habla la oficina (`src/nivel.ts`). */
+  nivel: Nivel;
   presentacion: Presentacion;
   /** Mascotas en el pasillo (encendidas por omisión). */
   mascotas: boolean;
@@ -42,7 +54,7 @@ export interface Ajustes {
    * en las 4; solo cuenta si su frase está prendida. Apagado, esa frase se dice
    * como en la 0.4.0 y no se pide ningún audio para ella.
    */
-  detalle: Record<Frase, boolean>;
+  detalle: Record<ClaveFrase, boolean>;
   /** 0.6.0 (JST-225 §6): qué se lee de la oficina; viene prendido solo «Conversaciones del descanso». */
   leer: Record<TipoLeer, boolean>;
   /** «Cómo se presentan y más» abierto en el panel «Voces». */
@@ -64,11 +76,12 @@ export const AJUSTES_POR_OMISION: Ajustes = {
   avisos: false,
   sonido: true,
   voces: false,
-  frases: { toca: true, error: true, fin: true, emp: false },
+  frases: { toca: true, error: true, fin: true, emp: false, bloq: true, recordar: true, volver: true, hitos: true },
+  nivel: NIVEL_POR_OMISION,
   presentacion: "nombre-empresa",
   mascotas: true,
   charlas: true,
-  detalle: { toca: true, error: true, fin: true, emp: true },
+  detalle: { toca: true, error: true, fin: true, emp: true, bloq: true },
   leer: { charlas: true, entregas: false, mascotas: false, sueltas: false, hora: false },
   vozMas: false,
   vistoLeer: false,
@@ -85,19 +98,29 @@ export function leerAjustes(texto: string | null): Ajustes {
     g = {};
   }
   const b = (v: unknown, d: boolean) => (typeof v === "boolean" ? v : d);
-  const f = (g.frases ?? {}) as Partial<Record<Frase, unknown>>;
-  const det = (g.detalle && typeof g.detalle === "object" ? g.detalle : {}) as Partial<Record<Frase, unknown>>;
+  const f = (g.frases && typeof g.frases === "object" ? g.frases : {}) as Partial<Record<ClaveCasilla, unknown>>;
+  const det = (g.detalle && typeof g.detalle === "object" ? g.detalle : {}) as Partial<Record<ClaveFrase, unknown>>;
   const le = (g.leer && typeof g.leer === "object" ? g.leer : {}) as Partial<Record<TipoLeer, unknown>>;
   const d = AJUSTES_POR_OMISION;
   return {
     avisos: b(g.avisos, d.avisos),
     sonido: b(g.sonido, d.sonido),
     voces: b(g.voces, d.voces),
-    frases: { toca: b(f.toca, d.frases.toca), error: b(f.error, d.frases.error), fin: b(f.fin, d.frases.fin), emp: b(f.emp, d.frases.emp) },
+    frases: {
+      toca: b(f.toca, d.frases.toca),
+      error: b(f.error, d.frases.error),
+      fin: b(f.fin, d.frases.fin),
+      emp: b(f.emp, d.frases.emp),
+      bloq: b(f.bloq, d.frases.bloq),
+      recordar: b(f.recordar, d.frases.recordar),
+      volver: b(f.volver, d.frases.volver),
+      hitos: b(f.hitos, d.frases.hitos),
+    },
+    nivel: leerNivel(g.nivel),
     presentacion: g.presentacion === "nombre" || g.presentacion === "frase" ? g.presentacion : d.presentacion,
     mascotas: b(g.mascotas, d.mascotas),
     charlas: b(g.charlas, d.charlas),
-    detalle: { toca: b(det.toca, d.detalle.toca), error: b(det.error, d.detalle.error), fin: b(det.fin, d.detalle.fin), emp: b(det.emp, d.detalle.emp) },
+    detalle: { toca: b(det.toca, d.detalle.toca), error: b(det.error, d.detalle.error), fin: b(det.fin, d.detalle.fin), emp: b(det.emp, d.detalle.emp), bloq: b(det.bloq, d.detalle.bloq) },
     leer: { charlas: b(le.charlas, d.leer.charlas), entregas: b(le.entregas, d.leer.entregas), mascotas: b(le.mascotas, d.leer.mascotas), sueltas: b(le.sueltas, d.leer.sueltas), hora: b(le.hora, d.leer.hora) },
     vozMas: b(g.vozMas, d.vozMas),
     vistoLeer: b(g.vistoLeer, d.vistoLeer),
@@ -106,9 +129,22 @@ export function leerAjustes(texto: string | null): Ajustes {
   };
 }
 
-/** La voz dice de qué se trata en esa frase: la frase y su detalle prendidos (con las voces, lo mira quien habla). */
+/**
+ * La voz dice de qué se trata en esa frase: la frase y su detalle prendidos (con las voces, lo mira quien habla).
+ * JST-415: «te lo dejo para revisar» (`rev`) va con la casilla y el detalle de «terminé».
+ */
 export function conDetalle(a: Pick<Ajustes, "frases" | "detalle">, f: Frase): boolean {
-  return a.frases[f] && a.detalle[f];
+  const k = claveDeFrase(f);
+  return a.frases[k] && a.detalle[k];
+}
+
+/**
+ * JST-415: esa frase puede sonar ahora: su casilla Y el nivel (en «tranquilo» no suena «empecé»). Las extras
+ * (recordar, volver, hitos) además piden un nivel que las permita.
+ */
+export function suena(a: Pick<Ajustes, "frases" | "nivel">, f: Frase | FraseExtra): boolean {
+  if (f === "recordar" || f === "volver" || f === "hitos") return a.frases[f] && permiteExtras(a.nivel);
+  return a.frases[claveDeFrase(f)] && permiteFrase(a.nivel, f);
 }
 
 /**

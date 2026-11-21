@@ -52,6 +52,7 @@ import { BotonesAvisos, SubtituloVoz } from "./paneles.js";
 import { cx, EtiquetaEmpresa, Icono, Piso } from "./piso.js";
 import { todosLibres, useAhora, useAnchoVentana, useCelular, useMovimientoReducido, useOficina, usePestanaOculta, useSalasPrevias, useTemaOscuro, type Oficina } from "./useOficina.js";
 import { VentanaResponder } from "./ventana.js";
+import { useAvisoAlAbrir } from "./avisoAlAbrir.js";
 import { useVigia } from "./vigia.js";
 import { VistaTv } from "./vistaTv.js";
 import { Vista3D } from "./vista3d.js";
@@ -289,6 +290,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   const { tip, handlers, ocultar } = useTooltip(!celular);
   const vr = useVentana(oficina);
   const { avisos, mostrar } = useAvisos();
+  useAvisoAlAbrir(oficina, mostrar);
   /** Tu escritorio abierto (JST-163 §14): de qué sala, y el botón desde donde se abrió. */
   const [escritorio, setEscritorio] = useState<{ prefijo: string; el: HTMLElement } | null>(null);
 

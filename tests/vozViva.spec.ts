@@ -437,10 +437,10 @@ describe("0.6.0 (JST-226): lo que se lee de la oficina, en el worker", () => {
     const raiz = plugin();
     const hechos: Array<{ voz: string; texto: string }> = [];
     const v = new PreparadorVoces({ raiz, revisar: () => null, clonesOk: () => true, generar: async (t, d) => (hechos.push({ voz: t.voz.id, texto: t.texto }), writeFileSync(d, "mp3")) });
-    const pedidos = [charla("a-edge", "Acabo de terminar esta.", "JST-91: Re-QA de la Oficina global"), charla("a-clon", "¡Bien! ¿Fue complicado?"), charla("a-edge", "Tuvo lo suyo, pero salió.")];
+    const pedidos = [charla("a-edge", "Terminé esta.", "JST-91: Re-QA de la Oficina global"), charla("a-clon", "Bien. ¿Fue complicado?"), charla("a-edge", "Tuvo lo suyo, pero salió.")];
     expect(await v.esperarOficina(pedidos, 5_000)).toEqual(["lista", "lista", "lista"]);
     // Edge y los clones van cada uno en su fila (a la vez): el orden entre filas no importa.
-    expect(hechos.map((h) => `${h.voz}|${h.texto}`).sort()).toEqual(["lorenzo|Acabo de terminar esta: Re-QA de la Oficina global.", "lorenzo|Tuvo lo suyo, pero salió.", "qwen3-mujer|¡Bien! ¿Fue complicado?"]);
+    expect(hechos.map((h) => `${h.voz}|${h.texto}`).sort()).toEqual(["lorenzo|Terminé el re-QA de la Oficina global.", "lorenzo|Tuvo lo suyo, pero salió.", "qwen3-mujer|Bien. ¿Fue complicado?"]);
     // Con su nombre de siempre (voz y texto) y su duración en `vivo.json`.
     const vivo = JSON.parse(readFileSync(join(raiz, "dist", "ui", "voces", "vivo.json"), "utf8"));
     expect(Object.keys(vivo.audios)).toContain(archivoVivo("lorenzo", "Tuvo lo suyo, pero salió."));
@@ -532,7 +532,7 @@ describe("0.7.0 (JST-232): lo que escribió la IA de Chrome, en el worker", () =
     expect(r.slice(-2)).toEqual(["no", "no"]);
     // Las que ya están en la fila no gastan otra vez; las frases de siempre no tienen tope.
     expect(v.prepararOficina(frases.slice(0, 3))).toEqual(["fila", "fila", "fila"]);
-    expect(v.prepararOficina([charla("a-edge", "Bacán.")])).toEqual(["fila"]);
+    expect(v.prepararOficina([charla("a-edge", "Bien ahí.")])).toEqual(["fila"]);
     ahora += 60_000;
     expect(v.prepararOficina(frases.slice(-1))).toEqual(["fila"]);
   });

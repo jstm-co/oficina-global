@@ -26,7 +26,7 @@ import {
 
 const l = (quien: string, texto: string, codigo: string | null = null): Linea => ({ quien, texto, codigo, titulo: null });
 const ERROR: MuestraFinal = {
-  clave: "error-1|P3()/¿Qué le pasó?/Se quedó sin cupo, parece.",
+  clave: "error-1|P[A {q} le falló el run.]()/¿Qué le pasó?/P[Se quedó sin cupo, parece.]()",
   variante: "error-1",
   apertura: "A {agente} le falló el run.",
   fijas: [l("a", "A CEO le falló el run."), l("b", "¿Qué le pasó?"), l("a", "Se quedó sin cupo, parece.")],
@@ -209,6 +209,10 @@ describe("la reserva persistente", () => {
     expect(r.mascotas.gato).toHaveLength(1);
     expect(r.escritas).toBe(8);
     expect(vacia(leerReserva(JSON.stringify({ ...guardada, prompt: "v4" }), ahora))).toBe(true);
+    // JST-415: el hueco {tiempo} cambió el prompt: lo guardado con la versión anterior no sirve.
+    expect(vacia(leerReserva(JSON.stringify({ ...guardada, prompt: "v5.6-jst415" }), ahora))).toBe(true);
+    expect(VERSION_PROMPT).not.toBe("v5.6-jst415");
+    expect(SISTEMA).toContain("{tiempo}");
     expect(vacia(leerReserva("{roto", ahora))).toBe(true);
   });
 

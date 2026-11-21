@@ -161,12 +161,12 @@ export function tardaGrabar(id: VozId): string {
 
 /**
  * Los «3 agentes te necesitan.» para cualquier número de agentes (de 2 a
- * `agentes`): 4 frases × hasta 26 agentes son 100 textos. Los pide el worker
+ * `agentes`): 6 frases (JST-415; antes 4) × hasta 26 agentes. Los pide el worker
  * cuando cambia la voz del Resumen (no todos de una vez al leer).
  */
 export function textosAvisosJuntos(agentes: number): string[] {
   const lista: string[] = [];
-  for (const f of ["toca", "error", "fin", "emp"] as const) for (let n = 2; n <= Math.max(2, agentes); n++) lista.push(`${FRASES[f].resumen(n)}.`);
+  for (const f of ["toca", "error", "fin", "emp", "bloq", "rev"] as const) for (let n = 2; n <= Math.max(2, agentes); n++) lista.push(`${FRASES[f].resumen(n)}.`);
   return lista;
 }
 

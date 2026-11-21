@@ -20,7 +20,8 @@
 //   el worker la rellena y exige que coincida con el globo antes de aceptarla.
 //   Va marcada (`ia`) para que el worker le ponga un tope por minuto.
 import { sinBarras, tareaParaVoz, TOPES_OFICINA } from "./paraVoz.js";
-import { DICEN, fraseDeCharla, fraseSuelta, NOMBRE_EN_FRASE, rellenarHuecos, SUELTAS_CON_DATO, type AperturaRellena, type IdMascota, type Linea } from "./charlas.js";
+import { nombrarTarea } from "./nombrarTarea.js";
+import { fraseDeCharla, fraseDeMascota, fraseSuelta, NOMBRE_EN_FRASE, rellenarHuecos, SUELTAS_CON_DATO, type AperturaRellena, type IdMascota, type Linea } from "./charlas.js";
 import { fraseIaParaVoz, revisarMascota, revisarPlantillaApertura } from "./ia/revision.js";
 import type { Motor } from "./voces.js";
 
@@ -47,6 +48,8 @@ export interface PedidoOficina {
   texto?: string | null;
   /** El nombre de la tarea, entero, si la frase la lleva y se dice (la primera vez en la conversación). */
   tarea?: string | null;
+  /** JST-415: la frase nombra una tarea (la primera vez) pero su título no se conoce: «esta» se dice «esta tarea». */
+  sinTitulo?: boolean;
   /** A quién se le entrega la tarea (su nombre corto, el del globo). */
   para?: string | null;
   hora?: HoraVoz | null;
@@ -80,16 +83,12 @@ export function conLetras(texto: string): boolean {
 const may = (t: string) => `${t.charAt(0).toUpperCase()}${t.slice(1)}`;
 
 /**
- * La frase con el nombre de la tarea, sin el código (§4): «Acabo de terminar
- * esta.» → «Acabo de terminar esta: Re-QA de la Oficina global.»; una pregunta
- * va seguida: «¿Por esta? Instalar la Oficina global en la real.». Sin nombre
- * (o si de él no queda nada que decir), la frase sola.
+ * La frase con la tarea dentro (JST-415): «Acabo de terminar esta.» → «Acabo de terminar el re-QA de la Oficina global.»; una
+ * pregunta, «¿Por esta?» → «¿Por la instalación de la versión?». Sin título, «esta tarea». Nunca «esta: …»: la tarea
+ * reemplaza al «esta» de la frase (`src/nombrarTarea.ts`); una frase sin «esta» queda como está.
  */
-export function conTarea(texto: string, tarea: string | null | undefined): string {
-  const t = tareaParaVoz(tarea, TOPES_OFICINA);
-  if (!t) return texto;
-  if (/[?!]$/.test(texto)) return `${texto} ${may(t)}.`;
-  return `${texto.replace(/[.…]+$/u, "")}: ${t}.`;
+export function conTarea(texto: string, tarea: string | null | undefined, sinTitulo = false): string {
+  return nombrarTarea(texto, tarea, sinTitulo);
 }
 
 /** «a las 15:40», «a la 1:05». */
@@ -117,7 +116,7 @@ export function pedidosDeCharla(lineas: readonly Linea[]): PedidoOficina[] {
   return lineas.map((l) => {
     const primera = !!l.codigo && !dichas.has(l.codigo);
     if (l.codigo) dichas.add(l.codigo);
-    return { clase: "charla", agenteId: l.quien, texto: l.texto, tarea: primera ? l.titulo : null, ...(l.aperturaIa ? { apertura: l.aperturaIa } : {}) };
+    return { clase: "charla", agenteId: l.quien, texto: l.texto, tarea: primera ? l.titulo : null, ...(primera && !l.titulo ? { sinTitulo: true } : {}), ...(l.aperturaIa ? { apertura: l.aperturaIa } : {}) };
   });
 }
 
@@ -135,7 +134,7 @@ function textoDelGlobo(p: PedidoOficina): string | null {
   switch (p.clase) {
     case "charla":
     case "suelta":
-      return p.texto ? conTarea(p.texto, p.tarea) : null;
+      return p.texto ? conTarea(p.texto, p.tarea, !!p.sinTitulo) : null;
     case "mascota": {
       const t = p.texto ? paraLeer(p.texto) : "";
       return conLetras(t) ? t : null;
@@ -166,7 +165,7 @@ export const VOCES_MASCOTA: Readonly<Record<IdMascota, { id: string; motor: Moto
   robot: { id: "mascota-robot", motor: "edge", clave: "es-CL-LorenzoNeural", pitch: "+25Hz", rate: "-5%" },
 };
 
-const MASCOTAS: ReadonlySet<string> = new Set(Object.keys(DICEN));
+const MASCOTAS: ReadonlySet<string> = new Set(["gato", "perro", "conejo", "robot"]);
 const NOMBRE = new RegExp(`^${NOMBRE_EN_FRASE}$`, "u");
 const sinControl = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
 const id = (v: unknown): v is string => sinControl(v, 80);
@@ -188,8 +187,9 @@ export function validarPedidoOficina(x: unknown): PedidoOficina | null {
   if (tarea === undefined) return null;
   if (clase === "mascota") {
     if (!MASCOTAS.has(p.mascota as string) || typeof p.texto !== "string") return null;
-    if (DICEN[p.mascota!].includes(p.texto)) return { clase, agenteId: null, mascota: p.mascota!, texto: p.texto };
-    if (Object.values(DICEN).some((frases) => frases.includes(p.texto!))) return null;
+    const propia = fraseDeMascota(p.mascota!, p.texto);
+    if (propia === "propia") return { clase, agenteId: null, mascota: p.mascota!, texto: p.texto };
+    if (propia === "de otra") return null;
     return revisarMascota(p.mascota!, p.texto).length === 0 ? { clase, agenteId: null, mascota: p.mascota!, texto: p.texto, ia: true } : null;
   }
   if (!id(p.agenteId)) return null;
@@ -197,7 +197,8 @@ export function validarPedidoOficina(x: unknown): PedidoOficina | null {
   switch (clase) {
     case "charla": {
       if (typeof p.texto !== "string") return null;
-      if (fraseDeCharla(p.texto)) return { clase, agenteId, texto: p.texto, tarea };
+      const sinTitulo = p.sinTitulo === true;
+      if (fraseDeCharla(p.texto)) return { clase, agenteId, texto: p.texto, tarea, ...(sinTitulo ? { sinTitulo } : {}) };
       const a = p.apertura;
       if (a && sinControl(a.plantilla, 100) && a.datos && typeof a.datos === "object") {
         const datos: Record<string, string> = {};
@@ -214,7 +215,10 @@ export function validarPedidoOficina(x: unknown): PedidoOficina | null {
     }
     case "suelta":
       if (typeof p.texto !== "string" || !conLetras(p.texto)) return null;
-      if (fraseSuelta(p.texto)) return { clase, agenteId, texto: p.texto, tarea: SUELTAS_CON_DATO.includes(p.texto) ? tarea : null };
+      if (fraseSuelta(p.texto)) {
+        const conTarea_ = SUELTAS_CON_DATO.includes(p.texto);
+        return { clase, agenteId, texto: p.texto, tarea: conTarea_ ? tarea : null, ...(conTarea_ && p.sinTitulo === true ? { sinTitulo: true } : {}) };
+      }
       return fraseIaParaVoz(p.texto) ? { clase, agenteId, texto: p.texto, tarea: null, ia: true } : null;
     case "entrega":
     case "sobre":
