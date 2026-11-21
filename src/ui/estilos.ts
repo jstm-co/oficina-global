@@ -15,6 +15,7 @@ import { CSS_LISTA } from "./estilosLista.js";
 import { CSS_RESUMEN } from "./estilosResumen.js";
 import { CSS_CONTEXTO } from "./estilosContexto.js";
 import { CSS_ROTULO } from "./estilosRotulo.js";
+import { CSS_TAREA } from "./estilosTarea.js";
 import { CSS_VENTANA } from "./estilosVentana.js";
 import { CSS_VOCES } from "./estilosVoces.js";
 import { CSS_VIDA } from "./estilosVida.js";
@@ -554,7 +555,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 `;
 
 /** La hoja entera: la de la 0.1.x, las piezas de la 0.2.0 (JST-95), la vida de la 0.3.0 (JST-96) y el Resumen de la 0.9.0 (JST-246), cada una en su archivo. */
-const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES + CSS_3D;
+const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_TAREA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES + CSS_3D;
 
 const STYLE_ID = "jstm-oficina-pixel-estilos";
 

@@ -27,6 +27,9 @@ import { anchoCelular, anchoComputador, armarPiso, armarPisoComputador, armarSal
 import type { Vida } from "../vida.js";
 import { PLUGIN_KEY } from "../shared.js";
 import { contarVista, type AgenteVista } from "../vista.js";
+import { hrefTarea } from "../estado.js";
+import { abreAqui, tareaDeHref } from "../tarea.js";
+import { TareaModal } from "./tarea.js";
 import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
 import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
@@ -225,6 +228,27 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   const location = useHostLocation();
   // Con todas las empresas: la activa puede ser una sin agentes, que no se dibuja.
   const enlazar = useEnlazar(usePrefijoActivo(context, [...oficina.empresas, ...oficina.ocultas]));
+  // JST-411: el enlace a una tarea (de la ficha) la abre aquí, en un modal. Con Ctrl, ⌘, Mayús o el botón del medio
+  // manda el navegador, y un enlace con ancla (`#interaction`: algo que se responde en la tarea) va a su página.
+  const [tareaAbierta, setTareaAbierta] = useState<{ prefijo: string; ref: string } | null>(null);
+  const enlazarTarea = useCallback<Enlazar>(
+    (href) => {
+      const base = enlazar(href);
+      const tarea = href.includes("#") ? null : tareaDeHref(href);
+      if (!tarea) return base;
+      return {
+        href: base.href,
+        // La ficha lo mira para no dibujar la flecha de enlace externo.
+        ["data-aqui" as string]: "",
+        onClick: (e) => {
+          if (!abreAqui(e)) return;
+          e.preventDefault();
+          setTareaAbierta(tarea);
+        },
+      };
+    },
+    [enlazar],
+  );
   const urlTv = useUrlTv();
   const { ref, ancho, altoLibre, dpr, estilo } = useContenedor();
   const previas = useSalasPrevias();
@@ -437,7 +461,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
       sync={oficina.sync}
       ahora={ahora}
       rm={rm}
-      enlazar={enlazar}
+      enlazar={enlazarTarea}
       onCerrar={cerrarFicha}
       onSeleccionar={setSel}
       onResponder={(i) => responderDesde(agente.id, anclaFila, i)}
@@ -656,6 +680,24 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             avisar={avisar}
           />
         </Capa>
+      ) : null}
+      {tareaAbierta && !tv ? (
+        <TareaModal
+          key={`${tareaAbierta.prefijo}/${tareaAbierta.ref}`}
+          tarea={tareaAbierta}
+          agentes={oficina.agentes}
+          usuarioId={context.userId}
+          celular={celular}
+          ahora={ahora}
+          hrefPagina={hrefTarea(tareaAbierta.prefijo, tareaAbierta.ref)}
+          enlacePagina={enlazar(hrefTarea(tareaAbierta.prefijo, tareaAbierta.ref))}
+          onCerrar={() => setTareaAbierta(null)}
+          avisar={avisar}
+          onCambio={() => {
+            const empresa = [...oficina.empresas, ...oficina.ocultas].find((e) => e.prefijo === tareaAbierta.prefijo.toUpperCase());
+            if (empresa) void oficina.sync?.refrescarAtencion(empresa.id);
+          }}
+        />
       ) : null}
       {!tv ? <SubtituloVoz agentes={oficina.agentes} rm={rm} /> : null}
       {!tv ? <ReproductorResumen /> : null}

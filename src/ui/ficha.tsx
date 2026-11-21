@@ -57,10 +57,12 @@ function Boton({ href, enlazar, children, clase }: { href: string | null; enlaza
       </span>
     );
   }
+  // JST-411: si el enlace se abre aquí mismo (el modal de tarea), no lleva la flecha de «sale de la Oficina».
+  const props = enlazar(href);
   return (
-    <a className={cx("of-btn", clase)} {...enlazar(href)}>
+    <a className={cx("of-btn", clase)} {...props}>
       {children}
-      <Icono nombre="arrow-up-right" tam={14} />
+      {"data-aqui" in props ? null : <Icono nombre="arrow-up-right" tam={14} />}
     </a>
   );
 }
