@@ -22,6 +22,10 @@ import {
   type ComentarioTarea,
 } from "../tarea.js";
 import { Capa, useAtraparFoco, useEsc } from "./capas.js";
+import { contexto, useContexto } from "./contextoBarra.js";
+import { PanelContexto } from "./contextoEscrito.js";
+import { soltarDe } from "./contextoLugar.js";
+import { BotonContextoVentana } from "./contextoVentana.js";
 import { cx, EtiquetaEmpresa, Icono } from "./piso.js";
 import { cambiarEstado, comentar, leerComentarios, leerTarea, marcarLeida, type DetalleTarea } from "./tareaDatos.js";
 
@@ -159,6 +163,12 @@ function Descripcion({ texto }: { texto: string }) {
   );
 }
 
+/** El informe escrito del modal: suscrito aquí, para que cada frase que avanza redibuje solo este trozo y no todo el modal. */
+function EscritoModal({ tarea, celular }: { tarea: string; celular: boolean }) {
+  const c = useContexto();
+  return <PanelContexto c={c} tarea={tarea} lugar="modal" celular={celular} dentro />;
+}
+
 export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagina, enlacePagina, onCerrar, avisar, onCambio }: PropsTareaModal): ReactNode {
   const clave = `${tarea.prefijo}/${tarea.ref}`;
   const ref = useRef<HTMLDivElement>(null);
@@ -192,6 +202,14 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
     botonEstado.current?.focus();
   });
   useEsc(true, onCerrar);
+  // «Leer contexto» (JST-414): lo que se lee desde el modal se calla y su informe escrito se cierra con él.
+  useEffect(
+    () => () => {
+      soltarDe(contexto, "modal");
+      if (contexto.activo() && contexto.tarea === tarea.ref) contexto.detener();
+    },
+    [tarea.ref],
+  );
 
   const detalle = hilo.tarea;
   const idTitulo = `of-tk-t-${tarea.ref.replace(/[^a-z0-9_-]/gi, "")}`;
@@ -237,6 +255,7 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
             <EtiquetaEmpresa prefijo={tarea.prefijo} solida />
             <span className="of-tk-cod">{codigo ?? tarea.ref}</span>
             <span className="of-sp" />
+            {hilo.errorTarea ? null : <BotonContextoVentana tarea={tarea.ref} codigo={codigo ?? t("la tarea")} celular={celular} lugar="modal" chico={celular} />}
             <a className="of-btn is-sm is-ghost" title={t("Abrir la página de la tarea, con todo su detalle")} {...enlacePagina} href={hrefPagina}>
               <Icono nombre="external-link" tam={14} />
               <span className="of-tk-full">{t("Página completa")}</span>
@@ -280,6 +299,8 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                     <span className="of-sk of-tk-sk" style={{ width: "70%", height: 20 }} aria-hidden="true" />
                   </h3>
                 )}
+
+                <EscritoModal tarea={tarea.ref} celular={celular} />
 
                 <section className="of-tk-sec" aria-label={t("Descripción")}>
                   <h4>{t("Descripción")}</h4>

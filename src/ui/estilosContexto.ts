@@ -33,20 +33,36 @@ export const CSS_CONTEXTO = /* css */ `
 .of-ctx.is-m.is-borde:focus-visible { outline: none; }
 .of-ctx.is-m.is-borde:focus-visible::before { outline: 2px solid var(--of-ring); outline-offset: 2px; }
 
-/* Sin voz en español: todas las frases, escritas, bajo el botón (computador) o bajo la barra (celular) */
-.of-ctx-esc { position: fixed; z-index: 1150; width: 380px; max-width: calc(100vw - 16px); max-height: 340px; overflow: auto; padding: 6px 8px 8px; background: var(--of-popover);
+/* El informe escrito (JST-414): siempre que se lee, con sus partes y la frase que va marcada. Flota bajo el botón
+   (computador) o bajo la barra (celular); en la ventana de responder y en el modal va dentro (is-in); desde la
+   franja «Te necesitan» flota bajo ella. Alto máximo con scroll propio: la cabecera queda a la vista. */
+.of-ctx-esc { position: fixed; z-index: 1150; width: 400px; max-width: calc(100vw - 16px); max-height: min(540px, calc(100vh - 120px)); display: flex; flex-direction: column; overflow: hidden; background: var(--of-popover);
   border: 1px solid var(--of-border-strong); border-radius: 12px; box-shadow: var(--of-shadow-pop); font-size: 13.5px; line-height: 20px; color: var(--of-fg); text-align: left; }
-.of-ctx-eh { display: flex; align-items: flex-start; gap: 8px; padding: 6px 2px 8px 6px; font-size: 12.5px; line-height: 17px; color: var(--of-muted-fg); }
-.of-ctx-eh > svg { margin-top: 1px; flex: none; }
-.of-ctx-eh b { color: var(--of-fg); font-weight: 500; }
-.of-ctx-eh > span { flex: 1; }
-.of-ctx-eh .of-ibtn { width: 26px; height: 26px; margin: -4px -2px 0 0; flex: none; }
-.of-ctx-esc p { margin: 0; padding: 5px 8px 5px 10px; border-radius: 8px; position: relative; }
-.of-ctx-esc p.is-fut { color: var(--of-muted-fg); }
-.of-ctx-esc p.is-cur { background: var(--of-hover-strong); }
-.of-ctx-esc p.is-cur::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--of-fg); }
+.of-ctx-ph { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--of-border); }
+.of-ctx-pt { font-size: 13px; font-weight: 600; }
+.of-ctx-dur { font-size: 12px; color: var(--of-muted-fg); font-variant-numeric: tabular-nums; }
+.of-ctx-bts { flex: none; display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.of-ctx-niv { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--of-muted); }
+.of-ctx-niv button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--of-muted-fg); font: inherit; font-size: 12px; font-weight: 500; line-height: 1; cursor: pointer; }
+.of-ctx-niv button:hover:not(:disabled) { color: var(--of-fg); }
+.of-ctx-niv button[aria-pressed="true"] { background: var(--of-bg); color: var(--of-fg); box-shadow: 0 0 0 1px var(--of-border); }
+.of-ctx-niv button:focus-visible, .of-ctx-fr:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-ctx-niv button:disabled, .of-ctx-ib:disabled, .of-ctx-fr:disabled { cursor: progress; opacity: .6; }
+.of-ctx-ib { width: 28px; height: 28px; flex: none; }
+.of-ctx-sv { flex: none; display: flex; align-items: flex-start; gap: 8px; padding: 6px 12px; font-size: 12.5px; line-height: 17px; color: var(--of-muted-fg); border-bottom: 1px solid var(--of-border); }
+.of-ctx-sv > svg { margin-top: 1px; flex: none; }
+.of-ctx-sv b { color: var(--of-fg); font-weight: 500; }
+.of-ctx-pc { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 2px 6px 8px; }
+.of-ctx-sh { margin: 8px 0 1px; padding: 0 10px; font-size: 11.5px; font-weight: 600; line-height: 16px; color: var(--of-muted-fg); }
+.of-ctx-fr { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 5px 8px 5px 10px; border: 0; border-radius: 8px; position: relative; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.of-ctx-fr:hover:not(:disabled) { background: var(--of-hover-strong); }
+.of-ctx-fr.is-fut { color: var(--of-muted-fg); }
+.of-ctx-fr.is-cur { background: var(--of-hover-strong); }
+.of-ctx-fr.is-cur::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--of-fg); }
 .of-ctx-esc.is-m { width: auto; max-width: none; max-height: 52vh; font-size: 14px; }
-.of-ctx-esc.is-m .of-ctx-eh .of-ibtn { width: 44px; height: 44px; margin: -12px -6px -8px 0; }
+.of-ctx-esc.is-m .of-ctx-ph { padding: 4px 4px 4px 12px; }
+.of-ctx-esc.is-m .of-ctx-ib { width: 40px; height: 40px; }
+.of-ctx-esc.is-m .of-ctx-niv button { height: 32px; padding: 0 12px; font-size: 13px; }
 
 /* Celular: «No se pudo», 8 px bajo la barra, 4 s */
 .of-ctx-toast { position: fixed; z-index: 1150; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--of-popover); border: 1px solid var(--of-danger-border);
@@ -67,10 +83,16 @@ export const CSS_CONTEXTO = /* css */ `
 /* «Detener» con ■ (la ✕ de la ventana la cierra) */
 .of-ctx > svg.of-ctx-stop { width: 15px; height: 15px; }
 .of-rw .of-ctx.is-m > svg.of-ctx-stop { width: 19px; height: 19px; }
-/* Sin voz: dentro de la ventana, bajo la fila de la tarea. «flex: none» porque .of-rw-b es una columna que baja y, sin eso, lo aplasta a una línea en el celular. */
-.of-ctx-esc.is-in { flex: none; position: static; z-index: auto; width: auto; max-width: none; max-height: 172px; box-shadow: none; border-color: var(--of-border); background: var(--of-muted); padding: 4px 6px 6px; }
-.of-ctx-esc.is-in.is-m { max-height: 38vh; }
-.of-ctx-esc.is-in p.is-cur { background: var(--of-popover); }
+/* Dentro de la ventana de responder o del modal, bajo la fila de la tarea. «flex: none» porque .of-rw-b es una columna que baja y, sin eso, lo aplasta a una línea en el celular. */
+.of-ctx-esc.is-in { flex: none; position: static; z-index: auto; width: auto; max-width: none; max-height: 260px; box-shadow: none; border-color: var(--of-border); background: var(--of-muted); }
+.of-ctx-esc.is-in.is-m { max-height: 42vh; }
+.of-ctx-esc.is-in .of-ctx-fr.is-cur { background: var(--of-popover); }
+.of-ctx-esc.is-in .of-ctx-niv { background: var(--of-border); }
+/* «Leer contexto» en cada tarjeta de «Te necesitan» y en el modal de tarea: solo el ícono */
+.of-ctx.of-ctx-chico { min-width: 0; width: 24px; height: 24px; padding: 0; justify-content: center; border-color: transparent; border-radius: 7px; flex: none; }
+.of-ctx.of-ctx-chico.is-g { width: 36px; height: 36px; }
+.of-ctx.of-ctx-chico:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-ctx.of-ctx-chico.is-leyendo { border-color: var(--of-border-strong); }
 /* La pestaña que se lee */
 .of-rw-step .of-ctx-pil { color: var(--of-s-toca); margin-left: -2px; animation: of-ctx-late 1.2s ease-in-out infinite; }
 @keyframes of-ctx-late { 50% { opacity: .45; } }
