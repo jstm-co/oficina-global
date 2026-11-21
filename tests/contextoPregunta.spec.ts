@@ -1,7 +1,7 @@
 // Lo que te preguntan en una tarea, para «Leer contexto» (JST-273), con tarjetas y comentarios reales de JSTM
 // (leídos de la real el 25-10, solo con GET).
 import { describe, expect, it } from "vitest";
-import { dichoDeTarjeta, preguntaPendiente, teTocaDelHilo, type ComentarioHilo } from "../src/ui/contextoPregunta.js";
+import { dichoDeTarjeta, preguntaPendiente, TE_TOCA, teTocaDelHilo, type ComentarioHilo } from "../src/ui/contextoPregunta.js";
 import type { Interaccion } from "../src/shared.js";
 
 let n = 0;
@@ -132,5 +132,21 @@ describe("sin tarjeta: el último «🙋 Te toca»", () => {
   it("un comentario que no es «Te toca», o ninguno: nada", () => {
     expect(teTocaDelHilo([comentario("Me toca revisar esto mañana: te toca después.", "2026-10-25T10:00:00.000Z")])).toBeNull();
     expect(teTocaDelHilo([])).toBeNull();
+  });
+});
+
+describe("TE_TOCA no se queda rebuscando", () => {
+  it("5.000 espacios al principio se resuelven en menos de 100 ms (con y sin «Te toca» al final)", () => {
+    const t0 = performance.now();
+    expect(TE_TOCA.test(`${" ".repeat(5000)}hola`)).toBe(false);
+    expect(TE_TOCA.test(`${" ".repeat(5000)}**🙋 Te toca:** revisar`)).toBe(true);
+    expect(TE_TOCA.test(`${" ".repeat(5000)}*_ 🙋 ${" ".repeat(5000)}te  toca`)).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(100);
+  });
+
+  it("sigue entendiendo el emoji, la negrita y los espacios de siempre", () => {
+    for (const c of ["🙋 Te toca: x", "  **Te toca**: x", "_te toca_ : x", "🙋️ TE  TOCA :  x"]) expect(TE_TOCA.test(c), c).toBe(true);
+    expect(TE_TOCA.exec("🙋 Te toca:   revisar")![0]).toBe("🙋 Te toca:   ");
+    expect(TE_TOCA.test("Me toca revisar: x")).toBe(false);
   });
 });

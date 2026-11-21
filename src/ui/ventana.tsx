@@ -40,8 +40,8 @@ import { hace, type AgenteVista } from "../vista.js";
 import { useAtraparFoco, useEsc } from "./capas.js";
 import type { Enlazar } from "./ficha.js";
 import { CajaPersonaje, cx, EtiquetaEmpresa, Icono } from "./piso.js";
-import { BotonContextoVentana, callarSiEsDeOtra, callarSiLee, ErrorVentana, EscritoVentana, leeEsta, tareaDeEspera } from "./contextoVentana.js";
-import { contexto, useContexto } from "./contextoBarra.js";
+import { BotonContextoVentana, callarAlCerrar, callarSiEsDeOtra, callarSiLee, ErrorVentana, EscritoVentana, leeEsta, tareaDeEspera } from "./contextoVentana.js";
+import { useContexto } from "./contextoBarra.js";
 
 export interface PropsVentana {
   /** El agente que espera, con sus esperas vivas (`teNecesita`, la más antigua primero). */
@@ -210,7 +210,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
   useContexto();
   const tareaCtx = tareaDeEspera(espera);
   useEffect(() => callarSiEsDeOtra(tareaCtx), [tareaCtx]);
-  useEffect(() => () => contexto.detener(), []);
+  useEffect(() => callarAlCerrar, []);
 
   // El borrador de la espera (lo escrito y lo marcado).
   const borrador: Borrador | null = espera && contenido ? (borradores.get(espera.itemId) ?? borradorInicial(contenido)) : null;

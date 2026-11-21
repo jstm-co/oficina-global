@@ -13,8 +13,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
 import { useHostContext, useHostLocation } from "@paperclipai/plugin-sdk/ui";
 import { t } from "../i18n.js";
-import { textoDeTarea } from "./botonContexto.js";
 import { Capa } from "./capas.js";
+import { PanelContexto } from "./contextoEscrito.js";
+import { soltarDe, tocarEn, visibleEn } from "./contextoLugar.js";
+import { useNivelContexto } from "./contextoNivel.js";
 import { LectorContexto, msEscrita, tareaDeRuta, type EstadoContexto, type VozContexto } from "./contextoLector.js";
 import { VozContextoElegida } from "./contextoMotor.js";
 import { calentarVoz } from "./eleccion.js";
@@ -255,39 +257,6 @@ function useBajoBoton(boton: RefObject<HTMLElement | null>, activo: boolean, cel
   return activo ? pos : null;
 }
 
-/**
- * Sin voz en español (§5): todas las frases escritas, con la que va marcada; sigue a la que va. En la barra va flotando
- * (`estilo`); en la ventana de responder (JST-321) va `dentro`, bajo la fila de la tarea, sin flotar ni tapar.
- */
-export function EscritoContexto({ c, celular, estilo, dentro = false }: { c: LectorContexto; celular: boolean; estilo?: CSSProperties; dentro?: boolean }) {
-  const caja = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = caja.current;
-    const cur = el?.querySelector<HTMLElement>("p.is-cur");
-    if (!el || !cur) return;
-    const arriba = cur.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-    if (arriba < el.scrollTop + 40 || arriba + cur.offsetHeight > el.scrollTop + el.clientHeight - 8) el.scrollTop = Math.max(0, arriba - 48);
-  }, [c.k]);
-  return (
-    <div ref={caja} className={cx("of-ctx-esc", dentro && "is-in", celular && "is-m")} style={estilo} role="region" aria-label={t("Contexto de la tarea, escrito")}>
-      <div className="of-ctx-eh">
-        <Icono nombre="volume-x" tam={14} />
-        <span>
-          <b>{t("Este navegador no tiene voz en español.")}</b> {t("Te lo dejo escrito.")}
-        </span>
-        <button type="button" className="of-ibtn is-ghost" aria-label={t("Detener lectura")} title={t("Detener")} onClick={() => c.detener()}>
-          <Icono nombre="x" tam={celular ? 18 : 14} />
-        </button>
-      </div>
-      {c.frases.map((f, i) => (
-        <p key={i} className={i === c.k ? "is-cur" : i > c.k ? "is-fut" : undefined} aria-current={i === c.k ? "true" : undefined}>
-          {f}
-        </p>
-      ))}
-    </div>
-  );
-}
-
 /** El botón de la barra de arriba; no dibuja nada fuera de la página de una tarea. */
 export function BotonContextoBarra() {
   const location = useHostLocation();
@@ -296,6 +265,7 @@ export function BotonContextoBarra() {
   const rm = useMovimientoReducido();
   const c = useContexto();
   const host = useHostContext();
+  const nivel = useNivelContexto();
   empresaDeVoz = host.companyId ?? empresaDeVoz;
   const boton = useRef<HTMLButtonElement>(null);
   const caja = useRef<HTMLSpanElement>(null);
@@ -303,11 +273,15 @@ export function BotonContextoBarra() {
   // Al ir a otra tarea o a otra página (o si el host quita la barra), se calla (§6).
   useEffect(() => {
     if (!tarea) return;
-    return () => contexto.detener();
+    // Al salir de la tarea se calla y el informe escrito se cierra.
+    return () => {
+      soltarDe(contexto, "barra");
+      contexto.detener();
+    };
   }, [tarea]);
   const propia = !!tarea && c.tarea === tarea;
   const e: EstadoContexto = propia ? c.estado : "listo";
-  const escrito = propia && e === "leyendo" && c.sinVoz && c.frases.length > 0;
+  const escrito = visibleEn(c, "barra", tarea);
   const aviso = propia && e === "error" && celular;
   const bajo = useBajoBoton(boton, escrito || aviso, celular, c.version);
   if (!tarea) return null;
@@ -324,7 +298,7 @@ export function BotonContextoBarra() {
         onPointerEnter={() => calentarVoz("contexto", empresaDeVoz ?? resumen.empresaDeVoz())}
         onClick={() => {
           calentarVoz("contexto", empresaDeVoz ?? resumen.empresaDeVoz());
-          c.tocar(tarea, () => textoDeTarea(tarea));
+          tocarEn(c, "barra", tarea, nivel);
         }}
       >
         <Icono nombre={ICONO[e]} tam={celular ? 18 : 14} className={e === "cargando" ? "of-spin" : undefined} />
@@ -336,7 +310,7 @@ export function BotonContextoBarra() {
       </span>
       {escrito && bajo ? (
         <Capa>
-          <EscritoContexto c={c} celular={celular} estilo={bajo} />
+          <PanelContexto c={c} tarea={tarea} lugar="barra" celular={celular} estilo={bajo} />
         </Capa>
       ) : null}
       {aviso && bajo ? (

@@ -133,8 +133,11 @@ export interface ComentarioHilo {
   presentation?: { kind?: string | null } | null;
 }
 
-/** «🙋 Te toca:» al principio, con o sin el emoji y la negrita. */
-const TE_TOCA = /^\s*[*_]*\s*(?:\p{Extended_Pictographic}️?\s*)?[*_]*\s*te\s+toca\s*[*_]*\s*:\s*[*_]*\s*/iu;
+/**
+ * «🙋 Te toca:» al principio, con o sin el emoji y la negrita. Sin tramos de espacios seguidos que puedan quedar
+ * vacíos: con miles de espacios al principio no se queda rebuscando (corre sobre cada comentario).
+ */
+export const TE_TOCA = /^[\s*_]*(?:\p{Extended_Pictographic}\uFE0F?[\s*_]*)?te\s+toca[\s*_]*:[\s*_]*/iu;
 /** Donde termina la primera frase del comentario: un punto, «?» o «!» seguido de un espacio, o un fin de línea. */
 const FIN_FRASE = /[.?!](?=\s|$)|\n/u;
 
@@ -154,7 +157,7 @@ export interface TeToca {
  */
 export function teTocaDelHilo(comentarios: readonly ComentarioHilo[]): TeToca | null {
   const ultimo = comentarios
-    .filter((c) => c.body?.trim() && !esComentarioAutomatico(c) && !enIngles(c.body))
+    .filter((c) => typeof c.body === "string" && c.body.trim() && !esComentarioAutomatico(c) && !enIngles(c.body))
     .reduce<ComentarioHilo | null>((a, c) => (!a || (Date.parse(c.createdAt ?? "") || 0) > (Date.parse(a.createdAt ?? "") || 0) ? c : a), null);
   if (!ultimo) return null;
   const m = TE_TOCA.exec(ultimo.body);
