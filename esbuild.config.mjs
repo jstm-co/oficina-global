@@ -1,4 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import esbuild from "esbuild";
 import { createPluginBundlerPresets } from "@paperclipai/plugin-sdk/bundlers";
 import { versionDeBuild } from "./scripts/version.mjs";
@@ -9,7 +10,19 @@ const defineVersion = {
   __OFICINA_VERSION__: JSON.stringify(datosVersion.version),
   __OFICINA_SHA__: JSON.stringify(datosVersion.sha),
 };
-const conVersion = (config) => ({ ...config, define: { ...config.define, ...defineVersion } });
+// Lo propio de una instancia (JST-419): si en la raíz hay un `instancia.local.ts` (no entra a git), el build lo
+// usa en lugar de `src/instancia.ts`, que en el repo va de ejemplo. Así la copia instalada lleva el personaje fijo
+// de sus agentes y cómo se pronuncian sus nombres sin que esos datos se publiquen. Las pruebas usan el de ejemplo.
+const INSTANCIA_LOCAL = resolve("instancia.local.ts");
+const INSTANCIA_REPO = resolve("src/instancia.js");
+const instanciaLocal = {
+  name: "instancia-local",
+  setup(build) {
+    if (!existsSync(INSTANCIA_LOCAL)) return;
+    build.onResolve({ filter: /(^|\/)instancia\.js$/ }, (args) => (resolve(args.resolveDir, args.path) === INSTANCIA_REPO ? { path: INSTANCIA_LOCAL } : null));
+  },
+};
+const conVersion = (config) => ({ ...config, define: { ...config.define, ...defineVersion }, plugins: [...(config.plugins ?? []), instanciaLocal] });
 
 // Los sprites y el sonido del aviso (JST-95) van dentro del bundle como data-URL (ver src/ui/sprites.ts).
 const loader = { ".png": "dataurl", ".mp3": "dataurl" };
@@ -82,10 +95,10 @@ await Promise.all([
   esbuild.build(conVersion(presets.esbuild.worker)),
   esbuild.build(conVersion(presets.esbuild.manifest)),
   esbuild.build(conVersion({ ...presets.esbuild.ui, loader: { ...presets.esbuild.ui.loader, ...loader } })),
-  esbuild.build(tv),
-  esbuild.build(oficina3d),
-  esbuild.build(voces),
-  esbuild.build(motorSupertonic),
+  esbuild.build({ ...tv, plugins: [instanciaLocal] }),
+  esbuild.build({ ...oficina3d, plugins: [instanciaLocal] }),
+  esbuild.build({ ...voces, plugins: [instanciaLocal] }),
+  esbuild.build({ ...motorSupertonic, plugins: [instanciaLocal] }),
   existsSync(sonda.entryPoints[0]) ? esbuild.build(sonda) : null,
 ]);
 mkdirSync("dist/ui", { recursive: true });
@@ -93,4 +106,4 @@ copyFileSync("static/tv.html", "dist/ui/tv.html");
 if (!readFileSync("dist/ui/index.js", "utf8").includes("data-oficina-version")) {
   throw new Error("The UI bundle does not contain the version footer.");
 }
-console.log(`Build: ${datosVersion.version} · ${datosVersion.sha}`);
+console.log(`Build: ${datosVersion.version} · ${datosVersion.sha}${existsSync(INSTANCIA_LOCAL) ? " · with instancia.local.ts" : ""}`);

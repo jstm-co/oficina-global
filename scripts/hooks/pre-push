@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Control antes de cada `git push`: nada privado sale a GitHub (JST-419).
+
+`subir.py` lo instala en la carpeta de hooks del clon (vale para todas sus copias de
+trabajo), junto con una copia del revisor (`oficina_revisar.py`, el de develop). De cada
+rama o tag que se sube revisa lo que GitHub todavía no tiene: todos los archivos de todos
+los commits nuevos con sus nombres, los mensajes y las firmas de esos commits, el nombre
+de la rama o del tag y, si es un tag anotado, su mensaje. Si encuentra algo, o si no
+puede leer los datos de la instancia, el push no sale.
+Tampoco deja subir directo a `develop` ni a `main`: ahí todo entra por pull request.
+
+`subir.py` ya hace esta misma revisión (y más). Esto es para el `git push` hecho a mano.
+"""
+import sys
+
+if sys.version_info < (3, 10):
+    print(f"pre-push: este control necesita Python 3.10 o más nuevo y `python3` es {sys.version.split()[0]}. "
+          "No subí nada: pon un python3 más nuevo delante en el PATH.")
+    sys.exit(1)
+
+import importlib.util
+import subprocess
+from pathlib import Path
+
+CEROS = "0" * 40
+CACHE_SEGUNDOS = 15 * 60
+PROTEGIDAS = {"refs/heads/develop", "refs/heads/main"}
+
+
+def git(*args: str, ok=(0,)) -> str:
+    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    if r.returncode not in ok:
+        raise SystemExit(f"pre-push: falló git {' '.join(args)}\n{r.stderr}")
+    return r.stdout.strip()
+
+
+def nombre_del_remoto(nombre: str, url: str) -> str:
+    """El remoto al que se sube, por su nombre: con él se sabe qué tiene ya ese remoto (y solo ese)."""
+    remotos = git("remote").split()
+    if nombre in remotos:
+        return nombre
+    for r in remotos:  # se subió nombrando la dirección: es el remoto que la tiene
+        if url in (git("remote", "get-url", r, ok=(0, 2, 128)), git("config", "--get", f"remote.{r}.url", ok=(0, 1))):
+            return r
+    return ""
+
+
+def main() -> int:
+    subidas = [linea.split() for linea in sys.stdin.read().splitlines() if linea.strip()]
+    directas = sorted({remota for _, sha, remota, _ in subidas if sha != CEROS and remota in PROTEGIDAS})
+    if directas:
+        print(f"pre-push: no se sube directo a {' ni a '.join(r.rsplit('/', 1)[1] for r in directas)}: ahí todo entra por pull request. "
+              "Sube tu rama y abre el PR (subir.py lo hace).")
+        return 1
+    subidas = [(sha, remota) for _, sha, remota, _ in subidas if sha != CEROS]  # borrar una rama no sube nada
+    if not subidas:
+        return 0
+
+    repo = Path(git("rev-parse", "--show-toplevel"))
+    comun = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir"))
+    instalado = Path(__file__).resolve().parent / "oficina_revisar.py"
+    spec = importlib.util.spec_from_file_location("revisar", instalado if instalado.is_file() else repo / "scripts" / "revisar.py")
+    revisar = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(revisar)
+    try:
+        revisor = revisar.armar(repo, cache=comun / "oficina-revisar-cache.json", vale=CACHE_SEGUNDOS)
+    except revisar.SinDatos as error:
+        print(f"pre-push: {error}")
+        return 1
+
+    remoto = nombre_del_remoto(sys.argv[1] if len(sys.argv) > 1 else "", sys.argv[2] if len(sys.argv) > 2 else "")
+    # Lo que ese remoto todavía no tiene. Si no se sabe cuál es, todo lo que alcanza el commit: mejor de más.
+    ya_esta = ["--not", f"--remotes={remoto}"] if remoto else []
+    hallazgos = 0
+    for sha, remota in subidas:
+        hallazgos += revisor.ruta(remota.split("/", 2)[2] if remota.count("/") >= 2 else remota)
+        if git("cat-file", "-t", sha) == "tag":
+            hallazgos += revisor.tag(repo, sha)
+        hallazgos += revisor.commits(repo, sha, *ya_esta)
+        hallazgos += revisor.objetos(repo, sha, *ya_esta)
+    if hallazgos:
+        print(f"\npre-push: {hallazgos} hallazgos de datos privados. No subí nada: este repo es público.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
