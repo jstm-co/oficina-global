@@ -368,28 +368,5 @@ export function Leyenda({ celular }: { celular: boolean }) {
   );
 }
 
-/**
- * «Mascotas» (JST-96 §8): muestra u oculta las 4 mascotas del pasillo. La
- * elección se guarda en el navegador y vale para la página, el widget y el TV.
- * En el celular, solo el ícono.
- */
-export function BotonMascotas({ celular }: { celular: boolean }) {
-  const { mascotas } = useAjustes();
-  const titulo = mascotas ? t("Ocultar las mascotas (se guarda en este navegador)") : t("Mostrar las mascotas (se guarda en este navegador)");
-  const alternar = () => cambiarAjustes({ mascotas: !mascotas });
-  if (celular) {
-    return (
-      <button type="button" className={cx("of-ibtn is-ghost of-petbtn is-m", !mascotas && "is-off")} aria-pressed={mascotas} aria-label={mascotas ? t("Mascotas") : t("Mascotas ocultas")} title={titulo} onClick={alternar}>
-        <Icono nombre="paw-print" tam={14} />
-      </button>
-    );
-  }
-  return (
-    <button type="button" className={cx("of-btn is-sm of-petbtn", !mascotas && "is-off")} aria-pressed={mascotas} title={titulo} onClick={alternar}>
-      <Icono nombre="paw-print" tam={14} />
-      {mascotas ? t("Mascotas") : t("Mascotas ocultas")}
-    </button>
-  );
-}
-
+// «Mascotas» (JST-96 §8) pasó al menú «Ambiente» (`menuAmbiente.tsx`), también en el celular (JST-416).
 // «Conversaciones» (JST-162 §4) pasó a abrir un menú en la 0.7.0 (JST-231): `menuConversaciones.tsx`.

@@ -30,8 +30,29 @@ import pisoBaldosaClaro from "./assets/baldosas/piso-baldosa-claro.png";
 import pisoBaldosaOscuro from "./assets/baldosas/piso-baldosa-oscuro.png";
 import pisoMaderaClaro from "./assets/baldosas/piso-madera-claro.png";
 import pisoMaderaOscuro from "./assets/baldosas/piso-madera-oscuro.png";
+import mueblesMadera from "./assets/decorados/madera/muebles.png";
+import maderaDescansoClaro from "./assets/decorados/madera/baldosas/madera-descanso-claro.png";
+import maderaDescansoOscuro from "./assets/decorados/madera/baldosas/madera-descanso-oscuro.png";
+import maderaParedBetClaro from "./assets/decorados/madera/baldosas/madera-pared-bet-claro.png";
+import maderaParedBetOscuro from "./assets/decorados/madera/baldosas/madera-pared-bet-oscuro.png";
+import maderaParedElmClaro from "./assets/decorados/madera/baldosas/madera-pared-elm-claro.png";
+import maderaParedElmOscuro from "./assets/decorados/madera/baldosas/madera-pared-elm-oscuro.png";
+import maderaParedJstClaro from "./assets/decorados/madera/baldosas/madera-pared-jst-claro.png";
+import maderaParedJstOscuro from "./assets/decorados/madera/baldosas/madera-pared-jst-oscuro.png";
+import maderaParedMigClaro from "./assets/decorados/madera/baldosas/madera-pared-mig-claro.png";
+import maderaParedMigOscuro from "./assets/decorados/madera/baldosas/madera-pared-mig-oscuro.png";
+import maderaParedNoneClaro from "./assets/decorados/madera/baldosas/madera-pared-none-claro.png";
+import maderaParedNoneOscuro from "./assets/decorados/madera/baldosas/madera-pared-none-oscuro.png";
+import maderaPisoClaro from "./assets/decorados/madera/baldosas/madera-piso-claro.png";
+import maderaPisoOscuro from "./assets/decorados/madera/baldosas/madera-piso-oscuro.png";
 
 export const HOJAS = { personajes: personajesPng, efectos: efectosPng, muebles: mueblesPng, mascotas: mascotasPng };
+
+/**
+ * Hoja de muebles de cada decorado que no es el clásico (JST-416): la misma disposición que `muebles.png` (un solo
+ * `muebles.json`). Los pone `estilosDecorado.ts` en `--of-img-mu` de las salas con ese decorado.
+ */
+export const HOJAS_DECORADO = { madera: mueblesMadera };
 
 /** Baldosas que se repiten, en `-claro` y `-oscuro` (la hoja de estilos elige según el tema). */
 export const BALDOSAS: Readonly<Record<string, string>> = {
@@ -55,6 +76,21 @@ export const BALDOSAS: Readonly<Record<string, string>> = {
   "piso-baldosa-oscuro": pisoBaldosaOscuro,
   "piso-madera-claro": pisoMaderaClaro,
   "piso-madera-oscuro": pisoMaderaOscuro,
+  // Baldosas de los decorados (JST-416), con el id del decorado delante.
+  "madera-descanso-claro": maderaDescansoClaro,
+  "madera-descanso-oscuro": maderaDescansoOscuro,
+  "madera-pared-bet-claro": maderaParedBetClaro,
+  "madera-pared-bet-oscuro": maderaParedBetOscuro,
+  "madera-pared-elm-claro": maderaParedElmClaro,
+  "madera-pared-elm-oscuro": maderaParedElmOscuro,
+  "madera-pared-jst-claro": maderaParedJstClaro,
+  "madera-pared-jst-oscuro": maderaParedJstOscuro,
+  "madera-pared-mig-claro": maderaParedMigClaro,
+  "madera-pared-mig-oscuro": maderaParedMigOscuro,
+  "madera-pared-none-claro": maderaParedNoneClaro,
+  "madera-pared-none-oscuro": maderaParedNoneOscuro,
+  "madera-piso-claro": maderaPisoClaro,
+  "madera-piso-oscuro": maderaPisoOscuro,
 };
 
 export type Animacion = keyof typeof PERSONAJES.animaciones;

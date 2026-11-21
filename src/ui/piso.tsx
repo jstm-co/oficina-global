@@ -28,7 +28,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 import { hash } from "../aspecto.js";
 import { spriteConPies } from "../caminos.js";
-import { claseEscala, CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
+import { claseEscala, CON_COLOR, MURO, spriteDe, type Pieza, type PisoPlano, type SalaPlano } from "../plano.js";
 import { lineasDe, nombreQueCabe, tituloDe, unCorteMenos, type Linea } from "../charlas.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
 import { t } from "../i18n.js";
@@ -39,6 +39,11 @@ import type { Sincronizador } from "../sincronizador.js";
 import { entregaDeEvento, ROTULO_PISO, Vida, type AgenteVida, type VistaCharla, type VistaFuera, type VistaJunta, type VistaMascota, type VistaRotulo, type VistaSobre, type VistaSobreMano, type VistaSuelta } from "../vida.js";
 import { ESTADOS, etiqueta, pisoDeAbajo, type AgenteVista, type Dibujo, type PisoAbajo } from "../vista.js";
 import { useAjustes } from "./ajustes.js";
+import { resolverDecorado, type DecoradoId } from "../decorado.js";
+import { mueblesDeSala } from "../adornos.js";
+import { adornoDeHoy, ahoraOficina, enChileAhora, type Adorno } from "../fechas.js";
+import { luzDeSala } from "../luzSala.js";
+import { useAhora } from "./ahora.js";
 import { tx } from "./i18n.js";
 import { fuenteIa, registrarPisoIa, registroUsoIa, useIaActiva } from "./ia.js";
 import { PATHS, type NombreIcono } from "./iconos.js";
@@ -526,23 +531,52 @@ function SobreMano({ s, vida }: { s: VistaSobreMano; vida: Vida }) {
 // ---------------------------------------------------------------------------
 
 /** Lo quieto de una sala (muro, alfombra, muebles y placa): no se vuelve a dibujar cuando alguien camina. */
-const FondoSala = memo(function FondoSala({ sala, nombre, numero, oscuro }: { sala: SalaPlano; nombre: string; numero: string; oscuro: boolean }) {
+const FondoSala = memo(function FondoSala({
+  sala,
+  nombre,
+  numero,
+  ventana,
+  decorado,
+  adorno,
+  escala,
+  luz,
+}: {
+  sala: SalaPlano;
+  nombre: string;
+  numero: string;
+  /** La ventana que se dibuja: la de día o la de noche (por la hora, o por el tema si la luz está apagada). */
+  ventana: "dia" | "noche";
+  decorado: DecoradoId;
+  adorno: Adorno | null;
+  /** Pixeles de pantalla por pixel de arte (a escala 1 la placa no escala y no se cuelga nada del muro). */
+  escala: number;
+  /** Se dibuja el halo de las lámparas y la chimenea: con la luz según la hora encendida y solo mientras brilla (de día, no hay). */
+  luz: boolean;
+}) {
   const gris = !CON_COLOR.includes(sala.prefijo);
+  // JST-416: el decorado cambia lo que se dibuja (la hoja y alguna pieza de igual huella), no el plano ni los caminos; el
+  // adorno de la fecha va encima (una planta se vuelve árbol o calabaza, y se cuelga algo del muro).
+  const muebles = mueblesDeSala(sala, decorado, adorno, escala);
   return (
     <>
       <div className="of-zona of-alfombra" style={{ "--x": 0, "--y": MURO, "--w": sala.anchoEscritorios, "--h": sala.h - MURO } as CSSProperties} />
       <div className="of-zona of-madera" style={{ "--x": sala.anchoEscritorios, "--y": MURO, "--w": sala.w - sala.anchoEscritorios, "--h": sala.h - MURO } as CSSProperties} />
       <div className="of-muro" style={{ "--x": 0, "--y": 0, "--w": sala.w, "--h": MURO } as CSSProperties} />
-      {sala.muebles.map((m, i) => (
+      {muebles.map((m, i) => (
         <Mueble
           key={i}
-          nombre={m.nombre === "ventana" ? (oscuro ? "ventana-noche" : "ventana-dia") : m.nombre}
+          nombre={m.nombre === "ventana" ? `ventana-${ventana}` : m.nombre}
           x={m.x}
           y={m.y}
           z={m.z}
           className={gris && m.nombre.startsWith("cuadro-") ? "of-gris" : undefined}
         />
       ))}
+      {luz
+        ? muebles.flatMap((m, i) =>
+            m.nombre === "lampara" || m.nombre === "chimenea" ? [<span key={`h${i}`} className={cx("of-halo", m.nombre === "chimenea" && "is-fuego")} style={m.nombre === "chimenea" ? ({ "--x": m.x + 14, "--y": m.y + 15, "--r": 20 } as CSSProperties) : ({ "--x": m.x + 5, "--y": m.y + 3, "--r": 15 } as CSSProperties)} aria-hidden="true" />] : [],
+          )
+        : null}
       <div className="of-placa">
         <EtiquetaEmpresa prefijo={sala.prefijo} solida />
         <span>{nombre}</span>
@@ -852,6 +886,8 @@ interface PropsSala {
   empresa: EmpresaVista | undefined;
   agentes: readonly AgenteVista[];
   o: OpcionesPiso;
+  /** Pixeles de pantalla por pixel de arte del piso. */
+  escala: number;
   atenuada: boolean;
   /** Celular, piso entero: la sala es el objetivo y se acerca al tocarla. */
   onAcercar?: (prefijo: string) => void;
@@ -868,11 +904,18 @@ interface PropsSala {
   onEscritorio: ((prefijo: string, el: HTMLElement) => void) | null;
 }
 
-function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vida, revisores, horaDe, ahoraDe, titulo, onEscritorio }: PropsSala) {
+function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReintentar, vida, revisores, horaDe, ahoraDe, titulo, onEscritorio }: PropsSala) {
   // Se vuelve a dibujar cuando cambia la forma de esta sala (alguien llega, dobla, un sobre cambia de fase).
   useSyncExternalStore(vida.suscribir, () => vida.version(sala.prefijo));
   // 0.6.0: el globo que suena lleva el 🔊.
   const marca = useMarcaVoz();
+  // JST-416: el decorado de esta sala (el de toda la oficina, el repartido o el de su empresa); cambia al instante.
+  const aj = useAjustes();
+  const decorado = resolverDecorado(aj, sala.prefijo);
+  // JST-416 (etapa 2): la luz según la hora y el adorno de la fecha; se releen cada pocos minutos, sin recargar.
+  const fecha = ahoraOficina(new Date(useAhora()));
+  const luz = aj.luz ? luzDeSala(fecha, o.oscuro) : null;
+  const adorno = aj.fechas ? adornoDeHoy(fecha, enChileAhora()) : null;
   const salaRef = useRef<HTMLDivElement>(null);
   const nombre = empresa?.nombre ?? sala.prefijo;
   const cargando = !empresa || empresa.estado.cargando;
@@ -1108,8 +1151,8 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
   return (
     <div
       ref={salaRef}
-      className={cx("of-sala", claseEmpresa(sala.prefijo), atenuada && "is-dim", acercable && "is-zoom")}
-      style={{ "--x": sala.x, "--y": sala.y, "--w": sala.w, "--h": sala.h } as CSSProperties}
+      className={cx("of-sala", claseEmpresa(sala.prefijo), decorado !== "clasico" && `of-dec-${decorado}`, atenuada && "is-dim", acercable && "is-zoom")}
+      style={{ "--x": sala.x, "--y": sala.y, "--w": sala.w, "--h": sala.h, ...(luz ? { "--of-halo": luz.halo } : {}) } as CSSProperties}
       data-sala={sala.prefijo}
       {...fijar}
       {...(acercable
@@ -1127,7 +1170,8 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
           }
         : {})}
     >
-      <FondoSala sala={sala} nombre={nombre} numero={empresa?.conocidos ? String(empresa.agentes) : ""} oscuro={o.oscuro} />
+      <FondoSala sala={sala} nombre={nombre} numero={empresa?.conocidos ? String(empresa.agentes) : ""} ventana={luz ? luz.ventana : o.oscuro ? "noche" : "dia"} decorado={decorado} adorno={adorno} escala={escala} luz={!!luz && luz.halo > 0} />
+      {luz && luz.tinte !== "#ffffff" ? <div className="of-tinte" style={{ backgroundColor: luz.tinte }} aria-hidden="true" /> : null}
       {contenido}
       {/* Después de los agentes de la sala en el orden del teclado (§3.5). */}
       {rotuloEl}
@@ -1420,6 +1464,7 @@ export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReinten
           empresa={porPrefijo.get(sala.prefijo)}
           agentes={agentes.filter((a) => a.prefijo === sala.prefijo)}
           o={o}
+          escala={plano.escala}
           atenuada={filtro.length > 0 && !filtro.includes(sala.prefijo)}
           onAcercar={onAcercar}
           onReintentar={onReintentar}

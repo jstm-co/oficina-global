@@ -1,7 +1,7 @@
 {
  "imagen": "muebles.png",
  "ancho": 256,
- "alto": 153,
+ "alto": 162,
  "piezas": {
   "escritorio": {
    "x": 0,
@@ -434,6 +434,60 @@
    "y": 131,
    "w": 16,
    "h": 16
+  },
+  "chimenea": {
+   "x": 85,
+   "y": 131,
+   "w": 28,
+   "h": 22
+  },
+  "arbol-navidad": {
+   "x": 114,
+   "y": 131,
+   "w": 12,
+   "h": 18
+  },
+  "arbol-navidad-grande": {
+   "x": 127,
+   "y": 131,
+   "w": 14,
+   "h": 24
+  },
+  "guirnalda-navidad": {
+   "x": 142,
+   "y": 131,
+   "w": 28,
+   "h": 9
+  },
+  "guirnalda-dieciocho": {
+   "x": 171,
+   "y": 131,
+   "w": 28,
+   "h": 10
+  },
+  "bandera-chile": {
+   "x": 200,
+   "y": 131,
+   "w": 13,
+   "h": 10
+  },
+  "calabaza": {
+   "x": 214,
+   "y": 131,
+   "w": 12,
+   "h": 18
+  },
+  "telarana": {
+   "x": 227,
+   "y": 131,
+   "w": 23,
+   "h": 12
+  },
+  "murcielago": {
+   "x": 0,
+   "y": 156,
+   "w": 10,
+   "h": 6
   }
  },
  "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje.",
