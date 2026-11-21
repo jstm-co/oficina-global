@@ -228,7 +228,7 @@ describe("ajustes (§6)", () => {
     expect(AJUSTES_POR_OMISION.charlas).toBe(true);
     // Lo que guarda la 0.3.8 en `localStorage` (sin `charlas`): todo igual, y las conversaciones encendidas.
     const de038 = { avisos: true, sonido: false, voces: true, frases: { toca: true, error: false, fin: true, emp: true }, presentacion: "nombre", mascotas: false };
-    expect(leerAjustes(JSON.stringify(de038))).toEqual({ ...de038, frases: { ...de038.frases, ...NUEVAS_FRASES }, nivel: "normal", charlas: true, detalle: AJUSTES_POR_OMISION.detalle, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(leerAjustes(JSON.stringify(de038))).toEqual({ ...de038, frases: { ...de038.frases, ...NUEVAS_FRASES }, nivel: "normal", charlas: true, detalle: AJUSTES_POR_OMISION.detalle, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false, decorado: "clasico", decoradoPorEmpresa: {}, luz: true, fechas: true });
     // Apagado se guarda y se lee apagado; un valor raro vuelve a encendido.
     expect(leerAjustes(JSON.stringify({ ...de038, charlas: false })).charlas).toBe(false);
     expect(leerAjustes(JSON.stringify({ charlas: "no" })).charlas).toBe(true);
@@ -366,7 +366,7 @@ describe("ajustes 0.5.0: «y de qué se trata» por frase", () => {
 
   it("lo que guardó la 0.4.0 (sin `detalle`) se lee igual, con las 4 prendidas", () => {
     const de040 = { avisos: true, sonido: false, voces: true, frases: { toca: true, error: false, fin: true, emp: true }, presentacion: "nombre", mascotas: false, charlas: false };
-    expect(leerAjustes(JSON.stringify(de040))).toEqual({ ...de040, frases: { ...de040.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { toca: true, error: true, fin: true, emp: true, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(leerAjustes(JSON.stringify(de040))).toEqual({ ...de040, frases: { ...de040.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { toca: true, error: true, fin: true, emp: true, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false, decorado: "clasico", decoradoPorEmpresa: {}, luz: true, fechas: true });
   });
 
   it("apagado se guarda y se lee apagado; lo raro vuelve a prendido; lo demás no cambia", () => {
@@ -400,7 +400,7 @@ describe("ajustes 0.6.0: qué se lee de la oficina (JST-225 §6)", () => {
 
   it("lo que guardó la 0.5.3 se lee igual y queda con `leer` por omisión: quien tenía las voces prendidas oye las conversaciones", () => {
     const a = leerAjustes(JSON.stringify(de053));
-    expect(a).toEqual({ ...de053, frases: { ...de053.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { ...de053.detalle, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(a).toEqual({ ...de053, frases: { ...de053.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { ...de053.detalle, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false, decorado: "clasico", decoradoPorEmpresa: {}, luz: true, fechas: true });
     expect(leeOficina(a, "charlas")).toBe(true);
     for (const t of ["entregas", "mascotas", "sueltas", "hora"] as const) expect(leeOficina(a, t)).toBe(false);
     // Con el punto violeta en «Voces» hasta que abra el panel.

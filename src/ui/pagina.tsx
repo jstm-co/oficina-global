@@ -34,7 +34,7 @@ import { TareaModal } from "./tarea.js";
 import { esErrorViejo } from "../erroresViejos.js";
 import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
-import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
+import { Banners, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
 import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonAmbiente } from "./menuAmbiente.js";
 import { FranjaTeNecesitan } from "./franjaToca.js";
@@ -554,7 +554,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             <EstadoVivo oficina={oficina} corto />
             <span className="of-sp" />
             {rm ? <ChipAnimacionReducida soloIcono /> : null}
-            <BotonMascotas celular />
+            <BotonAmbiente agentes={oficina.agentes} empresas={oficina.empresas} celular />
             <BotonConversaciones celular />
             <Menores {...pCont} xs />
             <BotonesAvisos celular agentes={oficina.agentes} rm={rm} />
@@ -602,7 +602,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             {/* Con la vista 3D abierta, va en su barra (el menú abierto es uno para los dos botones). */}
             {en3d ? null : <BotonResumen />}
             <BotonesAvisos celular={false} agentes={oficina.agentes} rm={rm} />
-            <BotonAmbiente agentes={oficina.agentes} />
+            <BotonAmbiente agentes={oficina.agentes} empresas={oficina.empresas} />
             <button type="button" className="of-btn is-sm" title={t("Camina por la oficina en primera persona, desde tu escritorio")} onClick={abrir3d} disabled={!vidaPiso}>
               <Icono nombre="box" tam={14} />
               {t("Vista 3D")}

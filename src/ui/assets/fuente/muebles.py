@@ -424,7 +424,174 @@ def pliegues():
 GIRAN = ["planta", "planta-grande", "lampara"]
 
 
-def build(OUT):
+# ---------------------------------------------------------------- adornos por fecha (JST-416, etapa 2)
+# Van encima de cualquier decorado: están en el atlas de todas las hojas, con los mismos colores (festivos, no del decorado).
+def arbol_navidad(w, h):
+    """Árbol de Navidad con luces y estrella, del tamaño de la planta que reemplaza (12x18 o 14x24)."""
+    p = Pic(w, h)
+    V, V2, V3 = hx("#2f8a4a"), hx("#226b38"), hx("#4fb06a")
+    cx = w // 2
+    alto = h - 5  # del vértice al pie
+    luces = [hx("#e0443e"), hx("#f2d36b"), hx("#84bdf2"), hx("#f2d36b")]
+    for y in range(alto):
+        ancho = 1 + round((w - 3) * (y + 1) / alto)
+        ancho = max(3, min(w - 2, ancho + (1 if y % 4 == 3 else 0)))
+        x0 = cx - ancho // 2
+        p.rect(x0, 2 + y, ancho, 1, O)
+        p.rect(x0 + 1, 2 + y, max(0, ancho - 2), 1, V if y % 3 else V2)
+    for y in range(3, alto + 1, 4):
+        ancho = 1 + round((w - 3) * (y + 1) / alto)
+        p.hline(cx - ancho // 2 + 1, 2 + y, max(0, ancho - 2), V3)
+    # luces repartidas en zigzag
+    k = 0
+    for y in range(4, alto + 1, 3):
+        ancho = 1 + round((w - 3) * (y + 1) / alto)
+        x = cx - ancho // 2 + 1 + ((k * 3) % max(1, ancho - 2))
+        p.px(x, 2 + y, luces[k % 4])
+        p.px(cx - ancho // 2 + 1 + ((k * 3 + 4) % max(1, ancho - 2)), 3 + y, luces[(k + 2) % 4])
+        k += 1
+    # estrella y tronco
+    p.px(cx, 0, hx("#f7d34a")); p.px(cx - 1, 1, hx("#f7d34a")); p.px(cx, 1, hx("#fff2a8")); p.px(cx + 1, 1, hx("#f7d34a"))
+    p.rect(cx - 1, h - 3, 2, 3, O); p.rect(cx - 1, h - 3, 2, 2, hx("#7a4a2a"))
+    p.hline(cx - 3, h - 1, 6, O)
+    return p.im
+
+
+def _cuerda(w, caida):
+    """Curva de una guirnalda (puntos de arriba hacia abajo): cae `caida` px en el medio. Devuelve [(x, y)]."""
+    import math
+    return [(x, round(caida * math.sin(math.pi * x / (w - 1)))) for x in range(w)]
+
+
+def guirnalda_navidad():
+    """Guirnalda de pino con luces y lazos rojos en las puntas, 28x9."""
+    p = Pic(28, 9)
+    V, V2 = hx("#2f8a4a"), hx("#226b38")
+    luces = [hx("#e0443e"), hx("#f2d36b"), hx("#84bdf2"), hx("#f2d36b")]
+    pts = _cuerda(28, 3)
+    for x, y in pts:
+        p.px(x, y, O); p.px(x, y + 1, V if x % 2 else V2); p.px(x, y + 2, V2 if x % 2 else V)
+        p.px(x, y + 3, O) if x % 3 == 0 else None
+    for k, (x, y) in enumerate(pts[3:26:4]):
+        p.px(x, y + 3, luces[k % 4]); p.px(x, y + 4, light(luces[k % 4], .2))
+    for x in (0, 26):
+        p.rect(x, 0, 2, 3, hx("#c8413b")); p.px(x, 0, hx("#e0443e")); p.hline(x, 3, 2, O)
+    return p.im
+
+
+def guirnalda_dieciocho():
+    """Banderines rojo, blanco y azul (fiestas patrias), 28x10."""
+    p = Pic(28, 10)
+    colores = [hx("#d52b1e"), hx("#f6f2ea"), hx("#1f4fb4")]
+    pts = _cuerda(28, 2)
+    for x, y in pts:
+        p.px(x, y, O)
+    for k, x0 in enumerate(range(2, 25, 5)):
+        c = colores[k % 3]
+        y0 = pts[x0 + 1][1] + 1
+        borde = dark(c, .45) if k % 3 == 1 else dark(c, .3)
+        for j, ancho in enumerate((5, 4, 3, 2, 1)):
+            if y0 + j >= 10:
+                break
+            xi = x0 + (5 - ancho) // 2
+            p.rect(xi, y0 + j, ancho, 1, c)
+            p.px(xi, y0 + j, borde); p.px(xi + ancho - 1, y0 + j, borde)
+        p.hline(x0 + 1, y0, 3, c); p.px(x0, y0, borde); p.px(x0 + 4, y0, borde)
+    return p.im
+
+
+def bandera_chile():
+    """Bandera chilena chica en su asta, 13x10: franja blanca arriba, roja abajo y el cantón azul con la estrella."""
+    p = Pic(13, 10)
+    rojo, blanco, azul = hx("#d52b1e"), hx("#f6f2ea"), hx("#1f4fb4")
+    p.vline(0, 1, 9, hx("#6e4626")); p.px(0, 0, hx("#f7d34a"))
+    p.rect(1, 1, 12, 8, O)
+    p.rect(2, 2, 10, 3, blanco); p.rect(2, 5, 10, 3, rojo)
+    p.rect(2, 2, 4, 3, azul)
+    p.px(3, 2, blanco); p.px(2, 3, blanco); p.px(3, 3, blanco); p.px(4, 3, blanco); p.px(3, 4, blanco)
+    return p.im
+
+
+def calabaza():
+    """Calabaza con cara iluminada, 12x18 (el cuerpo apoya en el suelo; arriba queda libre)."""
+    p = Pic(12, 18)
+    N, N2, N3 = hx("#f08a24"), hx("#c8631a"), hx("#ffb454")
+    # cuerpo: elipse de 12x11 con costillas
+    for y in range(11):
+        dy = (y - 5) / 5.4
+        mitad = 6 * (1 - dy * dy) ** 0.5
+        x0, x1 = round(6 - mitad), round(6 + mitad)
+        for x in range(x0, x1):
+            borde = x == x0 or x == x1 - 1 or y in (0, 10)
+            p.px(x, 6 + y, O if borde else (N2 if x in (3, 8) else N))
+    p.rect(5, 3, 2, 3, hx("#3f9a5a")); p.px(5, 3, O); p.px(6, 3, O); p.px(4, 5, O); p.px(7, 5, O)
+    p.rect(4, 4, 1, 1, O); p.rect(7, 4, 1, 1, O)
+    p.px(2, 8, N3); p.px(3, 8, N3)
+    cara = hx("#ffe28a")
+    for (x, y) in [(3, 9), (2, 10), (3, 10), (4, 10), (8, 9), (7, 10), (8, 10), (9, 10),
+                   (3, 13), (4, 13), (5, 13), (6, 13), (7, 13), (8, 13), (4, 14), (7, 14)]:
+        p.px(x, y, cara)
+    p.px(5, 14, O); p.px(6, 14, O)
+    return p.im
+
+
+def telarana():
+    """Telaraña colgando del muro, con su araña, 23x12."""
+    import math
+    p = Pic(23, 12)
+    hilo, hilo2 = hx("#e8e8ef"), hx("#b5bac6")
+    cx = 11
+    for ang in (-72, -36, 0, 36, 72):
+        a = math.radians(ang)
+        for r in range(0, 12):
+            p.px(round(cx + r * math.sin(a)), round(r * math.cos(a)), hilo if r % 3 else hilo2)
+    for r in (4, 7, 10):
+        for ang in range(-72, 73, 4):
+            a = math.radians(ang)
+            p.px(round(cx + r * math.sin(a)), round(r * math.cos(a)), hilo2)
+    p.vline(cx, 0, 1, hilo)
+    p.rect(cx - 1, 7, 3, 2, O); p.px(cx - 2, 6, O); p.px(cx + 2, 6, O); p.px(cx - 2, 9, O); p.px(cx + 2, 9, O)
+    return p.im
+
+
+def murcielago():
+    """Murciélago con las alas abiertas, 10x6."""
+    p = Pic(10, 6)
+    p.rows([".oo....oo.", "oooo..oooo", "ooooeeoooo", "oo.oooo.oo", "o...oo...o", "....oo...."], 0, 0, {"o": hx("#3b2a4d"), "e": hx("#e0443e")})
+    return p.im
+
+
+ADORNOS = {
+    "arbol-navidad": lambda: arbol_navidad(12, 18),
+    "arbol-navidad-grande": lambda: arbol_navidad(14, 24),
+    "guirnalda-navidad": guirnalda_navidad,
+    "guirnalda-dieciocho": guirnalda_dieciocho,
+    "bandera-chile": bandera_chile,
+    "calabaza": calabaza,
+    "telarana": telarana,
+    "murcielago": murcielago,
+}
+
+
+# Piezas que solo existen en algunos decorados (JST-416): su lugar en el atlas queda reservado, vacío, en la hoja
+# clásica, así todas las hojas comparten el mismo `muebles.json`. Nombre -> (ancho, alto). Las piezas nuevas van siempre al
+# final del atlas, y por eso la hoja clásica creció (de 153 a 162 px de alto): las 72 piezas de antes no se movieron
+# (`tests/decorado.spec.ts` congela su posición y su tamaño).
+RESERVADAS = {"chimenea": (28, 22)}
+
+PALETA_CLASICA = {
+    "sofa": "#5b6b8c",
+    "sofa-calido": "#b0645a",
+    "puff": "#e2b23c",
+    "puff-2": "#2f8a83",
+    "alfombra-sala": "#a35a4a",
+    "alfombra-sala-2": "#3f6f8f",
+}
+
+
+def piezas(paleta=None):
+    """Todas las piezas del atlas, por nombre, en el orden en que se empaquetan. `paleta` pisa los colores de los textiles."""
+    P = {**PALETA_CLASICA, **(paleta or {})}
     items = {}
     items["escritorio"] = escritorio()
     for k, c in CO.items():
@@ -432,8 +599,8 @@ def build(OUT):
     for tipo, n in [("apagada", 1), ("codigo", 5), ("error", 2), ("espera", 2), ("dormida", 1)]:
         for f in range(n):
             items[f"pantalla-{tipo}-{f}"] = pantalla(tipo, f)
-    items["sofa"] = sofa(hx("#5b6b8c"))
-    items["sofa-calido"] = sofa(hx("#b0645a"))
+    items["sofa"] = sofa(hx(P["sofa"]))
+    items["sofa-calido"] = sofa(hx(P["sofa-calido"]))
     items["cafetera"] = cafetera()
     items["planta"] = planta()
     items["planta-grande"] = planta(True)
@@ -446,12 +613,12 @@ def build(OUT):
     items["reloj"] = reloj()
     for k, c in CO.items():
         items[f"cuadro-{k}"] = cuadro(c)
-    items["puff"] = puff(hx("#e2b23c"))
-    items["puff-2"] = puff(hx("#2f8a83"))
+    items["puff"] = puff(hx(P["puff"]))
+    items["puff-2"] = puff(hx(P["puff-2"]))
     items["lampara"] = lampara()
     items["ascensor"] = ascensor()
-    items["alfombra-sala"] = alfombra_sala(hx("#a35a4a"))
-    items["alfombra-sala-2"] = alfombra_sala(hx("#3f6f8f"))
+    items["alfombra-sala"] = alfombra_sala(hx(P["alfombra-sala"]))
+    items["alfombra-sala-2"] = alfombra_sala(hx(P["alfombra-sala-2"]))
     items["pingpong"] = pingpong()
     items["arcade"] = arcade()
     for t, tn in ((0, "claro"), (1, "oscuro")):
@@ -463,14 +630,16 @@ def build(OUT):
             items[f"alfombra-{k}-{tn}"] = piso_alfombra(c, t)
             items[f"pared-{k}-{tn}"] = pared(c, t)
             items[f"papel-{k}-{tn}"] = pared_lateral(c, t)
-    # las baldosas también van sueltas: se repiten con background-repeat
-    tiles = OUT / "baldosas"
-    tiles.mkdir(exist_ok=True)
-    for k, im in items.items():
-        if k.split("-")[0] in ("piso", "alfombra", "pared", "papel", "losa", "ladrillo"):
-            im.save(tiles / f"{k}.png")
-    # empaquetado en filas simples
-    W = 256
+    for k, (w, h) in RESERVADAS.items():
+        items[k] = Pic(w, h).im
+    # Siempre al final: las piezas de antes no se mueven de lugar en el atlas.
+    for k, f in ADORNOS.items():
+        items[k] = f()
+    return items
+
+
+def disposicion(items, W=256):
+    """Dónde va cada pieza en el atlas (filas simples), según su tamaño: igual para todas las hojas. Devuelve (atlas, alto)."""
     x = y = rowh = 0
     atlas = {}
     for k, im in items.items():
@@ -479,11 +648,29 @@ def build(OUT):
         atlas[k] = (x, y, im.width, im.height)
         x += im.width + 1
         rowh = max(rowh, im.height)
-    sheet = Image.new("RGBA", (W, y + rowh), (0, 0, 0, 0))
+    return atlas, y + rowh
+
+
+def hoja(items, atlas, alto, W=256):
+    sheet = Image.new("RGBA", (W, alto), (0, 0, 0, 0))
     for k, (ax, ay, w, h) in atlas.items():
         sheet.paste(items[k], (ax, ay))
+    return sheet
+
+
+def build(OUT):
+    items = piezas()
+    # las baldosas también van sueltas: se repiten con background-repeat
+    tiles = OUT / "baldosas"
+    tiles.mkdir(exist_ok=True)
+    for k, im in items.items():
+        if k.split("-")[0] in ("piso", "alfombra", "pared", "papel", "losa", "ladrillo"):
+            im.save(tiles / f"{k}.png")
+    W = 256
+    atlas, alto = disposicion(items, W)
+    sheet = hoja(items, atlas, alto, W)
     sheet.save(OUT / "muebles.png")
-    meta = {"imagen": "muebles.png", "ancho": W, "alto": y + rowh, "piezas": {k: {"x": a[0], "y": a[1], "w": a[2], "h": a[3]} for k, a in atlas.items()},
+    meta = {"imagen": "muebles.png", "ancho": W, "alto": alto, "piezas": {k: {"x": a[0], "y": a[1], "w": a[2], "h": a[3]} for k, a in atlas.items()},
             "nota": "escritorio: pantalla en (2,1) 8x5; el personaje va en (10,-8) respecto del escritorio y la silla en (11,-3) detrás del personaje.",
             "pliegues": pliegues(), "giran": GIRAN}
     (OUT / "muebles.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))

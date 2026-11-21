@@ -18,8 +18,12 @@
 // JST-415: `nivel` (cuánto habla la oficina: tranquilo, normal o conversador) y las frases nuevas
 // `frases.bloq` («quedé bloqueado»), `frases.recordar`, `frases.volver` y `frases.hitos`, todas
 // encendidas; `detalle.bloq` (la tarea). Lo que guardó una versión anterior se lee igual.
+// JST-416 suma el decorado de las salas (`decorado`, `decoradoPorEmpresa`): lo que guardó una versión anterior se lee
+// igual y queda con el decorado clásico, el de siempre; y la luz según la hora (`luz`) y los adornos por fecha (`fechas`),
+// encendidos por omisión.
 import { useSyncExternalStore } from "react";
 import { claveDeFrase, type ClaveFrase, type Frase, type Presentacion } from "../avisos.js";
+import { DECORADO_POR_OMISION, esEleccion, limpiarPorEmpresa, type DecoradoId, type EleccionDecorado } from "../decorado.js";
 import { leerNivel, NIVEL_POR_OMISION, permiteExtras, permiteFrase, type Nivel } from "../nivel.js";
 
 /** Las frases extras (JST-415) que solo suenan en los niveles «normal» y «conversador», cada una con su casilla. */
@@ -65,6 +69,14 @@ export interface Ajustes {
   iaFuente: FuenteCharlas;
   /** 0.7.0: ya se abrió el menú «Conversaciones»: apaga su punto violeta para siempre. */
   iaVisto: boolean;
+  /** JST-416: el decorado de toda la oficina, o «repartidos» (a cada empresa le toca uno según su prefijo). «clasico» por omisión. */
+  decorado: EleccionDecorado;
+  /** JST-416: un decorado por empresa (prefijo → id); pisa a `decorado` («Ambiente» → «Decorado» → «Por sala»). */
+  decoradoPorEmpresa: Record<string, DecoradoId>;
+  /** JST-416: luz de día y de noche según la hora (tinte de las salas, ventanas, lámparas y chimenea). Encendida por omisión. */
+  luz: boolean;
+  /** JST-416: adornos de Navidad, fiestas patrias y Halloween en sus fechas. Encendidos por omisión. */
+  fechas: boolean;
 }
 
 /** Quién escribe las conversaciones (0.7.0): «ia» (la IA de Chrome) o «hoy» (las frases de siempre). */
@@ -87,6 +99,10 @@ export const AJUSTES_POR_OMISION: Ajustes = {
   vistoLeer: false,
   iaFuente: "ia",
   iaVisto: false,
+  decorado: DECORADO_POR_OMISION,
+  decoradoPorEmpresa: {},
+  luz: true,
+  fechas: true,
 };
 
 /** Lo guardado sobre lo de por omisión (un campo raro o que falte vuelve a su valor por omisión). */
@@ -126,6 +142,10 @@ export function leerAjustes(texto: string | null): Ajustes {
     vistoLeer: b(g.vistoLeer, d.vistoLeer),
     iaFuente: g.iaFuente === "ia" || g.iaFuente === "hoy" ? g.iaFuente : d.iaFuente,
     iaVisto: b(g.iaVisto, d.iaVisto),
+    decorado: esEleccion(g.decorado) ? g.decorado : d.decorado,
+    decoradoPorEmpresa: limpiarPorEmpresa(g.decoradoPorEmpresa),
+    luz: b(g.luz, d.luz),
+    fechas: b(g.fechas, d.fechas),
   };
 }
 
