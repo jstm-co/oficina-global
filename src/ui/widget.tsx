@@ -9,10 +9,12 @@
 // 0.3.0 (JST-96 §10): caminan y hay sobres y mascotas, pero no conversaciones.
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyTextToClipboard, useHostNavigation, usePluginToast, type PluginWidgetProps } from "@paperclipai/plugin-sdk/ui";
+import { t } from "../i18n.js";
 import { abreVentana } from "../lista.js";
 import { ANCHO_WIDGET, anchoWidgetCelular, armarPiso } from "../plano.js";
 import { PAGE_ROUTE } from "../shared.js";
 import { contarVista } from "../vista.js";
+import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
 import { Contadores, ContadoresCelular, ConteoEmpresas, type Resaltado } from "./encabezado.js";
 import { asegurarEstilos } from "./estilos.js";
@@ -68,7 +70,9 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [clave, ancho, celular],
   );
-  const c = contarVista(oficina.agentes);
+  // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
+  const silenciados = useErroresSilenciados();
+  const c = contarVista(oficina.agentes, ahora, silenciados);
   const pCont = {
     c,
     hl,
@@ -98,7 +102,7 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
         <ConteoEmpresas oficina={oficina} conAgentes={false} className="of-wsub" />
         <span className="of-sp" />
         <a className="of-wlink" {...abrir}>
-          Abrir
+          {t("Abrir")}
           <Icono nombre="arrow-right" tam={14} />
         </a>
       </div>
@@ -107,7 +111,7 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
         {caidas.length > 0 ? (
           <div className="of-wmsg">
             <Icono nombre="triangle-alert" tam={12} />
-            No pude leer {caidas.join(", ")}
+            {t("No pude leer {nombres}", { nombres: caidas.join(", ") })}
           </div>
         ) : null}
         <Piso

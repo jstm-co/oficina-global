@@ -4,7 +4,7 @@
 
 A [Paperclip](https://github.com/paperclipai/paperclip) plugin that draws the agents of **every company** in your instance in a pixel-art office: who is working, who needs you, who failed, who is paused and who is idle. You can answer their questions without leaving the office, get spoken notifications and leave it running on a TV.
 
-**The interface and the voices are in Spanish** (Chilean voices included). This README quotes the on-screen labels in Spanish, with a translation the first time they appear.
+**The interface is in English and Spanish.** It follows your browser's language, and a selector at the bottom of the page lets you switch. The voices, the spoken summary and the agents' chats are in Spanish (with voices from nine countries). This README quotes the on-screen labels as they read in Spanish, with their meaning the first time they appear.
 
 - Plugin key: `jstm.oficina-pixel` · npm package: `paperclip-plugin-oficina-global` · version `0.9.7`
 - Tested with Paperclip `2026.824.1`.
@@ -12,8 +12,10 @@ A [Paperclip](https://github.com/paperclipai/paperclip) plugin that draws the ag
 ## What it does
 
 - **One floor, one room per company.** Each agent has a desk and a character. While working, it types with its issue ID in a speech bubble; when it needs you, it raises its hand and lines up in front of your desk; on an error it turns red; when paused it sleeps; when idle it goes to the break room.
+- **Everything on one screen.** On a computer the whole floor fits under the header, from a laptop to a 4K monitor: the office picks the largest scale that fits and arranges the rooms to the shape of the screen. A strip at the top lists who needs you, each with its «Responder» (answer) button. An error older than a day, or one you mute from the agent's card, stops counting in the red counter and moves to «Errores antiguos» (old errors) in the list.
 - **It moves.** Agents walk between their desk and the break room. An issue handed from one agent to another travels in an envelope or is handed over at the table. Idle agents chat about what is actually going on in the office, and pets in the hallway react when you click them.
 - **Answer without leaving.** The questions, confirmations, suggested tasks and approvals that agents leave for you («Te toca», your turn) are answered in a window inside the office, with your session. The office only writes when you send an answer.
+- **Open an issue without leaving.** «Abrir tarea» (open issue) on an agent's card opens the issue in a window inside the office: its description, its comments with a box to add yours, and its status, which you can change there. Ctrl or ⌘ + click, or «Página completa» (full page), goes to the issue page. Opening it marks the issue as read, like opening its page.
 - **Notifications and voices** (off until you turn them on). When an agent starts needing you, a bell rings and its voice says what it needs («te necesito», I need you; «tengo un error», I have an error; «terminé», I'm done; «empecé», I started), with a different voice for each agent.
 - **Choosing the voices** (0.11.0). In «Voces» (Voices), «Quién habla» (Who speaks) sets the voice of the **Resumen** (the spoken summary), the voice of **«Leer contexto»** (reads an issue aloud) and, on its own page, the voice of **each agent**, with a ▶ to hear each one first. The two that read on the spot only accept voices that answer in a few seconds (Lorenzo, Catalina, Alex, Dora, Santa) or the browser's voice; the four clones can be chosen for agents only. Changing an agent's voice records its phrases in the background and switches when they are all ready, so it never goes silent in between.
 - **Room sign.** Under each room, a sign tells what each issue is about, one at a time.
@@ -97,11 +99,12 @@ In the office, open the «Voces» (voices) panel, pick the engines and press **P
 |---|---|---|---|
 | 10 voices (5 female, 5 male) | Supertonic 3 (int8, with `sherpa-onnx-node`) | Ships with the plugin: downloads 145 MB once and uses ~0.5 GB of memory while recording. Mac, Linux and Windows | OpenRAIL-M (the model); Apache 2.0 (`sherpa-onnx`) |
 | Lorenzo and Catalina (Chilean) | Microsoft Edge TTS (`edge-tts`) | `uv`, `ffmpeg` and internet access. Unofficial free service: **Microsoft receives the text of every phrase** (agent and issue names) | LGPL-3.0 (the library) |
+| 16 more Edge voices in Spanish from other countries, one woman and one man each: Dalia and Jorge (Mexico), Elvira and Álvaro (Spain), Elena and Tomás (Argentina), Salomé and Gonzalo (Colombia), Camila and Alex (Peru, shown as «Alex (Perú)»), Paloma and Alonso (United States), Paola and Sebastián (Venezuela), Valentina and Mateo (Uruguay) | Microsoft Edge TTS (`es-MX-DaliaNeural`, `es-ES-AlvaroNeural`, …) | Same as Lorenzo and Catalina: **Microsoft receives the text**. They are only for choosing (they are not handed out to agents on their own); their ▶ sample is recorded on the spot | LGPL-3.0 (the library) |
 | Alex, Dora and Santa | Kokoro-82M (`kokoro-onnx`) | `uv` and `ffmpeg`; downloads 354 MB once | Apache 2.0 |
 | 2 Chilean clones | Chatterbox Multilingual (`chatterbox-tts`) | `uv` and `ffmpeg`; 4–5 GB of memory and ~10 min per agent | MIT |
 | 2 Chilean clones | Qwen3-TTS 0.6B (`qwen-tts`) | Same as Chatterbox | Apache 2.0 |
 
-- Only the engines you pick are used. Edge is not used unless you pick it, so no text goes to Microsoft.
+- Only the engines you pick are used. Edge (Lorenzo, Catalina and the voices from other countries) is not used unless you pick it, so no text goes to Microsoft.
 - Supertonic needs neither `uv` nor `ffmpeg`. The others run with `uv run --with <package>` and need `uv` and `ffmpeg` on the `PATH` Paperclip starts with; the panel says which one can't be used and why.
 - The models go to `~/.cache/oficina-voces/` and are checked against their SHA-256 when downloaded.
 - The audio files live **outside the plugin**, so an upgrade doesn't delete them: in `~/Library/Application Support/oficina-global/voces/` on a Mac, `~/.local/share/oficina-global/voces/` on Linux and `%LOCALAPPDATA%\oficina-global\voces\` on Windows, in one folder per plugin install. On start, the plugin links (or copies) them into `dist/ui/voces/` to serve them. The first time, it adopts the ones that were already there.
@@ -143,6 +146,8 @@ npm run build       # dist/: worker, manifest, interface, tv.html and the voice 
 
 The code is in `src/` (the logic, without React or the DOM, kept apart from `src/ui/`), the tests in `tests/` and the voice generator in `generador/`. Code comments are in Spanish and mention issues from our internal board («JST-123»), which are not public.
 
+**Languages.** The Spanish text in the code is the source: `t("Sin asignar")` returns that text in Spanish and its translation in other languages (`src/i18n.ts`). English lives in `src/i18n/en/`, split by area. A new on-screen text goes through `t()` (or `tx()` with React nodes inside, `plural()` for counts) and gets its entry in the catalog; `tests/i18n.spec.ts` fails if one is missing or left over. To add a language, copy `src/i18n/en/`, translate the values and register it in `LOCALES` and `CATALOGS`. What is heard (voices, spoken summary, «Leer contexto») and what agents say to each other stays in Spanish and does not go through `t()`.
+
 ## Known limits
 
 - The Paperclip API routes it reads are not part of the SDK (they are all in `src/fuentes.ts`): they may change with a new Paperclip version.
@@ -150,7 +155,7 @@ The code is in `src/` (the logic, without React or the DOM, kept apart from `src
 - Sound and voices start with your first click on the tab after opening it.
 - iPhone has no full screen for web pages: TV mode explains how to add it to the home screen. It was not tested in Safari or on a real iPhone.
 - The 3D view needs WebGL 2 and is for computers only (not on phones or in TV mode).
-- Edge TTS is an unofficial service: if Microsoft changes it, the Lorenzo and Catalina voices stop generating until `edge-tts` is updated.
+- Edge TTS is an unofficial service: if Microsoft changes it, the Edge voices (Lorenzo, Catalina and the ones from other countries) stop generating until `edge-tts` is updated.
 
 ## Contributing and releases
 

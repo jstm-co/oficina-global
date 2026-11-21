@@ -1007,11 +1007,11 @@ export async function montar(contenedor: HTMLElement, datos: DatosVisor): Promis
 
   const mover = (dt: number) => {
     const s = dt / 1000;
-    const t = (c: string) => (teclas.has(c) ? 1 : 0);
-    yo.giro += (t("ArrowLeft") + t("KeyQ") - t("ArrowRight") - t("KeyE")) * GIRO * s;
+    const pulsada = (c: string) => (teclas.has(c) ? 1 : 0);
+    yo.giro += (pulsada("ArrowLeft") + pulsada("KeyQ") - pulsada("ArrowRight") - pulsada("KeyE")) * GIRO * s;
     const rapido = teclas.has("ShiftLeft") || teclas.has("ShiftRight");
-    const adelante = t("KeyW") + t("ArrowUp") - t("KeyS") - t("ArrowDown");
-    const lado = t("KeyD") - t("KeyA");
+    const adelante = pulsada("KeyW") + pulsada("ArrowUp") - pulsada("KeyS") - pulsada("ArrowDown");
+    const lado = pulsada("KeyD") - pulsada("KeyA");
     const fx = -Math.sin(yo.giro);
     const fz = -Math.cos(yo.giro);
     const rx = Math.cos(yo.giro);

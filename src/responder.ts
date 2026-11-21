@@ -8,6 +8,7 @@
 import type { Espera, TipoEspera } from "./estado.js";
 import type { Aprobacion, Interaccion } from "./shared.js";
 import type { RespuestaEnvio } from "./fuentes.js";
+import { msg, t } from "./i18n.js";
 
 /** Lo que se responde aquí, o `fuera` (se responde en Paperclip). */
 export type Clase = "preguntas" | "confirmacion" | "casillas" | "tareas" | "aprobacion" | "fuera";
@@ -34,21 +35,24 @@ export function claseDe(e: Pick<Espera, "tipo" | "clase">): Clase {
 export const seResponde = (e: Pick<Espera, "tipo" | "clase">) => claseDe(e) !== "fuera";
 
 const CHIP_CLASE: Record<Exclude<Clase, "fuera">, { label: string; icono: string }> = {
-  preguntas: { label: "Pregunta", icono: "message-square" },
-  confirmacion: { label: "Confirmación", icono: "circle-check" },
-  casillas: { label: "Lista de casillas", icono: "list-checks" },
-  tareas: { label: "Tareas sugeridas", icono: "list-plus" },
-  aprobacion: { label: "Aprobación", icono: "check-check" },
+  preguntas: { label: msg("Pregunta"), icono: "message-square" },
+  confirmacion: { label: msg("Confirmación"), icono: "circle-check" },
+  casillas: { label: msg("Lista de casillas"), icono: "list-checks" },
+  tareas: { label: msg("Tareas sugeridas"), icono: "list-plus" },
+  aprobacion: { label: msg("Aprobación"), icono: "check-check" },
 };
 
 const CHIP_FUERA: Record<TipoEspera, { label: string; icono: string }> = {
-  tarjeta: { label: "Tarjeta", icono: "message-square" },
-  aprobacion: { label: "Aprobación", icono: "check-check" },
-  revision: { label: "Revisión", icono: "eye" },
-  decision: { label: "Decisión", icono: "list-checks" },
+  tarjeta: { label: msg("Tarjeta"), icono: "message-square" },
+  aprobacion: { label: msg("Aprobación"), icono: "check-check" },
+  revision: { label: msg("Revisión"), icono: "eye" },
+  decision: { label: msg("Decisión"), icono: "list-checks" },
 };
 
-/** Chip de la espera (ventana, pasos, aviso): «Pregunta», «Confirmación»… En gris si se responde en Paperclip. */
+/**
+ * Chip de la espera (ventana, pasos, aviso): «Pregunta», «Confirmación»… En gris si se responde en Paperclip.
+ * `label` queda en español porque también lo leen las voces (JST-413): quien lo muestra en pantalla lo pasa por `t()`.
+ */
 export function chipDe(e: Pick<Espera, "tipo" | "clase">): { label: string; icono: string; fuera: boolean } {
   const c = claseDe(e);
   if (c === "fuera") return { ...CHIP_FUERA[e.tipo], fuera: true };
@@ -57,8 +61,8 @@ export function chipDe(e: Pick<Espera, "tipo" | "clase">): { label: string; icon
 
 /** Por qué no se responde aquí (va con el enlace a la tarea). */
 export function motivoFuera(e: Pick<Espera, "tipo">): string {
-  if (e.tipo === "revision") return "Las revisiones se hacen en la tarea, donde están el diff y los comentarios.";
-  return "Esto se responde en la tarea.";
+  if (e.tipo === "revision") return t("Las revisiones se hacen en la tarea, donde están el diff y los comentarios.");
+  return t("Esto se responde en la tarea.");
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +174,12 @@ export function contenidoDe(c: Exclude<Clase, "fuera">, d: Detalle, espera: Pick
     minimo: 0,
     maximo: null,
     tareas: [],
-    submit: "Enviar",
-    aceptar: "Aceptar",
-    rechazar: "Rechazar",
+    submit: t("Enviar"),
+    aceptar: t("Aceptar"),
+    rechazar: t("Rechazar"),
     motivoObligatorio: false,
     conMotivo: true,
-    etiquetaMotivo: "¿Por qué?",
+    etiquetaMotivo: t("¿Por qué?"),
     placeholderMotivo: null,
     riesgos: [],
     recomienda: null,
@@ -227,7 +231,7 @@ export function contenidoDe(c: Exclude<Clase, "fuera">, d: Detalle, espera: Pick
       return {
         ...base,
         ...rechazo,
-        etiquetaMotivo: texto(p.rejectReasonLabel) ?? "¿Por qué no?",
+        etiquetaMotivo: texto(p.rejectReasonLabel) ?? t("¿Por qué no?"),
         titulo: texto(p.prompt) ?? texto(i.title) ?? base.titulo,
         detalle: texto(p.detailsMarkdown),
         opciones,
@@ -246,9 +250,9 @@ export function contenidoDe(c: Exclude<Clase, "fuera">, d: Detalle, espera: Pick
       }));
       return {
         ...base,
-        aceptar: "Crear las marcadas",
-        rechazar: "No, gracias",
-        etiquetaMotivo: "¿Por qué no?",
+        aceptar: t("Crear las marcadas"),
+        rechazar: t("No, gracias"),
+        etiquetaMotivo: t("¿Por qué no?"),
         titulo: texto(i.title) ?? texto(i.summary) ?? base.titulo,
         detalle: texto(i.title) ? texto(i.summary) : null,
         tareas,
@@ -327,12 +331,12 @@ export type Accion = "enviar" | "aceptar" | "rechazar" | "aprobar" | "cambios";
 export function falta(c: Contenido, b: Borrador, accion: Accion): string | null {
   if (c.clase === "preguntas" && accion === "enviar") {
     const sinElegir = c.preguntas.some((q) => q.requerida && (b.elegidas[q.id] ?? []).length === 0);
-    return sinElegir ? "Falta elegir una opción en cada pregunta." : null;
+    return sinElegir ? t("Falta elegir una opción en cada pregunta.") : null;
   }
-  if (accion === "rechazar" && c.motivoObligatorio && !b.motivo.trim()) return "Escribe el motivo para que sepa qué cambiar.";
-  if (accion === "cambios" && !b.motivo.trim()) return "Escribe el motivo para que sepa qué cambiar.";
-  if (c.clase === "casillas" && accion === "aceptar" && b.marcadas.length < c.minimo) return `Marca al menos ${c.minimo}.`;
-  if (c.clase === "tareas" && accion === "aceptar" && b.marcadas.length === 0) return "Marca al menos una tarea.";
+  if (accion === "rechazar" && c.motivoObligatorio && !b.motivo.trim()) return t("Escribe el motivo para que sepa qué cambiar.");
+  if (accion === "cambios" && !b.motivo.trim()) return t("Escribe el motivo para que sepa qué cambiar.");
+  if (c.clase === "casillas" && accion === "aceptar" && b.marcadas.length < c.minimo) return t("Marca al menos {n}.", { n: c.minimo });
+  if (c.clase === "tareas" && accion === "aceptar" && b.marcadas.length === 0) return t("Marca al menos una tarea.");
   return null;
 }
 
@@ -376,25 +380,25 @@ export function resultadoDe(r: RespuestaEnvio): Resultado {
   if (r.status === 409 && r.code === "interaction_issue_closed") return { tipo: "vencida" };
   if (r.status === 409) return { tipo: "revisar" };
   if (r.status === 404) return { tipo: "vencida" };
-  if (r.status === 0) return { tipo: "fallo", mensaje: "Paperclip no respondió (sin conexión)." };
-  if (r.status >= 500) return { tipo: "fallo", mensaje: `Paperclip respondió con un error (${r.status}).` };
+  if (r.status === 0) return { tipo: "fallo", mensaje: t("Paperclip no respondió (sin conexión).") };
+  if (r.status >= 500) return { tipo: "fallo", mensaje: t("Paperclip respondió con un error ({status}).", { status: r.status }) };
   // 422 y los demás 4xx: el mensaje del servidor, tal cual.
-  return { tipo: "invalido", mensaje: r.mensaje ?? `Paperclip no aceptó la respuesta (${r.status}).` };
+  return { tipo: "invalido", mensaje: r.mensaje ?? t("Paperclip no aceptó la respuesta ({status}).", { status: r.status }) };
 }
 
 /** Lo que se respondió, para la caja «Respuesta guardada» (§5: «¿Dónde guardamos…? → Redis»). */
 export function respuestaGuardada(c: Contenido | null, d: Detalle): string | null {
   if (d.de === "aprobacion") {
-    const nota = d.a.decisionNote ? `: ${d.a.decisionNote}` : "";
-    if (d.a.status === "approved") return `Aprobada${nota}`;
-    if (d.a.status === "rejected") return `Rechazada${nota}`;
-    if (d.a.status === "revision_requested") return `Pidió cambios${nota}`;
+    const nota = d.a.decisionNote;
+    if (d.a.status === "approved") return nota ? t("Aprobada: {nota}", { nota }) : t("Aprobada");
+    if (d.a.status === "rejected") return nota ? t("Rechazada: {nota}", { nota }) : t("Rechazada");
+    if (d.a.status === "revision_requested") return nota ? t("Pidió cambios: {nota}", { nota }) : t("Pidió cambios");
     return null;
   }
   const r = d.i.result ?? {};
   const outcome = typeof r.outcome === "string" ? r.outcome : null;
   const motivo = texto(r.reason) ?? texto(r.rejectionReason);
-  if (d.i.status === "rejected" || outcome === "rejected") return `${c?.rechazar ?? "Rechazada"}${motivo ? `: ${motivo}` : ""}`;
+  if (d.i.status === "rejected" || outcome === "rejected") return `${c?.rechazar ?? t("Rechazada")}${motivo ? `: ${motivo}` : ""}`;
   if (d.i.kind === "ask_user_questions") {
     const respuestas = lista(r.answers);
     if (respuestas.length === 0) return null;
@@ -416,19 +420,19 @@ export function respuestaGuardada(c: Contenido | null, d: Detalle): string | nul
   }
   if (d.i.kind === "suggest_tasks") {
     const n = lista(r.createdTasks).length;
-    return n === 1 ? "Se creó 1 tarea" : `Se crearon ${n} tareas`;
+    return n === 1 ? t("Se creó 1 tarea") : t("Se crearon {n} tareas", { n });
   }
   if (d.i.kind === "request_checkbox_confirmation") {
     const ids = textos(r.selectedOptionIds);
     const labels = ids.map((id) => c?.opciones.find((o) => o.id === id)?.label ?? id);
-    return `${c?.aceptar ?? "Aceptada"}${labels.length ? `: ${labels.join(", ")}` : ""}`;
+    return `${c?.aceptar ?? t("Aceptada")}${labels.length ? `: ${labels.join(", ")}` : ""}`;
   }
-  return c?.aceptar ?? "Aceptada";
+  return c?.aceptar ?? t("Aceptada");
 }
 
 /** «Queda a tu nombre en BET-268». */
 export function aTuNombre(e: Pick<Espera, "identifier">): string {
-  return e.identifier ? `Queda a tu nombre en ${e.identifier}` : "Queda a tu nombre";
+  return e.identifier ? t("Queda a tu nombre en {id}", { id: e.identifier }) : t("Queda a tu nombre");
 }
 
 /** Para separar `**negrita**` en partes (la ventana las dibuja sin HTML). */

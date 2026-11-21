@@ -35,6 +35,7 @@
 // capturarlo sin otro gesto porque lo soltó la página). Esc lo suelta; otro Esc sale.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { hash } from "../aspecto.js";
+import { t } from "../i18n.js";
 import { escenaDePiso, piesFuera, piesSentado, type Punto3d } from "../escena3d.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
 import { luzAhora } from "../luz.js";
@@ -45,6 +46,7 @@ import { nombreCorto } from "../rotulo.js";
 import type { Vida, VistaJunta, VistaSuelta } from "../vida.js";
 import { etiqueta, pantallaDe, pantallaTuya, pisoDeAbajo, type AgenteVista, type Dibujo, type Pantalla, type PisoAbajo } from "../vista.js";
 import { baseUi } from "./audiosVoces.js";
+import { tx } from "./i18n.js";
 import { useEsc, useMarcarVista3d } from "./capas.js";
 import { BotonResumen } from "./menuResumen.js";
 import { useMarcaVoz, type MarcaVoz } from "./vozOficina.js";
@@ -760,7 +762,7 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
   };
   const textos = textosDeMonitores(e, agentes, plano);
   return (
-    <div ref={caja} className={cx("of-3d", rm && "of-rm")} role="dialog" aria-label="Oficina en 3D">
+    <div ref={caja} className={cx("of-3d", rm && "of-rm")} role="dialog" aria-label={t("Oficina en 3D")}>
       <div
         ref={lienzo}
         className="of-3d-lienzo"
@@ -800,7 +802,7 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
             ) : (
               <span className="of-bub of-b-yo is-need" style={{ "--x": 0, "--y": 0 } as CSSProperties}>
                 <Icono nombre="hand" tam={12} />
-                <b>{g.esperan}</b> esperándote
+                {tx("{n} esperándote", { n: <b>{g.esperan}</b> })}
               </span>
             )}
           </div>
@@ -838,9 +840,9 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
         </div>
       ) : null}
       <div className="of-3d-barra">
-        <span className="of-3d-salas" role="group" aria-label="Ir a tu escritorio de una sala">
+        <span className="of-3d-salas" role="group" aria-label={t("Ir a tu escritorio de una sala")}>
           {plano.salas.map((s) => (
-            <button key={s.prefijo} type="button" className="of-3d-sala" title={`Ir a tu escritorio en ${s.prefijo}`} onClick={() => visor.current?.irA(s.prefijo)}>
+            <button key={s.prefijo} type="button" className="of-3d-sala" title={t("Ir a tu escritorio en {sala}", { sala: s.prefijo })} onClick={() => visor.current?.irA(s.prefijo)}>
               <EtiquetaEmpresa prefijo={s.prefijo} solida />
             </button>
           ))}
@@ -850,32 +852,32 @@ export function Vista3D({ plano, agentes, empresas, vida, oscuro, rm, onCerrar, 
         <BotonResumen />
         <button type="button" className="of-tvexit" onClick={onCerrar}>
           <Icono nombre="x" tam={16} />
-          Salir de la vista 3D
+          {t("Salir de la vista 3D")}
           <kbd>Esc</kbd>
         </button>
       </div>
-      {estado === "carga" ? <p className="of-3d-aviso">Armando la oficina en 3D…</p> : null}
+      {estado === "carga" ? <p className="of-3d-aviso">{t("Armando la oficina en 3D…")}</p> : null}
       {estado === "error" ? (
         <p className="of-3d-aviso" role="alert">
-          No pude abrir la vista 3D. Vuelve a intentarlo en un rato.
+          {t("No pude abrir la vista 3D. Vuelve a intentarlo en un rato.")}
         </p>
       ) : null}
       {estado === "sinWebgl" ? (
         <p className="of-3d-aviso" role="alert">
-          Este navegador no puede dibujar la vista 3D: necesita WebGL 2. Prueba activando la aceleración por hardware o con otro navegador.
+          {t("Este navegador no puede dibujar la vista 3D: necesita WebGL 2. Prueba activando la aceleración por hardware o con otro navegador.")}
         </p>
       ) : null}
       {estado === "lista" && !capturado && !abierto ? (
         <p className="of-3d-ayuda">
-          <span>Haz clic en la oficina o camina para mirar con el mouse</span>
+          <span>{t("Haz clic en la oficina o camina para mirar con el mouse")}</span>
         </p>
       ) : null}
       {estado === "lista" && capturado ? (
         <p className={cx("of-3d-ayuda", !ayuda && "is-off")}>
-          <span>Mueve el mouse o un dedo: mira</span>
-          <span>W A S D o flechas: camina</span>
-          <span>Clic en alguien: su ficha</span>
-          <span>Esc: suelta el mouse</span>
+          <span>{t("Mueve el mouse o un dedo: mira")}</span>
+          <span>{t("W A S D o flechas: camina")}</span>
+          <span>{t("Clic en alguien: su ficha")}</span>
+          <span>{t("Esc: suelta el mouse")}</span>
         </p>
       ) : null}
     </div>

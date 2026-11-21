@@ -5,9 +5,11 @@
 // la página ya sabe. Se cierra con un clic afuera, Escape o ✕.
 import type { ReactNode } from "react";
 import { nombreCorto } from "../avisos.js";
+import { t } from "../i18n.js";
 import { dondeEspera, filaDeSalas } from "../escritorio.js";
 import type { PisoPlano } from "../plano.js";
 import { chipDe } from "../responder.js";
+import { tituloVisible } from "../estado.js";
 import { ESPERAS, hace, type AgenteVista } from "../vista.js";
 import { CajaPersonaje, cx, Icono } from "./piso.js";
 
@@ -21,8 +23,8 @@ export function filaDelPlano(plano: PisoPlano, agentes: readonly AgenteVista[]):
 }
 
 const desde = (a: AgenteVista) => {
-  const t = Date.parse(a.teNecesita[0]?.desde ?? "");
-  return Number.isFinite(t) ? t : Infinity;
+  const ms = Date.parse(a.teNecesita[0]?.desde ?? "");
+  return Number.isFinite(ms) ? ms : Infinity;
 };
 
 export function VentanitaEscritorio({ empresa, prefijo, agentes, fila, ahora, onResponder, onCerrar }: {
@@ -39,20 +41,20 @@ export function VentanitaEscritorio({ empresa, prefijo, agentes, fila, ahora, on
   const enFila = lista.filter((a) => fila.has(a.id)).length;
   const primero = lista.find((a) => fila.get(a.id) === 0);
   return (
-    <div className="of-up" role="dialog" aria-label={`Te esperan en ${empresa}`}>
+    <div className="of-up" role="dialog" aria-label={t("Te esperan en {empresa}", { empresa })}>
       <div className="of-up-h">
         <Icono nombre="hand" tam={14} />
-        <b>Te esperan en {empresa}</b>
+        <b>{t("Te esperan en {empresa}", { empresa })}</b>
         <span className="of-up-n">{lista.length}</span>
         <span className="of-sp" />
-        <button type="button" className="of-ibtn" aria-label="Cerrar" onClick={onCerrar}>
+        <button type="button" className="of-ibtn" aria-label={t("Cerrar")} onClick={onCerrar}>
           <Icono nombre="x" tam={14} />
         </button>
       </div>
       {lista.length === 0 ? (
         <div className="of-up-vacio">
           <Icono nombre="coffee" tam={14} />
-          Nadie te espera en {empresa}.
+          {t("Nadie te espera en {empresa}.", { empresa })}
         </div>
       ) : (
         lista.map((a) => {
@@ -78,7 +80,7 @@ export function VentanitaEscritorio({ empresa, prefijo, agentes, fila, ahora, on
                 </div>
                 <div className="of-up-q">
                   <Icono nombre={k.icono} tam={12} />
-                  <span>{e.titulo ?? chipDe(e).label}</span>
+                  <span>{e.titulo != null ? tituloVisible(e.titulo) : t(chipDe(e).label)}</span>
                 </div>
                 <div className="of-up-qt">
                   {e.identifier ? <span className="of-tid">{e.identifier}</span> : null}
@@ -88,7 +90,7 @@ export function VentanitaEscritorio({ empresa, prefijo, agentes, fila, ahora, on
                     {mas > 0 ? (
                       <>
                         {" · "}
-                        <em>+{mas} más</em>
+                        <em>{t("+{n} más", { n: mas })}</em>
                       </>
                     ) : null}
                   </span>
@@ -105,7 +107,10 @@ export function VentanitaEscritorio({ empresa, prefijo, agentes, fila, ahora, on
         <div className="of-up-pie">
           <Icono nombre="info" tam={12} />
           <span>
-            {enFila > 0 ? `${enFila} en la fila; los que siguen trabajando te esperan en su puesto.` : "Nadie en la fila: todos siguen en su puesto."} «{ESPERAS[lista[0]!.teNecesita[0]!.tipo].boton}» abre la ventana de siempre, sin salir de la Oficina.
+            {t("{fila} «{boton}» abre la ventana de siempre, sin salir de la Oficina.", {
+              fila: enFila > 0 ? t("{n} en la fila; los que siguen trabajando te esperan en su puesto.", { n: enFila }) : t("Nadie en la fila: todos siguen en su puesto."),
+              boton: ESPERAS[lista[0]!.teNecesita[0]!.tipo].boton,
+            })}
           </span>
         </div>
       ) : null}

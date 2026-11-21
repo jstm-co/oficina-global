@@ -2,7 +2,8 @@
 // quién pasa a «te necesita», los textos del aviso y de las voces, el nombre
 // corto, la voz de cada agente y la cola de frases.
 import { hash } from "./aspecto.js";
-import { ETIQUETA_ROL, type Espera } from "./estado.js";
+import { ETIQUETA_ROL, tituloVisible, type Espera } from "./estado.js";
+import { t } from "./i18n.js";
 import { CORTOS_INSTANCIA } from "./instancia.js";
 import { analizarPregunta, normalizarRol, sinRolDelante, tareaParaVoz } from "./paraVoz.js";
 import { chipDe } from "./responder.js";
@@ -138,14 +139,17 @@ export function empezaron<A extends Pick<AgenteVista, "id" | "run">>(tareas: Map
 // Textos del aviso
 // ---------------------------------------------------------------------------
 
-const mas = (n: number) => (n > 1 ? ` (y ${n - 1} más)` : "");
-const pregunta = (e: Espera) => e.titulo ?? chipDe(e).label;
+// JST-413: estos textos solo se ven (aviso del host, del sistema y banner del TV), así que
+// siguen el idioma de la interfaz; los de las voces, más abajo, quedan en español.
+const mas = (n: number) => (n > 1 ? ` ${t("(y {n} más)", { n: n - 1 })}` : "");
+const pregunta = (e: Espera) => (e.titulo != null ? tituloVisible(e.titulo) : t(chipDe(e).label));
+const enTarea = (que: string, e: Espera) => (e.identifier ? t("{que} en {tarea}", { que, tarea: e.identifier }) : que);
 
 /** «Confirmación en BET-268: ¿Apruebas…? (y 2 más)» (aviso del host). */
 export function cuerpoAviso(a: Pick<AgenteVista, "teNecesita">): string {
   const e = a.teNecesita[0];
   if (!e) return "";
-  return `${chipDe(e).label}${e.identifier ? ` en ${e.identifier}` : ""}: ${pregunta(e)}${mas(a.teNecesita.length)}`;
+  return `${enTarea(t(chipDe(e).label), e)}: ${pregunta(e)}${mas(a.teNecesita.length)}`;
 }
 
 export interface AvisoHost {
@@ -173,13 +177,14 @@ export interface Llegada {
   esperas: Espera[];
 }
 
-const lista = (nombres: string[]) => (nombres.length <= 1 ? (nombres[0] ?? "") : `${nombres.slice(0, -1).join(", ")} y ${nombres.at(-1)}`);
+const lista = (nombres: string[]) =>
+  nombres.length <= 1 ? (nombres[0] ?? "") : t("{varios} y {ultimo}", { varios: nombres.slice(0, -1).join(", "), ultimo: nombres.at(-1)! });
 
 /** Nombres del aviso agrupado: «Speckit (Migo), CEO (El Mirador) y Chief of staff (JSTM)»; con más de 3, «… y 2 más». */
 export function nombresGrupo(ls: readonly Llegada[]): string {
   const n = ls.map((l) => `${l.corto} (${l.empresa})`);
   if (n.length <= 3) return lista(n);
-  return `${n.slice(0, 3).join(", ")} y ${n.length - 3} más`;
+  return t("{nombres} y {n} más", { nombres: n.slice(0, 3).join(", "), n: n.length - 3 });
 }
 
 /**
@@ -194,31 +199,31 @@ export function avisoHost(ls: readonly Llegada[], prefijoPagina: string, grupo: 
     return {
       id: `oficina:${grupo}`,
       dedupeKey: `oficina:${l.agenteId}:${e?.itemId ?? ""}`,
-      title: `✋ ${l.corto} (${l.empresa}) te necesita`,
+      title: t("✋ {nombre} ({empresa}) te necesita", { nombre: l.corto, empresa: l.empresa }),
       body: cuerpoAviso({ teNecesita: l.esperas }),
       tone: "info",
       ttlMs: TTL_AVISO,
-      action: { label: "Responder", href: `${base}?responder=${encodeURIComponent(l.agenteId)}` },
+      action: { label: t("Responder"), href: `${base}?responder=${encodeURIComponent(l.agenteId)}` },
     };
   }
   return {
     id: `oficina:${grupo}`,
     dedupeKey: `oficina:${grupo}:${ls.length}`,
-    title: `✋ ${ls.length} agentes te necesitan`,
+    title: t("✋ {n} agentes te necesitan", { n: ls.length }),
     body: nombresGrupo(ls),
     tone: "info",
     ttlMs: TTL_AVISO,
-    action: { label: "Ver en la Oficina", href: `${base}?hl=toca` },
+    action: { label: t("Ver en la Oficina"), href: `${base}?hl=toca` },
   };
 }
 
 /** El aviso del sistema (solo con https y permitido): título, texto y `tag` por agente. */
 export function avisoSistema(l: Llegada): { titulo: string; body: string; tag: string } {
   const e = l.esperas[0];
-  const verbo = e?.tipo === "aprobacion" ? "Te pide aprobar" : "Te necesita";
+  const verbo = e?.tipo === "aprobacion" ? t("Te pide aprobar") : t("Te necesita");
   return {
     titulo: `${l.corto} · ${l.empresa}`,
-    body: e ? `${verbo}${e.identifier ? ` en ${e.identifier}` : ""}: ${pregunta(e)}${mas(l.esperas.length)}` : verbo,
+    body: e ? `${enTarea(verbo, e)}: ${pregunta(e)}${mas(l.esperas.length)}` : verbo,
     tag: `oficina:${l.agenteId}`,
   };
 }
@@ -227,8 +232,8 @@ export function avisoSistema(l: Llegada): { titulo: string; body: string; tag: s
 export function bannerTv(l: Llegada): { fuerte: string; resto: string } {
   const e = l.esperas[0];
   return {
-    fuerte: `${l.corto}, de ${l.empresa}, te necesita.`,
-    resto: e ? `${chipDe(e).label}${e.identifier ? ` en ${e.identifier}` : ""}: ${pregunta(e)}` : "",
+    fuerte: t("{nombre}, de {empresa}, te necesita.", { nombre: l.corto, empresa: l.empresa }),
+    resto: e ? `${enTarea(t(chipDe(e).label), e)}: ${pregunta(e)}` : "",
   };
 }
 

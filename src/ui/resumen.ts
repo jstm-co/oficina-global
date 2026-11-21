@@ -27,12 +27,13 @@
 //   Resumen sigue o vuelve a leer, el contexto se calla (`alHablar`).
 import { useSyncExternalStore } from "react";
 import { rolesDeEmpresa } from "../avisos.js";
+import { getLocale, localeTag, msg, opcionesHora, SOURCE_LOCALE, t } from "../i18n.js";
 import type { AgenteOficina } from "../estado.js";
 import { leerAbiertas, leerCadena, leerTerminadas, type Conexion, type FilaTarea } from "../fuentes.js";
 import { agenteParaVoz, Arbol, armarDatos, completarArbol, contarPartes, elegidasDe, idsParaArbol, MAX_PADRES, tituloParaVoz, type DatosResumen, type EmpresaRes, type Insumos, type Nodo, type TareaViva } from "../resumen/datos.js";
 import { duracionTotal, frasesDeSeccion, leerOpciones, seccionesDe, textoDuracion, type Contexto, type FraseResumen, type OpcionesResumen, type Seccion, type Titulo } from "../resumen/frases.js";
 import { Lector } from "../resumen/lector.js";
-import { explicacionDesde, inicioDe } from "../resumen/tiempo.js";
+import { diasAtras, explicacionDesde, inicioDe, nuevoDe, periodoTexto, type Desde } from "../resumen/tiempo.js";
 import { calentarVoz, vozParaLeer } from "./eleccion.js";
 import { escribirResumen, iaParaResumen, type RegistroIa } from "./resumenIa.js";
 import { VozResumen } from "./resumenVoz.js";
@@ -42,6 +43,60 @@ import { escucharVoz, publicarVoz } from "./vigia.js";
 
 export const CLAVE_OPCIONES = "of-resumen-op";
 export const CLAVE_ULTIMA = "of-resumen-ultima";
+
+/**
+ * Los nombres de las partes del resumen tal como se MUESTRAN (JST-413): mismo texto que `NOMBRE_SECCION` de
+ * `resumen/frases.ts`, que no se toca (es de lo que se oye); aquí van marcados para traducir.
+ */
+const SECCION_MSG: Readonly<Record<Seccion, string>> = {
+  intro: msg("Los números"),
+  toca: msg("Lo que te toca"),
+  hecho: msg("Lo que se hizo"),
+  trabajan: msg("En qué trabajan"),
+  cola: msg("Lo que está en cola"),
+  cierre: msg("Para terminar"),
+};
+export const nombreSeccion = (s: Seccion): string => t(SECCION_MSG[s]);
+
+/**
+ * La explicación del menú («Desde cuándo») en el idioma de la interfaz (JST-413). En español es la de
+ * `explicacionDesde`, que también abre el resumen hablado y por eso no pasa por `t()`; en otro idioma se arma aquí
+ * con las mismas reglas.
+ */
+export function explicacionMenu(desde: Desde, ahora: number, ultima: number | null): string {
+  if (getLocale() === SOURCE_LOCALE) return explicacionDesde(desde, ahora, ultima);
+  const fecha = (ms: number, opciones: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(localeTag(), opciones).format(ms);
+  switch (desde) {
+    case "nuevo": {
+      const n = nuevoDe(ultima, ahora);
+      if (n.k === "primera") return t("Es la primera vez: te cuento lo de hoy");
+      if (n.k === "semana") return t("Hace más de una semana: te cuento los últimos 7 días");
+      const dias = diasAtras(n.ultima, ahora);
+      const hora = { hour: "numeric", minute: "2-digit", ...opcionesHora() } as const;
+      const cuando = fecha(n.ultima, dias <= 0 ? hora : dias < 7 ? { weekday: "long", ...hora } : { day: "numeric", month: "long", ...hora });
+      return t("Desde {cuando}, la última vez que lo escuchaste", { cuando });
+    }
+    case "hoy":
+      return t("Desde las 0:00 de hoy");
+    case "24h":
+      return t("Desde ayer a esta hora");
+    case "7d":
+      return t("Desde el {dia} pasado a esta hora", { dia: fecha(ahora, { weekday: "long" }) });
+  }
+}
+/**
+ * El encabezado del panel «Texto» (JST-413): en español, exactamente `periodoTexto` (que alimenta la voz);
+ * en otro idioma, se arma con `t()`. Ese encabezado no se oye.
+ */
+export function periodoEncabezado(desde: Desde, ahora: number, ultima: number | null): string {
+  if (getLocale() === SOURCE_LOCALE) return periodoTexto(desde, ahora, ultima);
+  if (desde === "nuevo") {
+    const n = nuevoDe(ultima, ahora);
+    if (n.k === "primera") return t("Lo de hoy, la primera vez que lo escuchas");
+    if (n.k === "semana") return t("Los últimos 7 días");
+  }
+  return explicacionMenu(desde, ahora, ultima);
+}
 /** Lo leído al abrir el menú sirve este rato (después se vuelve a pedir). */
 export const FRESCO_MS = 60_000;
 /** Lo leído de más arriba (el pedido de origen) sirve este rato; lo que no se pudo leer, `FRESCO_MS`. */
@@ -383,7 +438,7 @@ export class ControlResumen {
     const arbol = this.arbolDeCarga(ahora);
     const d = armarDatos(this.insumos(o, empresas, arbol, inicio), this.op.co);
     const vivas = d.empresas;
-    const base = { explicacion: explicacionDesde(this.op.desde, ahora, this.ultima), fallan: d.fallan.map((e) => e.prefijo), pidiendo: this.enCamino.size > 0 };
+    const base = { explicacion: explicacionMenu(this.op.desde, ahora, this.ultima), fallan: d.fallan.map((e) => e.prefijo), pidiendo: this.enCamino.size > 0 };
     if (elegidas.length > 0 && vivas.length === 0) return { ...base, toca: null, trabajan: null, hecho: null, cola: null, dura: null, duraMs: null, ninguna: true };
     const k = contarPartes(d);
     // Lo de antes sirve mientras se vuelve a pedir; si cambió el «desde» a uno más atrás, esqueleto hasta que llegue.

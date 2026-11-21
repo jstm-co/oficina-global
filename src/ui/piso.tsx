@@ -28,9 +28,10 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 import { hash } from "../aspecto.js";
 import { spriteConPies } from "../caminos.js";
-import { CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
+import { claseEscala, CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
 import { lineasDe, nombreQueCabe, tituloDe, unCorteMenos, type Linea } from "../charlas.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
+import { t } from "../i18n.js";
 import { textoRun } from "../estado.js";
 import { textoGlobo, textoTooltip, type Estimacion } from "../hora.js";
 import { cortarNombre, medirConCanvas, type TipoRotulo } from "../rotulo.js";
@@ -38,6 +39,7 @@ import type { Sincronizador } from "../sincronizador.js";
 import { entregaDeEvento, ROTULO_PISO, Vida, type AgenteVida, type VistaCharla, type VistaFuera, type VistaJunta, type VistaMascota, type VistaRotulo, type VistaSobre, type VistaSobreMano, type VistaSuelta } from "../vida.js";
 import { ESTADOS, etiqueta, pisoDeAbajo, type AgenteVista, type Dibujo, type PisoAbajo } from "../vista.js";
 import { useAjustes } from "./ajustes.js";
+import { tx } from "./i18n.js";
 import { fuenteIa, registrarPisoIa, registroUsoIa, useIaActiva } from "./ia.js";
 import { PATHS, type NombreIcono } from "./iconos.js";
 import { registrarVida } from "./reloj.js";
@@ -212,6 +214,8 @@ export interface OpcionesPiso {
   rm: boolean;
   oscuro: boolean;
   seleccionado: string | null;
+  /** JST-410: los agentes con un error antiguo o silenciado; no cuentan en «con error» y tampoco se resaltan. */
+  apagados?: ReadonlySet<string>;
   /** `null`: los personajes no reciben clics (piso entero del celular). */
   onSeleccionar: ((id: string) => void) | null;
 }
@@ -236,7 +240,7 @@ function Puesto({ agente, x, y, o, extra, ahora }: { agente: AgenteVista; x: num
   return (
     <button
       type="button"
-      className={cx("of-ws", `of-st-${st}`, agente.need && "is-need", o.seleccionado === agente.id && "is-sel")}
+      className={cx("of-ws", `of-st-${st}`, agente.need && "is-need", o.apagados?.has(agente.id) && "is-viejo", o.seleccionado === agente.id && "is-sel")}
       data-agente={agente.id}
       data-tip={texto}
       aria-label={texto}
@@ -284,21 +288,21 @@ function EscritorioVacio({ prefijo, x, y }: { prefijo: string; x: number; y: num
  * también mientras camina. La posición la mueve la vida en cada cuadro.
  */
 const CAMINA_A: Record<NonNullable<VistaFuera["hacia"]>, string> = {
-  escritorio: "; camina a su escritorio",
-  descanso: "; camina a la sala de descanso",
-  fila: "; camina a la fila de tu escritorio",
-  mesa: "; camina a la mesa del descanso",
+  escritorio: t("camina a su escritorio"),
+  descanso: t("camina a la sala de descanso"),
+  fila: t("camina a la fila de tu escritorio"),
+  mesa: t("camina a la mesa del descanso"),
 };
 
 function Andante({ agente, f, o, vida, extra, ahora }: { agente: AgenteVista; f: VistaFuera; o: OpcionesPiso; vida: Vida; extra: Extra050; ahora: number }) {
-  const camina = f.caminando && f.hacia ? CAMINA_A[f.hacia] : f.fila !== null ? `; ${f.fila + 1}.º en la fila de tu escritorio` : "";
+  const camina = f.caminando && f.hacia ? `; ${CAMINA_A[f.hacia]}` : f.fila !== null ? `; ${t("{n}.º en la fila de tu escritorio", { n: f.fila + 1 })}` : "";
   const texto = `${texto050(agente, extra, ahora)}${camina}`;
   const s = spriteConPies(f.pos);
   return (
     <button
       type="button"
       ref={(el) => vida.registrar(`p:${agente.id}`, el)}
-      className={cx("of-lc", `of-st-${agente.st}`, agente.need && "is-need", f.caminando && "is-walk of-mov", o.seleccionado === agente.id && "is-sel")}
+      className={cx("of-lc", `of-st-${agente.st}`, agente.need && "is-need", o.apagados?.has(agente.id) && "is-viejo", f.caminando && "is-walk of-mov", o.seleccionado === agente.id && "is-sel")}
       data-agente={agente.id}
       data-anim={f.anim}
       data-tip={texto}
@@ -316,7 +320,7 @@ function Andante({ agente, f, o, vida, extra, ahora }: { agente: AgenteVista; f:
  * Globo con el código de la tarea (HTML, nítido), centrado en (x, y): (x + 8, y + 1) del puesto, o (pies.x, pies.y − 23)
  * de quien camina. `anillo`: el rótulo de la sala habla de él (JST-138 §3.2).
  */
-export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abajo = null, voz = false }: { agente: AgenteVista; x: number; y: number; refEl?: (el: HTMLElement | null) => void; anillo?: boolean; listo?: boolean; abajo?: PisoAbajo | null; voz?: boolean }) {
+export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abajo = null, voz = false, viejo = false }: { agente: AgenteVista; x: number; y: number; refEl?: (el: HTMLElement | null) => void; anillo?: boolean; listo?: boolean; abajo?: PisoAbajo | null; voz?: boolean; viejo?: boolean }) {
   const st = agente.st;
   const vz = voz ? <Parlante /> : null;
   const n = agente.teNecesita.length;
@@ -327,7 +331,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       <span ref={refEl} className={cx("of-bub of-b-listo", anillo && "is-anillo")} style={pos0} data-listo="">
         {vz}
         <Icono nombre="check" tam={12} />
-        listo
+        {t("listo")}
       </span>
     );
   }
@@ -337,7 +341,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       abajo.tipo === "mano" ? (
         <span className="of-p2 is-mano">
           <Icono nombre="hand" tam={12} />
-          {abajo.codigo ?? "Te toca"}
+          {abajo.codigo ?? t("Te toca")}
           {abajo.mas > 0 ? <em>+{abajo.mas}</em> : null}
         </span>
       ) : (
@@ -355,13 +359,13 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       ) : (
         <>
           <Icono nombre="triangle-alert" tam={12} />
-          Error
+          {t("Error")}
         </>
       );
     return (
       <span
         ref={refEl}
-        className={cx("of-bub is-2p", `of-st-${st}`, st === "trabaja" ? "of-b-trabaja" : "of-b-error", `p2-${abajo.tipo}`, agente.need && "is-need", agente.run?.enCola && st === "trabaja" && "is-q", anillo && "is-anillo")}
+        className={cx("of-bub is-2p", `of-st-${st}`, st === "trabaja" ? "of-b-trabaja" : "of-b-error", `p2-${abajo.tipo}`, agente.need && "is-need", viejo && "is-viejo", agente.run?.enCola && st === "trabaja" && "is-q", anillo && "is-anillo")}
         style={pos0}
       >
         {vz}
@@ -376,7 +380,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       {n > 1 ? n : null}
     </span>
   ) : null;
-  const clase = (extra: string) => cx("of-bub", `of-st-${st}`, agente.need && "is-need", anillo && "is-anillo", extra);
+  const clase = (extra: string) => cx("of-bub", `of-st-${st}`, agente.need && "is-need", viejo && "is-viejo", anillo && "is-anillo", extra);
   const pos = { "--x": x, "--y": y } as CSSProperties;
   if (st === "trabaja") {
     const codigo = textoRun(agente.run);
@@ -394,7 +398,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       <span ref={refEl} className={clase("of-b-toca")} style={pos}>
         {vz}
         <Icono nombre="hand" tam={12} />
-        {agente.teNecesita[0]?.identifier ?? "Te toca"}
+        {agente.teNecesita[0]?.identifier ?? t("Te toca")}
         {n > 1 ? <em>+{n - 1}</em> : null}
       </span>
     );
@@ -404,7 +408,8 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       <span ref={refEl} className={clase("of-b-error")} style={pos}>
         {vz}
         <Icono nombre="triangle-alert" tam={12} />
-        Error{cabo}
+        {t("Error")}
+        {cabo}
       </span>
     );
   }
@@ -414,7 +419,7 @@ export function Globo({ agente, x, y, refEl, anillo = false, listo = false, abaj
       <span ref={refEl} className={clase("of-b-toca is-quieto")} style={pos}>
         {vz}
         <Icono nombre="hand" tam={12} />
-        {agente.teNecesita[0]?.identifier ?? "Te toca"}
+        {agente.teNecesita[0]?.identifier ?? t("Te toca")}
         {n > 1 ? <em>+{n - 1}</em> : null}
       </span>
     );
@@ -457,7 +462,7 @@ function EscritorioTu({ sala, n, empresa, chico, rm, onClick }: { sala: SalaPlan
         ) : null
       ) : (
         <span className="of-placa-tu" style={{ "--x": 16, "--y": 24 } as CSSProperties}>
-          Tú
+          {t("Tú")}
         </span>
       )}
     </button>
@@ -696,6 +701,9 @@ function GloboSuelta({ s, ancho, voz }: { s: VistaSuelta; ancho: number; voz: bo
   );
 }
 
+/** Cómo empieza la hora estimada de «lleva …» en el idioma de la interfaz (JST-413): la pastilla del rótulo se pinta distinta. */
+const PREFIJO_LLEVA = t("lleva {tiempo}", { tiempo: "" }).trim();
+
 const ICONO_ROTULO: Record<TipoRotulo, NombreIcono> = {
   listo: "check",
   entrega: "handshake",
@@ -800,7 +808,7 @@ function Rotulo({ clave, v, vida, piso = false, etiqueta, style }: { clave: stri
         </span>
         {/* 0.5.0 (JST-163 §9): cuando cuenta lo que hace alguien, su hora estimada, a la derecha. */}
         {it.hora ? (
-          <span className={cx("of-ro-eta", it.hora.startsWith("lleva") && "is-lleva")}>
+          <span className={cx("of-ro-eta", it.hora.startsWith(PREFIJO_LLEVA) && "is-lleva")}>
             <Icono nombre="timer" tam={12} />
             {it.hora}
           </span>
@@ -808,10 +816,10 @@ function Rotulo({ clave, v, vida, piso = false, etiqueta, style }: { clave: stri
       </span>
       {nav ? (
         <span className="of-ro-nav">
-          <button type="button" aria-label="Anterior" onClick={() => vida.moverRotulo(clave, -1)}>
+          <button type="button" aria-label={t("Anterior")} onClick={() => vida.moverRotulo(clave, -1)}>
             <Icono nombre="chevron-left" tam={12} />
           </button>
-          <button type="button" aria-label="Siguiente" onClick={() => vida.moverRotulo(clave, 1)}>
+          <button type="button" aria-label={t("Siguiente")} onClick={() => vida.moverRotulo(clave, 1)}>
             <Icono nombre="chevron-right" tam={12} />
           </button>
         </span>
@@ -899,11 +907,11 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
         <div className="of-cover is-off" role="status">
           <div className="of-offmsg">
             <Icono nombre="cloud-off" tam={18} />
-            <b>No pude leer {nombre}</b>
-            <span>Las luces quedan apagadas hasta que responda.</span>
+            <b>{t("No pude leer {nombre}", { nombre })}</b>
+            <span>{t("Las luces quedan apagadas hasta que responda.")}</span>
             <button type="button" className="of-btn is-sm" onClick={onReintentar}>
               <Icono nombre="refresh" tam={14} />
-              Reintentar
+              {t("Reintentar")}
             </button>
           </div>
         </div>
@@ -923,7 +931,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
       const abajo = pisoDeAbajo(agente, hora, ahora);
       if (vida.enEscritorio(agente.id)) {
         piezas.push(<Puesto key={agente.id} agente={agente} x={p.x} y={p.y} o={o} extra={extra} ahora={ahora} />);
-        if (!o.chico) globos.push(<Globo key={agente.id} agente={agente} x={p.x + 8} y={p.y + 1} anillo={anillo === agente.id} listo={!!ls} abajo={abajo} voz={vozDelGlobo(marca, agente)} />);
+        if (!o.chico) globos.push(<Globo key={agente.id} agente={agente} x={p.x + 8} y={p.y + 1} anillo={anillo === agente.id} listo={!!ls} abajo={abajo} voz={vozDelGlobo(marca, agente)} viejo={o.apagados?.has(agente.id)} />);
         return;
       }
       // Mientras va o viene, su puesto se ve vacío con la pantalla apagada; el botón es el personaje.
@@ -939,7 +947,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
       if (!o.chico) {
         globos.push(
           <span key={`b-${agente.id}`} ref={(el) => vida.registrar(`b:${agente.id}`, el)} className="of-mov of-movb" style={{ "--x": f.pos.x, "--y": f.pos.y - 23 + dy } as CSSProperties}>
-            <Globo agente={agente} x={0} y={0} anillo={anillo === agente.id} abajo={abajo} voz={vozDelGlobo(marca, agente)} />
+            <Globo agente={agente} x={0} y={0} anillo={anillo === agente.id} abajo={abajo} voz={vozDelGlobo(marca, agente)} viejo={o.apagados?.has(agente.id)} />
           </span>,
         );
         return;
@@ -965,7 +973,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
         globos.push(
           <span key="yo" className="of-bub of-b-yo is-need" data-yo={sala.prefijo} style={{ "--x": e.x + 14, "--y": e.y + 7 } as CSSProperties}>
             <Icono nombre="hand" tam={12} />
-            <b>{n}</b> esperándote
+            {tx("{n} esperándote", { n: <b>{n}</b> })}
           </span>,
         );
       }
@@ -1092,7 +1100,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
     : {};
   const rotuloEl =
     rotulo && sala.rotulo ? (
-      <Rotulo clave={pre} v={rotulo} vida={vida} etiqueta={`Qué se hace en ${nombre}`} style={{ "--x": sala.rotulo.x, "--y": sala.rotulo.y, "--w": sala.rotulo.w } as CSSProperties} />
+      <Rotulo clave={pre} v={rotulo} vida={vida} etiqueta={t("Qué se hace en {nombre}", { nombre })} style={{ "--x": sala.rotulo.x, "--y": sala.rotulo.y, "--w": sala.rotulo.w } as CSSProperties} />
     ) : null;
 
   const acercable = !!onAcercar && !cargando;
@@ -1107,7 +1115,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
         ? {
             role: "button",
             tabIndex: 0,
-            "aria-label": `Acercar ${nombre}`,
+            "aria-label": t("Acercar {nombre}", { nombre }),
             onClick: () => onAcercar?.(sala.prefijo),
             onKeyDown: (e: React.KeyboardEvent) => {
               if (e.key === "Enter" || e.key === " ") {
@@ -1130,7 +1138,7 @@ function Sala({ sala, empresa, agentes, o, atenuada, onAcercar, onReintentar, vi
   );
 }
 
-const NOMBRE_MASCOTA: Record<VistaMascota["id"], string> = { gato: "Gato", perro: "Perro", conejo: "Conejo", robot: "Robot aspiradora" };
+const NOMBRE_MASCOTA: Record<VistaMascota["id"], string> = { gato: t("Gato"), perro: t("Perro"), conejo: t("Conejo"), robot: t("Robot aspiradora") };
 /** La zona de cada mascota, en px de pantalla (la de `.of-pet::before`). */
 const ZONA_MASCOTA = 44;
 
@@ -1349,7 +1357,7 @@ function RotuloPiso({ vida, ancho }: { vida: Vida; ancho: number }) {
   useSyncExternalStore(vida.suscribir, () => vida.versionDelPiso());
   const v = vida.rotuloDe(ROTULO_PISO);
   if (!v) return null;
-  return <Rotulo clave={ROTULO_PISO} v={v} vida={vida} piso etiqueta="Qué se hace en la oficina" style={{ width: ancho }} />;
+  return <Rotulo clave={ROTULO_PISO} v={v} vida={vida} piso etiqueta={t("Qué se hace en la oficina")} style={{ width: ancho }} />;
 }
 
 export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReintentar, sync = null, charlas = true, pausado = false, mascotasTocables = true, tv = false, onEscritorio = null, voz: conVoz = false, ia: conIa = false, onVida = null }: PropsPiso) {
@@ -1397,7 +1405,7 @@ export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReinten
   const titulo = (codigo: string) => titulos?.titulo(codigo) ?? null;
   const suelo = (
     <div
-      className={cx("of-piso", `is-x${plano.escala}`)}
+      className={cx("of-piso", `is-x${claseEscala(plano.escala)}`)}
       style={{ "--px": plano.escala, "--fw": plano.w, "--fh": plano.h, isolation: "isolate" } as CSSProperties}
     >
       <div className="of-pasillo" />

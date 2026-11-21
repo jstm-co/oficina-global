@@ -8,7 +8,7 @@
 // después hace un único POST con su sesión, sin reintentos automáticos.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { nombreCorto } from "../avisos.js";
-import { hrefTarea, type Espera } from "../estado.js";
+import { hrefTarea, tituloVisible, type Espera } from "../estado.js";
 import { enviar, leerAprobacion, listarInteracciones, type Conexion } from "../fuentes.js";
 import {
   aTuNombre,
@@ -35,6 +35,7 @@ import {
   type Pregunta,
 } from "../responder.js";
 import type { Sincronizador } from "../sincronizador.js";
+import { t } from "../i18n.js";
 import { hace, type AgenteVista } from "../vista.js";
 import { useAtraparFoco, useEsc } from "./capas.js";
 import type { Enlazar } from "./ficha.js";
@@ -257,7 +258,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
         avisar(
           <>
             <Icono nombre="check" tam={14} />
-            <span>Listo: no queda nada que responder a {corto} aquí.</span>
+            <span>{t("Listo: no queda nada que responder a {corto} aquí.", { corto })}</span>
           </>,
         );
       }
@@ -282,7 +283,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     try {
       d = await leerEspera(conRef.current, e);
     } catch {
-      cambiar(e.itemId, { envio: "fallo", mensaje: "Paperclip no respondió (sin conexión)." });
+      cambiar(e.itemId, { envio: "fallo", mensaje: t("Paperclip no respondió (sin conexión).") });
       return;
     }
     if (!d || vigencia(d) !== "pendiente") {
@@ -353,7 +354,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
   const chip = chipDe(espera);
   const prefijo = agente.prefijo;
   const hrefCodigo = espera.identifier ? `${hrefTarea(prefijo, espera.identifier)}#interaction` : espera.href;
-  const titulo = contenido?.titulo || espera.titulo || chip.label;
+  const titulo = contenido?.titulo || (espera.titulo ? tituloVisible(espera.titulo) : "") || t(chip.label);
   const idTitulo = `of-rw-t-${espera.itemId.replace(/[^a-z0-9_-]/gi, "")}`;
 
   // ---------------- Cuerpo y pie ----------------
@@ -364,12 +365,12 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
   const btnSiguiente = (primario = true) =>
     hayOtra ? (
       <button type="button" className={cx("of-btn", primario && "is-primary")} onClick={siguiente}>
-        Siguiente
+        {t("Siguiente")}
         <Icono nombre="chevron-right" tam={14} />
       </button>
     ) : (
       <button type="button" className={cx("of-btn", primario && "is-primary")} onClick={onCerrar}>
-        Cerrar
+        {t("Cerrar")}
       </button>
     );
 
@@ -379,11 +380,11 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     cuerpo =
       estado.envio === "vencida" ? (
         <Nota tipo="info" icono="clock">
-          <b>Ya no espera respuesta.</b> {corto} la retiró, la reemplazó por una más nueva o la tarea se cerró. No se envió nada.
+          <b>{t("Ya no espera respuesta.")}</b> {t("{corto} la retiró, la reemplazó por una más nueva o la tarea se cerró. No se envió nada.", { corto })}
         </Nota>
       ) : (
         <Nota tipo="info" icono="external-link">
-          <b>Esto se responde en Paperclip.</b> {motivoFuera(espera)}
+          <b>{t("Esto se responde en Paperclip.")}</b> {motivoFuera(espera)}
         </Nota>
       );
     botones =
@@ -393,12 +394,12 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
         <>
           {hayOtra ? (
             <button type="button" className="of-btn" onClick={siguiente}>
-              Saltar
+              {t("Saltar")}
             </button>
           ) : null}
           {hrefAbrir ? (
             <a className="of-btn is-primary" {...enlazar(hrefAbrir)}>
-              Abrir {espera.identifier ?? "en Paperclip"}
+              {espera.identifier ? t("Abrir {id}", { id: espera.identifier }) : t("Abrir en Paperclip")}
               <Icono nombre="arrow-up-right" tam={14} />
             </a>
           ) : null}
@@ -411,11 +412,14 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     cuerpo = (
       <>
         <Nota tipo="info" icono="check-check">
-          <b>Ya está respondida.</b> Alguien la respondió{cuando ? ` ${cuando}` : ""}, desde otra pestaña o desde Telegram. No se envió nada más.
+          <b>{t("Ya está respondida.")}</b>{" "}
+          {cuando
+            ? t("Alguien la respondió {cuando}, desde otra pestaña o desde Telegram. No se envió nada más.", { cuando })
+            : t("Alguien la respondió, desde otra pestaña o desde Telegram. No se envió nada más.")}
         </Nota>
         {guardada ? (
           <div className="of-rans">
-            <span>Respuesta guardada</span>
+            <span>{t("Respuesta guardada")}</span>
             <b>{guardada}</b>
           </div>
         ) : null}
@@ -425,34 +429,40 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
   } else if (estado.envio === "vencida") {
     cuerpo = (
       <Nota tipo="info" icono="clock">
-        <b>Ya no espera respuesta.</b> {corto} la retiró, la reemplazó por una más nueva o la tarea se cerró. No se envió nada.
+        <b>{t("Ya no espera respuesta.")}</b> {t("{corto} la retiró, la reemplazó por una más nueva o la tarea se cerró. No se envió nada.", { corto })}
       </Nota>
     );
     botones = btnSiguiente();
   } else if (estado.envio === "ok") {
     cuerpo = (
       <Nota tipo="ok" icono="check">
-        <b>Listo, respondido.</b> {corto} sigue con {espera.identifier ?? "su tarea"}
-        {hayOtra ? "; pasando a la siguiente…" : "."}
+        <b>{t("Listo, respondido.")}</b>{" "}
+        {espera.identifier
+          ? hayOtra
+            ? t("{corto} sigue con {id}; pasando a la siguiente…", { corto, id: espera.identifier })
+            : t("{corto} sigue con {id}.", { corto, id: espera.identifier })
+          : hayOtra
+            ? t("{corto} sigue con su tarea; pasando a la siguiente…", { corto })
+            : t("{corto} sigue con su tarea.", { corto })}
       </Nota>
     );
     botones = btnSiguiente();
   } else if (estado.lectura === "fallo") {
     cuerpo = (
       <Nota tipo="err" icono="cloud-off">
-        <b>No pude leer esta espera.</b> {estado.errorLectura ?? "Paperclip no respondió."}
+        <b>{t("No pude leer esta espera.")}</b> {estado.errorLectura ?? t("Paperclip no respondió.")}
       </Nota>
     );
     botones = (
       <button type="button" className="of-btn is-primary" onClick={() => void leer(espera)}>
         <Icono nombre="refresh" tam={14} />
-        Reintentar
+        {t("Reintentar")}
       </button>
     );
   } else if (!contenido || !borrador) {
     // Cargando el detalle.
     cuerpo = (
-      <div className={cx("of-rsk", rm && "is-quieto")} aria-busy="true" aria-label="Cargando">
+      <div className={cx("of-rsk", rm && "is-quieto")} aria-busy="true" aria-label={t("Cargando")}>
         {ESQUELETO.map((w) => (
           <i key={w} className="of-sk" style={{ width: `${w}%` }} />
         ))}
@@ -463,7 +473,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     botones = (
       <button type="button" className="of-btn is-primary" disabled>
         <Icono nombre="loader" tam={14} className="of-spin" />
-        Cargando…
+        {t("Cargando…")}
       </button>
     );
   } else {
@@ -474,12 +484,12 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
       enviando ? (
         <>
           <Icono nombre="loader" tam={14} className="of-spin" />
-          Enviando…
+          {t("Enviando…")}
         </>
       ) : estado.envio === "fallo" ? (
         <>
           <Icono nombre="refresh" tam={14} />
-          Reintentar
+          {t("Reintentar")}
         </>
       ) : (
         texto
@@ -492,7 +502,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
       <>
         <label className="of-rlbl" htmlFor={`${idTitulo}-motivo`}>
           {label}
-          {opcional ? <em> (opcional)</em> : null}
+          {opcional ? <em> {t("(opcional)")}</em> : null}
         </label>
         <textarea
           id={`${idTitulo}-motivo`}
@@ -500,7 +510,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
           rows={3}
           value={b.motivo}
           disabled={enviando}
-          placeholder={placeholder ?? "Cuéntale qué cambiarías"}
+          placeholder={placeholder ?? t("Cuéntale qué cambiarías")}
           onChange={(ev) => guardar({ ...b, motivo: ev.target.value })}
         />
       </>
@@ -512,7 +522,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     ) : null;
     const volver = (
       <button type="button" className="of-btn" disabled={enviando} onClick={() => modo("")}>
-        Volver
+        {t("Volver")}
       </button>
     );
 
@@ -537,7 +547,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
           <>
             {volver}
             <button type="button" className="of-btn is-primary" disabled={enviando} onClick={() => void enviarAccion("rechazar")}>
-              {etiqueta(`Enviar y ${c.rechazar.toLowerCase()}`)}
+              {etiqueta(t("Enviar y {accion}", { accion: c.rechazar.toLowerCase() }))}
             </button>
           </>
         ) : (
@@ -553,12 +563,13 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
     } else if (c.clase === "casillas" || c.clase === "tareas") {
       const tareas = c.clase === "tareas";
       const total = tareas ? c.tareas.length : c.opciones.length;
-      const hijas = tareas && c.tareas.some((t) => t.madre);
-      const nota = tareas
-        ? `Marcadas ${b.marcadas.length} de ${total}${hijas ? " · una tarea hija va con su madre" : ""}`
-        : `Marcadas ${b.marcadas.length} de ${total}${c.minimo ? ` · al menos ${c.minimo}` : ""}${c.maximo != null ? ` · como máximo ${c.maximo}` : ""}`;
+      const hijas = tareas && c.tareas.some((ta) => ta.madre);
+      const extras = tareas
+        ? [hijas ? t("una tarea hija va con su madre") : null]
+        : [c.minimo ? t("al menos {n}", { n: c.minimo }) : null, c.maximo != null ? t("como máximo {n}", { n: c.maximo }) : null];
+      const nota = [t("Marcadas {n} de {total}", { n: b.marcadas.length, total }), ...extras.filter(Boolean)].join(" · ");
       const nombreDe = (agenteId: string | null, usuarioId: string | null) =>
-        agenteId ? (agentes.find((a) => a.id === agenteId)?.nombre ?? "otro agente") : usuarioId ? "ti" : "sin asignar";
+        agenteId ? (agentes.find((a) => a.id === agenteId)?.nombre ?? t("otro agente")) : usuarioId ? t("ti") : t("sin asignar");
       cuerpo = (
         <>
           {detalle}
@@ -567,16 +578,16 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
               <em>{nota}</em>
             </legend>
             {tareas
-              ? c.tareas.map((t) => (
+              ? c.tareas.map((ta) => (
                   <Opcion
-                    key={t.clave}
+                    key={ta.clave}
                     tipo="checkbox"
                     nombre={`${idTitulo}-t`}
-                    marcada={b.marcadas.includes(t.clave)}
-                    hija={!!t.madre}
-                    titulo={`${t.madre ? "↳ " : ""}${t.titulo}`}
-                    descripcion={t.agenteId || t.usuarioId ? `Para ${nombreDe(t.agenteId, t.usuarioId)}` : "Sin asignar"}
-                    alCambiar={() => guardar(marcarTarea(b, c, t.clave))}
+                    marcada={b.marcadas.includes(ta.clave)}
+                    hija={!!ta.madre}
+                    titulo={`${ta.madre ? "↳ " : ""}${ta.titulo}`}
+                    descripcion={ta.agenteId || ta.usuarioId ? t("Para {quien}", { quien: nombreDe(ta.agenteId, ta.usuarioId) }) : t("Sin asignar")}
+                    alCambiar={() => guardar(marcarTarea(b, c, ta.clave))}
                   />
                 ))
               : c.opciones.map((o) => (
@@ -600,7 +611,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
           <>
             {volver}
             <button type="button" className="of-btn is-primary" disabled={enviando} onClick={() => void enviarAccion("rechazar")}>
-              {etiqueta(`Enviar «${c.rechazar}»`)}
+              {etiqueta(t("Enviar «{accion}»", { accion: c.rechazar }))}
             </button>
           </>
         ) : (
@@ -622,7 +633,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
             <div className="of-rrisk">
               <div className="of-rrh">
                 <Icono nombre="shield-alert" tam={14} />
-                Riesgos
+                {t("Riesgos")}
               </div>
               <ul>
                 {c.riesgos.map((r, k) => (
@@ -635,12 +646,12 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
             <div className="of-rrec">
               <Icono nombre="thumbs-up" tam={14} />
               <span>
-                <b>Te recomienda:</b> {c.recomienda}
+                <b>{t("Te recomienda:")}</b> {c.recomienda}
               </span>
             </div>
           ) : null}
-          {b.modo === "cambios" ? motivoCampo("¿Qué cambiarías?", false, null) : null}
-          {b.modo === "rechazo" ? motivoCampo("¿Por qué la rechazas?", true, null) : null}
+          {b.modo === "cambios" ? motivoCampo(t("¿Qué cambiarías?"), false, null) : null}
+          {b.modo === "rechazo" ? motivoCampo(t("¿Por qué la rechazas?"), true, null) : null}
         </>
       );
       botones = b.modo ? (
@@ -652,19 +663,19 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
             disabled={enviando}
             onClick={() => void enviarAccion(b.modo === "rechazo" ? "rechazar" : "cambios")}
           >
-            {etiqueta(b.modo === "rechazo" ? "Rechazar" : "Pedir cambios")}
+            {etiqueta(b.modo === "rechazo" ? t("Rechazar") : t("Pedir cambios"))}
           </button>
         </>
       ) : (
         <>
           <button type="button" className="of-btn" disabled={enviando} onClick={() => modo("cambios")}>
-            Pedir cambios
+            {t("Pedir cambios")}
           </button>
           <button type="button" className="of-btn" disabled={enviando} onClick={() => modo("rechazo")}>
-            Rechazar
+            {t("Rechazar")}
           </button>
           <button type="button" className="of-btn is-primary is-toca" disabled={enviando} onClick={() => void enviarAccion("aprobar")}>
-            {etiqueta("Aprobar")}
+            {etiqueta(t("Aprobar"))}
           </button>
         </>
       );
@@ -684,7 +695,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
         ) : null}
         {estado.envio === "fallo" ? (
           <Nota tipo="err" icono="triangle-alert">
-            <b>No se pudo enviar.</b> {estado.mensaje ?? "Paperclip no respondió (sin conexión)."} Tu respuesta sigue aquí; no se guardó nada.
+            <b>{t("No se pudo enviar.")}</b> {estado.mensaje ?? t("Paperclip no respondió (sin conexión).")} {t("Tu respuesta sigue aquí; no se guardó nada.")}
           </Nota>
         ) : null}
       </>
@@ -711,15 +722,15 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
               <EtiquetaEmpresa prefijo={agente.prefijo} />
               <span>{agente.empresa}</span>
               <span className="of-dotsep">·</span>
-              <span>{pasos.length > 1 ? `Espera ${pasos.length} cosas` : "Espera tu respuesta"}</span>
+              <span>{pasos.length > 1 ? t("Espera {n} cosas", { n: pasos.length }) : t("Espera tu respuesta")}</span>
             </div>
           </div>
-          <button type="button" className="of-ibtn is-ghost" aria-label="Cerrar (Esc)" onClick={onCerrar}>
+          <button type="button" className="of-ibtn is-ghost" aria-label={t("Cerrar (Esc)")} onClick={onCerrar}>
             <Icono nombre="x" tam={14} />
           </button>
         </div>
         {pasos.length > 1 ? (
-          <div ref={tira} className="of-rw-steps" role="tablist" aria-label="Lo que espera">
+          <div ref={tira} className="of-rw-steps" role="tablist" aria-label={t("Lo que espera")}>
             {pasos.map((e, k) => {
               const ch = chipDe(e);
               const s = estados[e.itemId];
@@ -736,7 +747,7 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
                 >
                   <span className="of-n">{ok ? <Icono nombre="check" tam={12} /> : k + 1}</span>
                   <span className="of-l">
-                    {ch.label}
+                    {t(ch.label)}
                     <em>{e.identifier ?? ""}</em>
                   </span>
                   {ch.fuera ? <Icono nombre="arrow-up-right" tam={12} /> : null}
@@ -750,16 +761,16 @@ export function VentanaResponder({ agente, inicial, sync, agentes, celular, rm, 
           <div className="of-rmeta">
             <span className={cx("of-rk", chip.fuera && "is-fuera")}>
               <Icono nombre={chip.icono} tam={12} />
-              {chip.label}
+              {t(chip.label)}
             </span>
             {espera.identifier && hrefCodigo ? (
-              <a className="of-rtid" title={`Abrir ${espera.identifier} en Paperclip`} {...enlazar(hrefCodigo)}>
+              <a className="of-rtid" title={t("Abrir {id} en Paperclip", { id: espera.identifier })} {...enlazar(hrefCodigo)}>
                 {espera.identifier}
                 <Icono nombre="arrow-up-right" tam={12} />
               </a>
             ) : null}
             <span className="of-rago">{hace(espera.desde, ahora)}</span>
-            {tareaCtx ? <BotonContextoVentana tarea={tareaCtx} codigo={espera.identifier ?? "la tarea"} celular={celular} /> : null}
+            {tareaCtx ? <BotonContextoVentana tarea={tareaCtx} codigo={espera.identifier ?? t("la tarea")} celular={celular} /> : null}
           </div>
           {tareaCtx ? <EscritoVentana tarea={tareaCtx} celular={celular} /> : null}
           {tareaCtx ? <ErrorVentana tarea={tareaCtx} celular={celular} /> : null}
@@ -840,8 +851,8 @@ function PreguntaCampo({
       <legend>
         {conLeyenda ? q.prompt : <span className="of-sr">{q.prompt}</span>}
         <em>
-          {q.multiple ? "Elige una o varias" : "Elige una"}
-          {q.requerida ? null : " (opcional)"}
+          {q.multiple ? t("Elige una o varias") : t("Elige una")}
+          {q.requerida ? null : ` ${t("(opcional)")}`}
         </em>
       </legend>
       {q.ayuda ? <p className="of-rhelp">{q.ayuda}</p> : null}
@@ -861,8 +872,8 @@ function PreguntaCampo({
               <textarea
                 className="of-rtx"
                 rows={2}
-                aria-label={`${o.label}: escribe tu respuesta`}
-                placeholder="Escribe tu respuesta"
+                aria-label={t("{label}: escribe tu respuesta", { label: o.label })}
+                placeholder={t("Escribe tu respuesta")}
                 value={b.libres[q.id] ?? ""}
                 onChange={(ev) => guardar({ ...b, libres: { ...b.libres, [q.id]: ev.target.value } })}
               />

@@ -16,6 +16,7 @@ import { accionPlugin } from "../fuentes.js";
 import { Escritor, usaReserva, type EstadoIa, type ModeloIa, type SinApi } from "../ia/escritor.js";
 import { FINALES_POR_PAQUETE, FINALES_POR_PAQUETE_CHICO } from "../ia/prompt.js";
 import { anotarUso, CLAVE_RESERVA, conteoIa, fuenteDe, leerReserva, reservaVacia, type DatosReserva } from "../ia/reserva.js";
+import { t } from "../i18n.js";
 import { ajustes, alCambiarAjustes, type Ajustes } from "./ajustes.js";
 import { instalacion } from "./audiosVoces.js";
 
@@ -58,7 +59,7 @@ export function sinApiAqui(): SinApi {
  * Ahí no es «la IA de Chrome» ni se baja con Chrome: es la IA del computador.
  */
 export const IA_CHROME = esChrome();
-export const NOMBRE_IA = IA_CHROME ? "IA de Chrome" : "IA del computador";
+export const NOMBRE_IA = IA_CHROME ? t("IA de Chrome") : t("IA del computador");
 
 function modeloAqui(): ModeloIa | null {
   const lm = (globalThis as { LanguageModel?: ModeloIa }).LanguageModel;

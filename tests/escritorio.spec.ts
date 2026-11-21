@@ -135,7 +135,10 @@ describe("tu escritorio en el plano (JST-163 §14)", () => {
   });
 
   it("ningún asiento del descanso cae en tu escritorio ni en tu fila, y desde cada lugar de la fila se llega a cada escritorio", () => {
-    for (const piso of [armarPisoComputador(HOY, 1440, 900), armarPisoTv(HOY), armarPiso(HOY, ANCHO_TV, "computador")]) {
+    // JST-410: también con las salas bajas (2 filas de escritorios) de una ventana ancha y baja, donde el puff no va.
+    const computador = [armarPisoComputador(HOY, 1440, 900), armarPisoComputador(HOY, 1900, 800), armarPisoComputador(HOY, 2700, 1200, [], 2), armarPisoComputador(HOY, 3400, 500)];
+    expect(computador.at(-1)!.salas.every((s) => s.h === 130 && !s.muebles.some((m) => m.nombre === "puff"))).toBe(true);
+    for (const piso of [...computador, armarPisoTv(HOY), armarPiso(HOY, ANCHO_TV, "computador")]) {
       for (const s of piso.salas) {
         const u = s.escritorio!;
         for (const a of s.asientos) {

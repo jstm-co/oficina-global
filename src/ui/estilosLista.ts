@@ -45,6 +45,16 @@ export const CSS_LISTA = /* css */ `
 .of-al-act { display: flex; justify-content: flex-end; min-width: 0; }
 .of-al-when { font-size: 12px; color: var(--of-muted-fg); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .of-al-when.is-error { color: var(--of-s-error-fg); }
+/* JST-410: «Errores antiguos» atenuado (sin el rojo de alarma) y la marca «Sin uso hace N días» */
+.of-c-viejos { --sc: var(--of-muted-fg); --sfg: var(--of-muted-fg); }
+.of-als.is-viejos .of-al-si { opacity: .7; }
+.of-alr.is-viejos, .of-alr.is-viejo { color: var(--of-muted-fg); }
+.of-alr.is-viejo .of-al-who b { color: var(--of-muted-fg); }
+.of-alr.is-viejo .of-nchip { color: var(--of-muted-fg); background: transparent; border-color: var(--of-border); }
+.of-alr.is-viejo .of-nchip svg { color: var(--of-muted-fg); }
+.of-al-sinuso { font-size: 12px; line-height: 16px; color: var(--of-muted-fg); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.of-fsilencio { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12.5px; line-height: 18px; color: var(--of-muted-fg); }
+.of-fsilencio > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .of-al-note { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; color: var(--of-danger-fg); }
 .of-al-note svg { color: var(--of-s-error); }
 .of-al-off { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px; border-radius: 10px; border: 1px dashed var(--of-border-strong); font-size: 13px; line-height: 18px; color: var(--of-muted-fg); }

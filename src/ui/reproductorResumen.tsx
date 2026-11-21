@@ -8,16 +8,17 @@
 // su chip (§4).
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { useHostLocation, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
-import { duracionFrase, mmss, NOMBRE_SECCION, type FraseResumen, type Seccion } from "../resumen/frases.js";
+import { duracionFrase, mmss, type FraseResumen, type Seccion } from "../resumen/frases.js";
 import type { Lector } from "../resumen/lector.js";
-import { periodoTexto } from "../resumen/tiempo.js";
+import { localeTag, t } from "../i18n.js";
 import { Capa, useVista3dAbierta } from "./capas.js";
 import { cx, EtiquetaEmpresa, Icono } from "./piso.js";
-import { resumen, useResumen } from "./resumen.js";
+import { nombreSeccion, periodoEncabezado, resumen, useResumen } from "./resumen.js";
 import { useCelular, useMovimientoReducido } from "./useOficina.js";
 
 const ICONO_SECCION: Readonly<Record<Seccion, string>> = { intro: "audio-lines", toca: "hand", hecho: "circle-check", trabajan: "keyboard", cola: "hourglass", cierre: "check" };
-const velocidadTexto = (v: number) => `${String(v).replace(".", ",")}×`;
+// El decimal va como lo escribe el idioma de la interfaz («1,5×» en español, «1.5×» en inglés; JST-413).
+const velocidadTexto = (v: number) => `${new Intl.NumberFormat(localeTag()).format(v)}×`;
 
 /** Dónde va: centrado sobre la página de la Oficina (o el contenido de la página de Paperclip que esté abierta), y si está sobre el piso (encima de sus rótulos). */
 function useArea(activo: boolean): { left: number; width: number; piso: boolean } | null {
@@ -110,7 +111,7 @@ function ChipTarea({ prefijo, tid }: { prefijo: string | null | undefined; tid: 
   const ruta = `/${encodeURIComponent(activo && activo !== pre ? activo : pre)}/issues/${encodeURIComponent(tid)}`;
   const { href, onClick } = navigation.linkProps(ruta);
   return (
-    <a className="of-rs-tid" href={href} onClick={(e) => { e.stopPropagation(); onClick(e); }} title={`Abrir ${tid}`}>
+    <a className="of-rs-tid" href={href} onClick={(e) => { e.stopPropagation(); onClick(e); }} title={t("Abrir {tid}", { tid })}>
       {tid}
     </a>
   );
@@ -148,7 +149,7 @@ function Avance({ l, rm }: { l: Lector; rm: boolean }) {
         const son = l.sonando;
         const ya = son ? (l.fase === "pausa" ? (l.pausadaEn ?? 0) : Math.max(0, Date.now() - son.desde)) : 0;
         return (
-          <i key={S.sec} style={{ flex: `${w} 1 0` } as CSSProperties} title={NOMBRE_SECCION[S.sec]}>
+          <i key={S.sec} style={{ flex: `${w} 1 0` } as CSSProperties} title={nombreSeccion(S.sec)}>
             <b style={{ width: `${estado === "ok" ? 100 : w0}%` }} />
             {estado === "cur" && esta > 0 && (l.fase === "leyendo" || l.fase === "pausa") ? (
               <b
@@ -171,7 +172,7 @@ function Centro({ l, conIa, contextoLee, cayo }: { l: Lector; conIa: boolean; co
       <>
         <span className="of-rsa-sec">
           <Icono nombre="loader" tam={12} className="of-rs-spin" />
-          <span className="of-rsa-nom">Armando el resumen…</span>
+          <span className="of-rsa-nom">{t("Armando el resumen…")}</span>
         </span>
         <span className="of-rsa-sub">
           <span className="of-rs-sk" style={{ width: "78%" }} />
@@ -186,7 +187,7 @@ function Centro({ l, conIa, contextoLee, cayo }: { l: Lector; conIa: boolean; co
       <>
         <span className="of-rsa-sec">
           <Icono nombre="check" tam={12} />
-          <span className="of-rsa-nom">Listo · {mmss(l.duracionTotal())}</span>
+          <span className="of-rsa-nom">{t("Listo · {tiempo}", { tiempo: mmss(l.duracionTotal()) })}</span>
         </span>
         {ultima ? <span className="of-rsa-sub is-fin">{ultima.texto}</span> : null}
       </>
@@ -202,12 +203,12 @@ function Centro({ l, conIa, contextoLee, cayo }: { l: Lector; conIa: boolean; co
     <span className="of-rsa-sec is-parte">
       <span className="of-rsa-sn">
         <Icono nombre={ICONO_SECCION[S.sec]} tam={12} className={cx("of-rsa-si", `is-${S.sec}`)} />
-        <span className="of-rsa-nom">{NOMBRE_SECCION[S.sec]}</span>
+        <span className="of-rsa-nom">{nombreSeccion(S.sec)}</span>
       </span>
-      {fr.length > 1 ? <span className="of-rsa-k">{`${l.pos.k + 1} de ${fr.length}`}</span> : null}
-      {l.fase === "pausa" ? <span className="of-rsa-pz">{contextoLee ? "En pausa · lees el contexto" : "En pausa"}</span> : null}
+      {fr.length > 1 ? <span className="of-rsa-k">{t("{k} de {n}", { k: l.pos.k + 1, n: fr.length })}</span> : null}
+      {l.fase === "pausa" ? <span className="of-rsa-pz">{contextoLee ? t("En pausa · lees el contexto") : t("En pausa")}</span> : null}
       {/* JST-325: el audio de la voz elegida no llegó a tiempo y sigue la del navegador (antes cambiaba sin avisar). */}
-      {cayo && l.fase !== "pausa" ? <span className="of-rsa-pz" title="El audio de la voz elegida no llegó a tiempo">Voz del navegador</span> : null}
+      {cayo && l.fase !== "pausa" ? <span className="of-rsa-pz" title={t("El audio de la voz elegida no llegó a tiempo")}>{t("Voz del navegador")}</span> : null}
     </span>
   );
   const f = l.actual();
@@ -218,7 +219,7 @@ function Centro({ l, conIa, contextoLee, cayo }: { l: Lector; conIa: boolean; co
         {cabeza}
         <span className="of-rsa-sub is-mut">
           <Icono nombre="loader" tam={14} className="of-rs-spin" />
-          {escribe ? `La IA está escribiendo «${NOMBRE_SECCION[S.sec]}»…` : `Armando «${NOMBRE_SECCION[S.sec]}»…`}
+          {escribe ? t("La IA está escribiendo «{parte}»…", { parte: nombreSeccion(S.sec) }) : t("Armando «{parte}»…", { parte: nombreSeccion(S.sec) })}
         </span>
       </>
     );
@@ -252,18 +253,20 @@ function PanelTexto({ l }: { l: Lector }) {
   return (
     <div ref={caja} className="of-rsa-texto" onWheel={() => (tocadoEn.current = Date.now())} onTouchMove={() => (tocadoEn.current = Date.now())}>
       <div className="of-rsa-th">
-        <b>Todo el resumen</b>
+        <b>{t("Todo el resumen")}</b>
         <span className="of-sp" />
-        <span className="of-rsa-tm">{p ? periodoTexto(p.desde, p.ahora, p.ultima) : ""}</span>
+        <span className="of-rsa-tm">{p ? periodoEncabezado(p.desde, p.ahora, p.ultima) : ""}</span>
       </div>
       {r.fallanResumen.length > 0 ? (
         <div className="of-rsa-warn" role="alert">
           <Icono nombre="triangle-alert" tam={14} />
           <span>
             <b>
-              {r.fallanResumen.map((e) => e.nombre).join(", ")} {r.fallanResumen.length === 1 ? "no responde" : "no responden"}.
+              {r.fallanResumen.length === 1
+                ? t("{nombres} no responde.", { nombres: r.fallanResumen.map((e) => e.nombre).join(", ") })
+                : t("{nombres} no responden.", { nombres: r.fallanResumen.map((e) => e.nombre).join(", ") })}
             </b>{" "}
-            El resumen va sin {r.fallanResumen.length === 1 ? "esa empresa" : "esas empresas"}.
+            {r.fallanResumen.length === 1 ? t("El resumen va sin esa empresa.") : t("El resumen va sin esas empresas.")}
           </span>
         </div>
       ) : null}
@@ -284,7 +287,7 @@ function PanelTexto({ l }: { l: Lector }) {
               <div key={S.sec} className="of-rs-gsec">
                 <div className={cx("of-rs-gh", `is-${S.sec}`)}>
                   <Icono nombre={ICONO_SECCION[S.sec]} tam={12} />
-                  <span>{NOMBRE_SECCION[S.sec]}</span>
+                  <span>{nombreSeccion(S.sec)}</span>
                 </div>
                 {!fr ? (
                   <div className="of-rs-gsk">
@@ -393,14 +396,14 @@ export function ReproductorResumen() {
             <div className="of-rsa-nv">
               <Icono nombre="volume-x" tam={14} />
               <span>
-                <b>Este navegador no tiene voz en español.</b> Te lo dejo escrito.
+                <b>{t("Este navegador no tiene voz en español.")}</b> {t("Te lo dejo escrito.")}
               </span>
             </div>
           ) : null}
-          <div className="of-rsa-bar" role="region" aria-label="Resumen en voz alta">
+          <div className="of-rsa-bar" role="region" aria-label={t("Resumen en voz alta")}>
             <Avance l={l} rm={rm} />
             {fin ? (
-              <button ref={play} type="button" className="of-rsa-play" aria-label="Leer otra vez" title="Otra vez" onClick={() => l.otraVez()}>
+              <button ref={play} type="button" className="of-rsa-play" aria-label={t("Leer otra vez")} title={t("Otra vez")} onClick={() => l.otraVez()}>
                 <Icono nombre="rotate-ccw" tam={16} />
               </button>
             ) : (
@@ -408,8 +411,8 @@ export function ReproductorResumen() {
                 ref={play}
                 type="button"
                 className="of-rsa-play of-rs-fill"
-                aria-label={sonando ? "Pausar" : "Seguir"}
-                title={sonando ? "Pausar (espacio)" : "Seguir"}
+                aria-label={sonando ? t("Pausar") : t("Seguir")}
+                title={sonando ? t("Pausar (espacio)") : t("Seguir")}
                 onClick={() => l.alternar()}
               >
                 {l.fase === "leyendo" || l.fase === "pausa" || !r.voz ? <Icono nombre={sonando ? "pause" : "play"} tam={16} /> : <Icono nombre="loader" tam={16} className="of-rs-spin" />}
@@ -417,10 +420,10 @@ export function ReproductorResumen() {
             )}
             {celular ? null : (
               <>
-                <button type="button" className="of-ibtn is-ghost of-rs-fill of-rsa-prev" aria-label="Parte anterior" title="Parte anterior (←)" disabled={fin || (l.pos.s === 0 && l.pos.k === 0)} onClick={() => l.saltar(-1)}>
+                <button type="button" className="of-ibtn is-ghost of-rs-fill of-rsa-prev" aria-label={t("Parte anterior")} title={t("Parte anterior (←)")} disabled={fin || (l.pos.s === 0 && l.pos.k === 0)} onClick={() => l.saltar(-1)}>
                   <Icono nombre="skip-back" tam={14} />
                 </button>
-                <button type="button" className="of-ibtn is-ghost of-rs-fill of-rsa-next" aria-label="Parte siguiente" title="Parte siguiente (→)" disabled={fin} onClick={() => l.saltar(1)}>
+                <button type="button" className="of-ibtn is-ghost of-rs-fill of-rsa-next" aria-label={t("Parte siguiente")} title={t("Parte siguiente (→)")} disabled={fin} onClick={() => l.saltar(1)}>
                   <Icono nombre="skip-forward" tam={14} />
                 </button>
               </>
@@ -429,21 +432,21 @@ export function ReproductorResumen() {
               <Centro l={l} conIa={r.conIa} contextoLee={r.contextoLee} cayo={!!r.voz?.cayo} />
             </div>
             {celular ? null : (
-              <button type="button" className="of-btn is-sm is-ghost of-rsa-vel" title="Velocidad" onClick={() => l.cambiarVelocidad()}>
+              <button type="button" className="of-btn is-sm is-ghost of-rsa-vel" title={t("Velocidad")} onClick={() => l.cambiarVelocidad()}>
                 {velocidadTexto(l.velocidad)}
               </button>
             )}
             {celular ? (
-              <button type="button" className={cx("of-ibtn is-ghost of-rsa-txt", r.texto && "is-on")} aria-pressed={r.texto} aria-label="Texto" title="Texto" onClick={() => r.alternarTexto()}>
+              <button type="button" className={cx("of-ibtn is-ghost of-rsa-txt", r.texto && "is-on")} aria-pressed={r.texto} aria-label={t("Texto")} title={t("Texto")} onClick={() => r.alternarTexto()}>
                 <Icono nombre="text" tam={18} />
               </button>
             ) : (
               <button type="button" className={cx("of-btn is-sm of-rsa-txt", !r.texto && "is-ghost", r.texto && "is-on")} aria-pressed={r.texto} onClick={() => r.alternarTexto()}>
                 <Icono nombre="text" tam={14} />
-                Texto
+                {t("Texto")}
               </button>
             )}
-            <button type="button" className="of-ibtn is-ghost of-rsa-x" aria-label="Cerrar el resumen" title="Cerrar" onClick={() => r.cerrar()}>
+            <button type="button" className="of-ibtn is-ghost of-rsa-x" aria-label={t("Cerrar el resumen")} title={t("Cerrar")} onClick={() => r.cerrar()}>
               <Icono nombre="x" tam={celular ? 18 : 14} />
             </button>
           </div>

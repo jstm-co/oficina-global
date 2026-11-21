@@ -5,34 +5,36 @@
 // nombre (`mantenerAlDia`), sin ningún comando.
 import { useEffect, useRef, useState } from "react";
 import { GRUPOS_MOTOR, vocesDe, type GrupoMotor } from "../eleccionVoces.js";
+import { msg, t } from "../i18n.js";
 import type { AgenteVista } from "../vista.js";
 import type { EstadoMotores } from "../vozViva.js";
 import { useAjustes } from "./ajustes.js";
 import { useVocesSinGenerar } from "./audiosVoces.js";
 import { mantenerAlDia, prepararVoces, useEleccion, useErrorPreparar, useEstadoMotores, type AgenteParaVoz } from "./eleccion.js";
+import { tx } from "./i18n.js";
 import { cx, Icono } from "./piso.js";
 
 /** Lo que se dice de cada motor al elegirlo: qué voces trae y lo que cuesta. */
 const MOTORES: Record<GrupoMotor, { nombre: string; voces: string; costo: (bajar: number) => string }> = {
   supertonic: {
     nombre: "Supertonic",
-    voces: "10 voces",
-    costo: (bajar) => `Corre en este computador, sin instalar nada más. ${bajar > 0 ? `Baja ${mb(bajar)} una vez` : "Ya está bajado"} y usa ~0,5 GB de memoria mientras graba.`,
+    voces: msg("10 voces"),
+    costo: (bajar) => (bajar > 0 ? t("Corre en este computador, sin instalar nada más. Baja {mb} una vez y usa ~0,5 GB de memoria mientras graba.", { mb: mb(bajar) }) : t("Corre en este computador, sin instalar nada más. Ya está bajado y usa ~0,5 GB de memoria mientras graba.")),
   },
   kokoro: {
     nombre: "Kokoro",
-    voces: "Alex, Dora y Santa",
-    costo: (bajar) => `Corre en este computador. Necesita uv y ffmpeg${bajar > 0 ? `, y baja ${mb(bajar)} una vez` : ""}.`,
+    voces: msg("Alex, Dora y Santa"),
+    costo: (bajar) => (bajar > 0 ? t("Corre en este computador. Necesita uv y ffmpeg, y baja {mb} una vez.", { mb: mb(bajar) }) : t("Corre en este computador. Necesita uv y ffmpeg.")),
   },
   edge: {
     nombre: "Edge",
-    voces: "Lorenzo y Catalina",
-    costo: () => "Las voces de Microsoft: cada frase (con el nombre del agente y, al momento, la tarea) va a sus servidores. Necesita uv, ffmpeg e internet.",
+    voces: msg("Lorenzo y Catalina (y 16 más de otros países, que se graban al elegirlas)"),
+    costo: () => t("Las voces de Edge (Lorenzo, Catalina y las de otros países) mandan el texto a Microsoft: cada frase (con el nombre del agente y, al momento, la tarea) va a sus servidores. Necesita uv, ffmpeg e internet."),
   },
   clones: {
-    nombre: "Clones chilenos",
-    voces: "4 voces",
-    costo: () => "Las más naturales y las más pesadas: usan 4 a 5 GB de memoria, bajan sus modelos la primera vez y tardan ~10 min por agente. Necesitan uv y ffmpeg.",
+    nombre: msg("Clones chilenos"),
+    voces: msg("4 voces"),
+    costo: () => t("Las más naturales y las más pesadas: usan 4 a 5 GB de memoria, bajan sus modelos la primera vez y tardan ~10 min por agente. Necesitan uv y ffmpeg."),
   },
 };
 
@@ -43,7 +45,7 @@ export function motivoNoDisponible(est: EstadoMotores | null, g: GrupoMotor): st
   if (!est) return null;
   const motivo = est.motores[g];
   if (motivo) return motivo;
-  if ((g === "supertonic" || g === "kokoro") && est.porBajar[g] > 0) return "falta bajar su modelo (con «Preparar voces»)";
+  if ((g === "supertonic" || g === "kokoro") && est.porBajar[g] > 0) return t("falta bajar su modelo (con «Preparar voces»)");
   return null;
 }
 
@@ -83,7 +85,7 @@ function marcadosAlAbrir(antes: readonly GrupoMotor[] | null, est: EstadoMotores
   return est.motores.supertonic ? [] : ["supertonic"];
 }
 
-const nombres = (gs: readonly GrupoMotor[]) => gs.map((g) => MOTORES[g].nombre).join(", ");
+const nombres = (gs: readonly GrupoMotor[]) => gs.map((g) => t(MOTORES[g].nombre)).join(", ");
 
 export function PrepararVoces({ agentes, companyId }: { agentes: readonly AgenteVista[]; companyId: string }) {
   const est = useEstadoMotores();
@@ -121,18 +123,15 @@ export function PrepararVoces({ agentes, companyId }: { agentes: readonly Agente
           <span>
             {p.fase === "bajando" ? (
               <>
-                <b>Bajando {p.modelo ?? "el modelo"}</b> · {pct} % de {mb(p.pesa)}. Se baja una sola vez.
+                {tx("{bajando} · {pct} % de {peso}. Se baja una sola vez.", { bajando: <b>{p.modelo ? t("Bajando {modelo}", { modelo: p.modelo }) : t("Bajando el modelo")}</b>, pct, peso: mb(p.pesa) })}
               </>
             ) : (
               <>
-                <b>
-                  Grabando las voces · {p.hechas} de {p.total}
-                </b>
-                {p.fallas > 0 ? ` (${p.fallas} no se pudieron)` : ""}. Ya hablan con lo que está listo; lo demás, con la voz del navegador.
+                {tx("{grabando}{fallas}. Ya hablan con lo que está listo; lo demás, con la voz del navegador.", { grabando: <b>{t("Grabando las voces · {hechas} de {total}", { hechas: p.hechas, total: p.total })}</b>, fallas: p.fallas > 0 ? ` (${t("{n} no se pudieron", { n: p.fallas })})` : "" })}
               </>
             )}
           </span>
-          <span className="of-ia-bar" role="progressbar" aria-label={p.fase === "bajando" ? `Bajando ${p.modelo ?? "el modelo"}` : "Grabando las voces"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+          <span className="of-ia-bar" role="progressbar" aria-label={p.fase === "bajando" ? (p.modelo ? t("Bajando {modelo}", { modelo: p.modelo }) : t("Bajando el modelo")) : t("Grabando las voces")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
             <i style={{ width: `${pct}%` }} />
           </span>
         </span>
@@ -147,16 +146,16 @@ export function PrepararVoces({ agentes, companyId }: { agentes: readonly Agente
         <Icono nombre="triangle-alert" tam={12} />
         <span className="of-pv-c">
           <span>
-            <b>No se pudieron preparar las voces.</b> {p.motivo ?? ""}
+            <b>{t("No se pudieron preparar las voces.")}</b> {p.motivo ?? ""}
           </span>
           <span className="of-pv-acc">
             {elegidos ? (
               <button type="button" className="of-btn is-xs" disabled={mandando} onClick={() => void preparar(elegidos)}>
-                Reintentar
+                {t("Reintentar")}
               </button>
             ) : null}
             <button type="button" className="of-btn is-xs" onClick={() => setEligiendo(true)}>
-              Elegir otros motores
+              {t("Elegir otros motores")}
             </button>
           </span>
         </span>
@@ -172,19 +171,19 @@ export function PrepararVoces({ agentes, companyId }: { agentes: readonly Agente
           <span className="of-avp-l">
             <Icono nombre="check" tam={14} />
             <span>
-              <b>Voces al día con {nombres(elegidos)}</b>
-              <em>Los agentes nuevos o con otro nombre se graban solos, en el computador donde corre Paperclip.</em>
+              <b>{t("Voces al día con {motores}", { motores: nombres(elegidos) })}</b>
+              <em>{t("Los agentes nuevos o con otro nombre se graban solos, en el computador donde corre Paperclip.")}</em>
             </span>
           </span>
           <button type="button" className="of-btn is-xs" onClick={() => setEligiendo(true)}>
-            Cambiar
+            {t("Cambiar")}
           </button>
         </div>
         {p.sinMotor > 0 ? (
           <div className="of-avp-note">
             <Icono nombre="info" tam={12} />
             <span>
-              {p.sinMotor === 1 ? "1 frase es" : `${p.sinMotor} frases son`} de una voz de un motor que no elegiste o que no se puede usar aquí: {p.sinMotor === 1 ? "esa la dice" : "esas las dice"} la voz del navegador.
+              {p.sinMotor === 1 ? t("1 frase es de una voz de un motor que no elegiste o que no se puede usar aquí: esa la dice la voz del navegador.") : t("{n} frases son de una voz de un motor que no elegiste o que no se puede usar aquí: esas las dice la voz del navegador.", { n: p.sinMotor })}
             </span>
           </div>
         ) : null}
@@ -199,12 +198,12 @@ export function PrepararVoces({ agentes, companyId }: { agentes: readonly Agente
         <span className="of-avp-l">
           <Icono nombre="rotate-ccw" tam={14} />
           <span>
-            <b>Mantener las voces al día</b>
-            <em>Que los agentes nuevos o con otro nombre se graben solos, sin correr ningún comando.</em>
+            <b>{t("Mantener las voces al día")}</b>
+            <em>{t("Que los agentes nuevos o con otro nombre se graben solos, sin correr ningún comando.")}</em>
           </span>
         </span>
         <button type="button" className="of-btn is-xs" onClick={() => setEligiendo(true)}>
-          Preparar voces
+          {t("Preparar voces")}
         </button>
       </div>
     );
@@ -218,41 +217,41 @@ export function PrepararVoces({ agentes, companyId }: { agentes: readonly Agente
       <Icono nombre="volume-2" tam={12} />
       <span className="of-pv-c">
         <span>
-          {sinGenerar ? <b>Todavía no hay audios en este Paperclip. </b> : null}
-          Elige con qué motores se graban las voces. Se graban una vez, en el computador donde corre Paperclip, y después se mantienen al día solas. Lo que falte lo dice la voz del navegador.
+          {sinGenerar ? <b>{t("Todavía no hay audios en este Paperclip.")} </b> : null}
+          {t("Elige con qué motores se graban las voces. Se graban una vez, en el computador donde corre Paperclip, y después se mantienen al día solas. Lo que falte lo dice la voz del navegador.")}
         </span>
-        <span className="of-pv-motores" role="group" aria-label="Motores de voz">
+        <span className="of-pv-motores" role="group" aria-label={t("Motores de voz")}>
           {GRUPOS_MOTOR.map((g) => {
             const m = MOTORES[g];
             const no = est.motores[g];
             const on = lista.includes(g) && !no;
             const bajar = g === "supertonic" || g === "kokoro" ? est.porBajar[g] : 0;
             return (
-              <label key={g} className={cx("of-vz-ev", on && "is-on", no && "is-no")} title={no ? `No se puede en este computador: ${no}` : undefined}>
+              <label key={g} className={cx("of-vz-ev", on && "is-on", no && "is-no")} title={no ? t("No se puede en este computador: {motivo}", { motivo: no }) : undefined}>
                 <input type="checkbox" checked={on} disabled={!!no || mandando} onChange={() => cambiar(g)} />
                 <span className="of-vz-mk">{on ? <Icono nombre="check" tam={12} /> : null}</span>
                 <span>
                   <b>
-                    {m.nombre} · {m.voces}
+                    {t(m.nombre)} · {t(m.voces)}
                   </b>
-                  <em>{no ? `No se puede en este computador: ${no}` : m.costo(bajar)}</em>
+                  <em>{no ? t("No se puede en este computador: {motivo}", { motivo: no }) : m.costo(bajar)}</em>
                 </span>
               </label>
             );
           })}
         </span>
-        {fallo ? <span className="of-pv-err">No respondió el servidor de Paperclip. Vuelve a intentarlo en un momento.</span> : null}
+        {fallo ? <span className="of-pv-err">{t("No respondió el servidor de Paperclip. Vuelve a intentarlo en un momento.")}</span> : null}
         <span className="of-pv-acc">
           <button type="button" className="of-btn is-xs is-primary" disabled={lista.length === 0 || mandando} onClick={() => void preparar(lista)}>
             <Icono nombre="download" tam={12} />
-            {mandando ? "Empezando…" : "Preparar voces"}
+            {mandando ? t("Empezando…") : t("Preparar voces")}
           </button>
           {elegidos || !sinGenerar ? (
             <button type="button" className="of-btn is-xs" disabled={mandando} onClick={() => setEligiendo(false)}>
-              Cancelar
+              {t("Cancelar")}
             </button>
           ) : null}
-          <span className="of-pv-n">{lista.length === 0 ? "Elige al menos uno" : `${cuantas} voces para repartir`}</span>
+          <span className="of-pv-n">{lista.length === 0 ? t("Elige al menos uno") : cuantas === 1 ? t("1 voz para repartir") : t("{n} voces para repartir", { n: cuantas })}</span>
         </span>
       </span>
     </div>

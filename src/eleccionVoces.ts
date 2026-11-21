@@ -17,10 +17,15 @@
 // frase). Y se elige con qué motores se graban las voces desde la oficina
 // («Preparar voces»): Supertonic (lo que viene listo), Kokoro, Edge y los clones.
 import { FRASES } from "./avisos.js";
-import { VOCES, vozPorId, type Motor, type Voz, type VozId } from "./voces.js";
+import { t } from "./i18n.js";
+import { VOCES, VOCES_REPARTO, vocesEdgePorPais, vozPorId, type Motor, type Voz, type VozId } from "./voces.js";
 
 /** Las que alcanzan a leer al momento. */
-export const VOCES_AL_MOMENTO: readonly VozId[] = ["lorenzo", "catalina", "alex", "dora", "santa", ...VOCES.filter((v) => v.motor === "supertonic").map((v) => v.id)];
+// JST-412: todas las de Edge (también las de otros países; primero, por país, como las ofrece el selector), Kokoro y Supertonic; los clones no.
+export const VOCES_AL_MOMENTO: readonly VozId[] = [
+  ...vocesEdgePorPais().flatMap((g) => g.voces.map((v) => v.id)),
+  ...VOCES.filter((v) => v.motor === "kokoro" || v.motor === "supertonic").map((v) => v.id),
+];
 
 /** 0.13.0: los motores como se eligen en «Preparar voces» (Qwen3 y Chatterbox van juntos, como «los clones»). */
 export type GrupoMotor = "supertonic" | "kokoro" | "edge" | "clones";
@@ -30,9 +35,9 @@ export function grupoDe(m: Motor): GrupoMotor {
   return m === "qwen3" || m === "chatterbox" ? "clones" : m;
 }
 
-/** Las voces de esos motores, en el orden de siempre. */
+/** Las voces de esos motores que se preparan y reparten, en el orden de siempre (JST-412: sin las que son solo por elección). */
 export function vocesDe(grupos: readonly GrupoMotor[]): readonly Voz[] {
-  return VOCES.filter((v) => grupos.includes(grupoDe(v.motor)));
+  return VOCES_REPARTO.filter((v) => grupos.includes(grupoDe(v.motor)));
 }
 
 /** Quién lee el Resumen o «Leer contexto»: una voz de la lista o la del navegador. */
@@ -137,14 +142,14 @@ export const NUMERO_VOZ: Readonly<Partial<Record<VozId, number>>> = {
 /** Cómo se llama una voz en el selector: los clones son «Clon #42». */
 export function nombreEnLista(id: VozId): string {
   const v = vozPorId(id);
-  return !v ? id : esAlMomento(id) ? v.nombre : `Clon #${NUMERO_VOZ[id]}`;
+  return !v ? id : esAlMomento(id) ? v.nombre : t("Clon #{n}", { n: NUMERO_VOZ[id] ?? "" });
 }
 
 /** Por qué un clon no sirve para leer al momento (el panel lo dice bajo su nombre). */
 export function porqueNoAlcanza(id: VozId): string | null {
   const v = vozPorId(id);
   if (!v || esAlMomento(id)) return null;
-  return v.motor === "qwen3" ? "Tarda 13 a 25 s por frase; para leer al momento, menos de 4 s" : "Tarda 14 a 30 s por frase; para leer al momento, menos de 4 s";
+  return v.motor === "qwen3" ? t("Tarda 13 a 25 s por frase; para leer al momento, menos de 4 s") : t("Tarda 14 a 30 s por frase; para leer al momento, menos de 4 s");
 }
 
 /** Cuánto tarda en grabarse un agente con esa voz (20 frases), para decírselo al usuario antes de elegir. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgenteOficina, Espera, RunActual } from "../src/estado.js";
-import { abreVentana, agrupar, chipsDe, comparar, cuandoFila, grupoDe, lineaDe, notaGrupo, PLEGADOS_CELULAR } from "../src/lista.js";
+import { abiertoPorOmision, abreVentana, agrupar, alternarPlegado, chipsDe, comparar, cuandoFila, DIAS_SIN_USO, escribirPlegados, estaAbierto, grupoDe, leerPlegados, lineaDe, marcaSinUso, notaGrupo, PLEGADOS_CELULAR } from "../src/lista.js";
 import { vistaDe, type AgenteVista } from "../src/vista.js";
 
 const AHORA = Date.parse("2026-10-21T15:00:00Z");
@@ -55,20 +55,20 @@ const run = (identifier: string | null, enCola = false, desde = min(3)): RunActu
 });
 
 describe("grupos de la lista (design-spec de JST-95 §3)", () => {
-  it("van en orden fijo: te necesitan, con error, trabajando, en pausa, libres; sin los vacíos", () => {
+  it("van en orden fijo: te necesitan, con error, trabajando, en pausa, errores antiguos, libres; sin los vacíos", () => {
     const g = agrupar([
       agente("libre"),
       agente("pausa", { base: "pausa" }),
       agente("trabaja", { base: "trabajando", run: run("BET-1") }),
       agente("error", { base: "error" }),
-    ]);
+    ], false, AHORA);
     expect(g.map((x) => x.k)).toEqual(["error", "trabaja", "pausa", "libre"]);
   });
 
   it("quien te espera va solo en «Te necesitan», en cualquier estado, y su sección dice «y N más arriba»", () => {
     const trabajaYEspera = agente("tb", { base: "trabajando", run: run("BET-2"), teNecesita: [espera("BET-3", min(5))] });
     const errorYEspera = agente("eb", { base: "error", teNecesita: [espera("BET-4", min(6))] });
-    const g = agrupar([trabajaYEspera, errorYEspera, agente("e2", { base: "error" }), agente("t2", { base: "trabajando", run: run("BET-5") })]);
+    const g = agrupar([trabajaYEspera, errorYEspera, agente("e2", { base: "error" }), agente("t2", { base: "trabajando", run: run("BET-5") })], false, AHORA);
     expect(g.find((x) => x.k === "toca")!.agentes.map((a) => a.id)).toEqual(["eb", "tb"]);
     expect(g.find((x) => x.k === "error")!.agentes.map((a) => a.id)).toEqual(["e2"]);
     expect(g.find((x) => x.k === "error")!.arriba).toBe(1);
@@ -97,10 +97,10 @@ describe("grupos de la lista (design-spec de JST-95 §3)", () => {
   });
 
   it("la pista del orden va solo en computador y con 2 o más", () => {
-    const dos = agrupar([agente("x", { base: "error", desde: min(1) }), agente("y", { base: "error", desde: min(2) })])[0]!;
+    const dos = agrupar([agente("x", { base: "error", desde: min(1) }), agente("y", { base: "error", desde: min(2) })], false, AHORA)[0]!;
     expect(notaGrupo(dos, false)).toBe("· el más reciente, arriba");
     expect(notaGrupo(dos, true)).toBeNull();
-    const uno = agrupar([agente("x", { base: "error" })])[0]!;
+    const uno = agrupar([agente("x", { base: "error" })], false, AHORA)[0]!;
     expect(notaGrupo(uno, false)).toBeNull();
     const libres = agrupar([agente("x"), agente("y")])[0]!;
     expect(notaGrupo(libres, false)).toBeNull();
@@ -113,6 +113,89 @@ describe("grupos de la lista (design-spec de JST-95 §3)", () => {
 
   it("en el celular vienen plegados «En pausa» y «Libres»", () => {
     expect(PLEGADOS_CELULAR).toEqual(["pausa", "libre"]);
+  });
+});
+
+const dia = (d: number) => new Date(AHORA - d * 86_400_000).toISOString();
+
+describe("errores antiguos (JST-410)", () => {
+  const reciente = agente("rec", { base: "error", desde: min(30) });
+  const viejo = agente("vie", { base: "error", desde: dia(12) });
+  const silenciado = agente("sil", { base: "error", desde: min(40) });
+  const sil = { sil: min(40) };
+
+  it("el grupo va después de «En pausa» y antes de «Libres»; los recientes siguen en «Con error»", () => {
+    const g = agrupar([agente("libre"), agente("pausa", { base: "pausa" }), viejo, reciente, silenciado], false, AHORA, sil);
+    expect(g.map((x) => x.k)).toEqual(["error", "pausa", "viejos", "libre"]);
+    expect(g.find((x) => x.k === "error")!.agentes.map((a) => a.id)).toEqual(["rec"]);
+    expect(g.find((x) => x.k === "viejos")!.agentes.map((a) => a.id)).toEqual(["sil", "vie"]);
+    expect(g.find((x) => x.k === "viejos")).toMatchObject({ label: "Errores antiguos", pista: "de hace más de un día o silenciados" });
+  });
+
+  it("quien te necesita va siempre en «Te necesitan», aunque su error sea viejo", () => {
+    const a = agente("n", { base: "error", desde: dia(5), teNecesita: [espera("BET-1", min(5))] });
+    expect(grupoDe(a, AHORA)).toBe("toca");
+  });
+
+  it("la fila de un error antiguo dice el error y pierde el tono rojo", () => {
+    expect(lineaDe(viejo, AHORA, null, null, true)).toMatchObject({ tono: null });
+    expect(lineaDe(viejo, AHORA, null, "adapter_failed", true).contexto).toMatch(/^adapter_failed · /);
+    expect(lineaDe(viejo, AHORA).tono).toBe("error");
+    expect(cuandoFila(viejo, AHORA)).toBe("hace 12 días");
+  });
+
+  it("«Libres» viene plegado en computador y «Errores antiguos» abierto; el celular sigue igual", () => {
+    expect(abiertoPorOmision("libre", false)).toBe(false);
+    expect(abiertoPorOmision("viejos", false)).toBe(true);
+    expect(abiertoPorOmision("pausa", false)).toBe(true);
+    expect(abiertoPorOmision("pausa", true)).toBe(false);
+    expect(abiertoPorOmision("libre", true)).toBe(false);
+    expect(abiertoPorOmision("viejos", true)).toBe(true);
+  });
+
+  it("lo que el usuario abre o pliega se recuerda por vista y se lee con tolerancia", () => {
+    let p = leerPlegados(null);
+    expect(estaAbierto(p, "libre", false)).toBe(false);
+    p = alternarPlegado(p, "libre", false);
+    expect(estaAbierto(p, "libre", false)).toBe(true);
+    expect(estaAbierto(p, "libre", true)).toBe(false);
+    p = alternarPlegado(p, "viejos", true);
+    expect(estaAbierto(p, "viejos", true)).toBe(false);
+    expect(leerPlegados(escribirPlegados(p))).toEqual(p);
+    for (const malo of ["", "{", "[]", "null", '{"computador":3}', '{"computador":{"libre":"si","otro":true}}']) {
+      expect(estaAbierto(leerPlegados(malo), "libre", false)).toBe(false);
+      expect(estaAbierto(leerPlegados(malo), "viejos", false)).toBe(true);
+    }
+  });
+});
+
+describe("agentes sin uso (JST-410)", () => {
+  it("la constante es de 30 días", () => {
+    expect(DIAS_SIN_USO).toBe(30);
+  });
+
+  it("un libre sin tarea pendiente con más de 30 días lleva «Sin uso hace N días»", () => {
+    expect(marcaSinUso(agente("a", { desde: dia(45) }), AHORA)).toBe("Sin uso hace 45 días");
+    expect(lineaDe(agente("a", { desde: dia(45) }), AHORA).sinUso).toBe("Sin uso hace 45 días");
+  });
+
+  it("no lleva la marca con 30 días o menos, ni sin fecha, ni si te necesita, ni si no está libre", () => {
+    expect(marcaSinUso(agente("a", { desde: dia(30) }), AHORA)).toBeNull();
+    expect(marcaSinUso(agente("a", { desde: dia(31) }), AHORA)).toBe("Sin uso hace 31 días");
+    expect(marcaSinUso(agente("a", { desde: null }), AHORA)).toBeNull();
+    expect(marcaSinUso(agente("a", { desde: dia(60), teNecesita: [espera("BET-1", min(1))] }), AHORA)).toBeNull();
+    expect(marcaSinUso(agente("a", { base: "pausa", desde: dia(60) }), AHORA)).toBeNull();
+    expect(lineaDe(agente("a", { desde: dia(5) }), AHORA)).not.toHaveProperty("sinUso");
+  });
+
+  it("el encabezado de «Libres» cuenta los sin uso", () => {
+    const g = agrupar([agente("a", { desde: dia(40) }), agente("b", { desde: dia(100) }), agente("c", { desde: dia(2) })], false, AHORA).find((x) => x.k === "libre")!;
+    expect(g.sinUso).toBe(2);
+    expect(notaGrupo(g, false)).toBe("· 2 sin uso hace más de 30 días");
+    expect(notaGrupo(g, true)).toBe("· 2 sin uso hace más de 30 días");
+    const sin = agrupar([agente("c", { desde: dia(2) })], false, AHORA).find((x) => x.k === "libre")!;
+    expect(sin.sinUso).toBe(0);
+    expect(notaGrupo(sin, false)).toBeNull();
   });
 });
 

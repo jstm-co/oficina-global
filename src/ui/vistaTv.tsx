@@ -13,9 +13,12 @@
 // 0.3.0 (JST-96 §11): la misma vida del piso, a 3x (o 2x con 5 empresas).
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fotoDe, llegadas, nombreCorto, type Llegada } from "../avisos.js";
+import { opcionesHora, t } from "../i18n.js";
 import { abreVentana } from "../lista.js";
 import { armarPisoTv } from "../plano.js";
-import { contarVista, type AgenteVista } from "../vista.js";
+import { contarVista, tagHora, type AgenteVista } from "../vista.js";
+import { useErroresSilenciados } from "./erroresSilenciados.js";
+import { tx } from "./i18n.js";
 import { useAjustes } from "./ajustes.js";
 import { Banners, Contadores, ConteoEmpresas, EstadoVivo } from "./encabezado.js";
 import { Ficha, FichaHoja, type Enlazar } from "./ficha.js";
@@ -111,7 +114,9 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
     () => armarPisoTv(oficina.empresas.map((e) => ({ prefijo: e.prefijo, agentes: e.agentes })), previas),
     [oficina.empresas, previas],
   );
-  const c = contarVista(oficina.agentes);
+  // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
+  const silenciados = useErroresSilenciados();
+  const c = contarVista(oficina.agentes, ahora, silenciados);
   const agente = sel ? oficina.agentes.find((a) => a.id === sel) : undefined;
   // La ventana sigue con lo último que se supo del agente hasta que se cierra (no pierde «Listo»).
   const ultimoResp = useRef<AgenteVista | null>(null);
@@ -131,9 +136,7 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
       mostrar(
         <>
           <Icono nombre="smartphone" tam={14} />
-          <span>
-            En iPhone no hay pantalla completa: usa <b>Compartir → Agregar a inicio</b>.
-          </span>
+          <span>{tx("En iPhone no hay pantalla completa: usa {accion}.", { accion: <b>{t("Compartir → Agregar a inicio")}</b> })}</span>
         </>,
         6000,
       );
@@ -170,12 +173,12 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
     if (!urlTv) return;
     const url = `${location.origin}${urlTv}`;
     copiar(url).then(
-      () => mostrar(<span>Enlace copiado. Ábrelo en el navegador del TV con tu sesión: <b className="of-mono">{url}</b></span>, 6000),
-      () => mostrar(<span>No pude copiar. El enlace es <b className="of-mono">{url}</b></span>, 8000),
+      () => mostrar(<span>{tx("Enlace copiado. Ábrelo en el navegador del TV con tu sesión: {url}", { url: <b className="of-mono">{url}</b> })}</span>, 6000),
+      () => mostrar(<span>{tx("No pude copiar. El enlace es {url}", { url: <b className="of-mono">{url}</b> })}</span>, 8000),
     );
   };
 
-  const hora = new Date(ahora).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+  const hora = new Date(ahora).toLocaleTimeString(tagHora(), { hour: "2-digit", minute: "2-digit", ...opcionesHora() });
   // Un solo lugar reservado: gana el error de lectura, después «te necesita», después «todos libres» (§10).
   const hayError = !!oficina.errorEmpresas || oficina.caidas.length > 0 || (oficina.sinAtencion && !oficina.cargando);
   const conToca = !hayError && !!bannerToca;
@@ -192,7 +195,7 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
           </div>
           <Contadores modo="tv" c={c} hl={null} onHl={() => undefined} cargando={oficina.cargando && oficina.agentes.length === 0} sinAtencion={oficina.sinAtencion} />
           <div className="of-tvsm">
-            {c.pausa} en pausa · {c.libre} {c.libre === 1 ? "libre" : "libres"}
+            {c.libre === 1 ? t("{pausa} en pausa · {libre} libre", { pausa: c.pausa, libre: c.libre }) : t("{pausa} en pausa · {libre} libres", { pausa: c.pausa, libre: c.libre })}
           </div>
           <span className="of-sp" />
           <div className="of-tvclock">{hora}</div>
@@ -223,20 +226,20 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
         <div className="of-tvbtns">
           <BotonesTv />
           {urlTv ? (
-            <button type="button" className="of-tvexit" onClick={copiarEnlace} title="Página suelta, sin el menú de Paperclip, para dejarla abierta en un TV">
+            <button type="button" className="of-tvexit" onClick={copiarEnlace} title={t("Página suelta, sin el menú de Paperclip, para dejarla abierta en un TV")}>
               <Icono nombre="link" tam={14} />
-              Enlace para un TV
+              {t("Enlace para un TV")}
             </button>
           ) : null}
           {onSalir ? (
             <button type="button" className="of-tvexit" onClick={onSalir}>
               <Icono nombre="minimize-2" tam={14} />
-              Salir <kbd>Esc</kbd>
+              {tx("Salir {tecla}", { tecla: <kbd>Esc</kbd> })}
             </button>
           ) : !completa && document.fullscreenEnabled ? (
             <button type="button" className="of-tvexit" onClick={() => void ref.current?.requestFullscreen().catch(() => undefined)}>
               <Icono nombre="maximize-2" tam={14} />
-              Pantalla completa
+              {t("Pantalla completa")}
             </button>
           ) : null}
         </div>
