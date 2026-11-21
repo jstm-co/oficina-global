@@ -133,7 +133,7 @@ Fuera de Chrome, el plugin usa el `LanguageModel` que tenga la página, si hay u
 
 Para esto hay que instalarla desde el código.
 
-- `src/instancia.ts`: el personaje fijo de algunos agentes (por ID) y cómo se pronuncian nombres propios en las voces. En esta copia va vacío: cada agente recibe un personaje según su nombre, cargo y rol.
+- `src/instancia.ts`: el personaje fijo de algunos agentes (por ID) y cómo se pronuncian nombres propios en las voces. En el repositorio va vacío: cada agente recibe un personaje según su nombre, cargo y rol. Para poner los tuyos, cópialo como `instancia.local.ts` en la raíz (git lo ignora) y compila.
 - `src/plano.ts`: cuántas columnas tiene cada sala y qué empresas tienen color propio, por prefijo. Viene ajustado para las salas de nuestra instancia (prefijos `BET`, `ELM`, `JST` y `MIG`); las demás se dibujan con las medidas por omisión y en gris.
 
 ## Desarrollo
@@ -145,7 +145,7 @@ npm run typecheck
 npm run build       # dist/: worker, manifiesto, interfaz, tv.html y el generador de voces
 ```
 
-El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`), las pruebas en `tests/` y el generador de voces en `generador/`. Los comentarios están en español y nombran tareas de nuestro tablero interno («JST-123»), que no son públicas.
+El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`), las pruebas en `tests/` y el generador de voces en `generador/`. Los comentarios están en español y nombran tareas del tablero de los mantenedores («JST-123»), que no es público.
 
 **Idiomas.** El texto en español del código es el origen: `t("Sin asignar")` devuelve ese texto en español y su traducción en los demás idiomas (`src/i18n.ts`). El inglés está en `src/i18n/en/`, por zonas. Un texto nuevo de la pantalla pasa por `t()` (o `tx()` con nodos de React dentro, `plural()` para cantidades) y lleva su entrada en el catálogo; `tests/i18n.spec.ts` falla si falta o sobra alguna. Para sumar un idioma, copia `src/i18n/en/`, traduce los valores y regístralo en `LOCALES` y `CATALOGS`. Lo que se oye (las voces, el Resumen hablado, «Leer contexto») y lo que conversan los agentes queda en español y no pasa por `t()`.
 

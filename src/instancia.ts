@@ -1,6 +1,7 @@
-// Copia pública: sin agentes ni nombres propios. Cada instancia puede poner aquí
-// el aspecto fijo de sus agentes (por ID), su nombre corto cuando la regla lo
-// deja raro y cómo se pronuncian sus nombres.
+// De ejemplo: sin agentes ni nombres propios. Lo de cada instancia (el aspecto fijo de sus
+// agentes por ID, su nombre corto cuando la regla lo deja raro y cómo se pronuncian sus
+// nombres) va en una copia de este archivo llamada `instancia.local.ts`, en la raíz del
+// repo: git la ignora y `npm run build` la usa en lugar de este (esbuild.config.mjs).
 
 /**
  * Aspecto fijo de cada agente, por ID: gana a la regla de `aspectoDe`.

@@ -343,7 +343,7 @@ const ROLES_DELANTE = [new RegExp(`${ANTES_DEL_ROL}([^:·]{1,40}):\\s*`, "u"), n
 /**
  * Sin el «‹Rol›:» (o «‹Rol› —») del principio, si es el nombre de un rol de
  * esa empresa (`roles`, ya normalizados con `normalizarRol`): «KAN-188 ·
- * Ingeniero: el producto…» → «KAN-188 · el producto…». Lo demás queda igual
+ * Ingeniero: el nombre…» → «KAN-188 · el nombre…». Lo demás queda igual
  * («QA de X:», «Spec:», «Plan:»).
  */
 export function sinRolDelante(titulo: string, roles: ReadonlySet<string>): string {

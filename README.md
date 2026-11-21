@@ -133,7 +133,7 @@ Outside Chrome, the plugin uses the page's `LanguageModel` if it has one (the sa
 
 This needs an install from source.
 
-- `src/instancia.ts`: the fixed character of some agents (by ID) and how proper names are pronounced by the voices. In this copy it is empty: each agent gets a character from its name, title and role.
+- `src/instancia.ts`: the fixed character of some agents (by ID) and how proper names are pronounced by the voices. In the repository it is empty: each agent gets a character from its name, title and role. To set your own, copy it to `instancia.local.ts` at the root (git ignores it) and build.
 - `src/plano.ts`: how many columns each room has and which companies get their own color, by prefix. It comes tuned for the rooms of our instance (prefixes `BET`, `ELM`, `JST` and `MIG`); the others are drawn with the default sizes and in gray.
 
 ## Development
@@ -145,7 +145,7 @@ npm run typecheck
 npm run build       # dist/: worker, manifest, interface, tv.html and the voice generator
 ```
 
-The code is in `src/` (the logic, without React or the DOM, kept apart from `src/ui/`), the tests in `tests/` and the voice generator in `generador/`. Code comments are in Spanish and mention issues from our internal board («JST-123»), which are not public.
+The code is in `src/` (the logic, without React or the DOM, kept apart from `src/ui/`), the tests in `tests/` and the voice generator in `generador/`. Code comments are in Spanish and mention issues from the maintainers' own board («JST-123»), which is not public.
 
 **Languages.** The Spanish text in the code is the source: `t("Sin asignar")` returns that text in Spanish and its translation in other languages (`src/i18n.ts`). English lives in `src/i18n/en/`, split by area. A new on-screen text goes through `t()` (or `tx()` with React nodes inside, `plural()` for counts) and gets its entry in the catalog; `tests/i18n.spec.ts` fails if one is missing or left over. To add a language, copy `src/i18n/en/`, translate the values and register it in `LOCALES` and `CATALOGS`. What is heard (voices, spoken summary, «Leer contexto») and what agents say to each other stays in Spanish and does not go through `t()`.
 
