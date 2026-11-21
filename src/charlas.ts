@@ -13,7 +13,10 @@
 // apertura con huecos (`{tarea}`, `{agente}`, `{n}`…), las sueltas, las bromas y
 // las mascotas. El código rellena los huecos con los datos actuales; las frases
 // fijas son respaldo solo si no se dijeron en la hora y, si no queda otra, se calla.
+import { BROMAS, DICEN, MASCOTA_DE_REACCION, REACCIONES, SUELTAS, SUELTAS_CON_DATO, SUELTAS_CON_DATO_COLA, SUELTAS_CON_DATO_RECIEN, SUELTAS_GENERALES, SUELTAS_POR_ESTADO, fraseDeMascota, type EstadoSuelta, type IdMascota, type Reaccion } from "./charlasTextos.js";
+import { duracionDeTarea, duracionHablada } from "./duracion.js";
 import type { TipoEspera } from "./estado.js";
+import { categoriaError, type CategoriaError } from "./motivoError.js";
 import { cortarNombre } from "./rotulo.js";
 import type { EstadoCola, Temas } from "./temas.js";
 import type { Dibujo } from "./vista.js";
@@ -99,14 +102,33 @@ export interface ContextoCharla {
   temas: (id: string) => Temas | null;
   /** El nombre de una tarea que la página ya conoce. */
   titulo: (codigo: string) => string | null;
-  /** La hora de verdad (`Date.now()`), para «lleva una hora esperando». */
+  /** La hora de verdad (`Date.now()`), para «lleva una hora esperando» y para decir el día y la hora (JST-415). */
   reloj: number;
+  /** JST-415: las entregas que vio la oficina hace poco (quién le pasó qué a quién y cuándo, en la hora de verdad). */
+  entregas?: ReadonlyArray<{ de: string; a: string; codigo: string; en: number }>;
   /** El reloj de la vida (para lo que no se repite en 10 min). */
   ahora: number;
   azar: () => number;
 }
 
-export type Tema = "termino" | "cola" | "revision" | "espera-otra" | "te-espera" | "error" | "pausa" | "trabajan" | "rol" | "sala" | "empresa" | "broma";
+export type Tema =
+  | "termino"
+  | "cola"
+  | "revision"
+  | "espera-otra"
+  | "bloqueada"
+  | "te-espera"
+  | "error"
+  | "pausa"
+  | "trabajan"
+  | "rol"
+  | "sala"
+  | "empresa"
+  | "entrega"
+  | "reloj"
+  | "tardo"
+  | "racha"
+  | "broma";
 
 export interface Guion {
   tema: Tema;
@@ -173,24 +195,35 @@ export function rolTema(a: Pick<AgenteCharla, "nombre" | "rol" | "rolApi">): str
   return (a.rolApi && ROL_API[a.rolApi]) || "la pega";
 }
 
-/** El motivo de un error, en corto (§1.3). */
-export function motivoError(m: string | null): string {
-  const t = (m ?? "").toLowerCase();
-  if (/limit|usage|quota|cupo|\brate\b/.test(t)) return "Se quedó sin cupo, parece.";
-  if (/timeout|timed out|tiempo/.test(t)) return "Se le acabó el tiempo.";
-  if (/\btests?\b|prueba/.test(t)) return "Le fallaron las pruebas.";
-  if (/permis|\bauth|\b40[13]\b/.test(t)) return "Un tema de permisos.";
-  if (/exit code|crash|se cayó/.test(t)) return "Se le cayó el proceso.";
-  return "No sé, hay que ver el detalle.";
+/** Lo que dicen las conversaciones de cada categoría de error (`motivoError.ts`); la voz usa otras palabras para lo mismo. */
+export const TEXTO_ERROR: Readonly<Record<CategoriaError, string>> = {
+  limite: "Se quedó sin cupo, parece.",
+  tiempo: "Se le acabó el tiempo.",
+  pruebas: "Le fallaron las pruebas.",
+  acceso: "Un tema de permisos.",
+  caida: "Se le cayó el proceso.",
+  dormida: "Se durmió la Mac, parece.",
+  carpeta: "Un problema con su carpeta.",
+  inicio: "No alcanzó a empezar.",
+};
+
+/**
+ * El motivo de un error, en corto (§1.3), o `null` si no se conoce (JST-415: las conversaciones que lo cuentan solo salen
+ * con un motivo conocido; sin él, las otras variantes no lo necesitan). La categoría sale del clasificador común
+ * (`motivoError.ts`), el mismo de la voz, para que las dos digan lo mismo.
+ */
+export function motivoError(m: string | null): string | null {
+  const c = categoriaError(m, null);
+  return c ? TEXTO_ERROR[c] : null;
 }
 
-/** El motivo de una pausa, en corto. `manual` (la pausaron a mano) es «Alguien le puso pausa.». */
-export function motivoPausa(m: string | null): string {
+/** El motivo de una pausa, en corto, o `null` si no se sabe. `manual` (la pausaron a mano) es «Alguien le puso pausa.». */
+export function motivoPausa(m: string | null): string | null {
   const t = (m ?? "").toLowerCase();
   if (/budget|presupuesto/.test(t)) return "Por presupuesto.";
   if (/approval|aprobaci/.test(t)) return "Espera una aprobación.";
   if (/paus|manual/.test(t)) return "Alguien le puso pausa.";
-  return "No sé, no dice.";
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +334,11 @@ export function fraseEn(t: number, duraciones: readonly number[]): { indice: num
 
 // ---------------------------------------------------------------------------
 // Las conversaciones (§1.3)
+//
+// JST-415: cada tema tiene 6 variantes o más, con aperturas y cierres distintos. Las frases son datos (`Renglon`), no
+// código: así el plugin sabe de antemano todo lo que puede decir (el worker solo hace audios de eso, ver más abajo) y las
+// plantillas con huecos (`{q}`, `{n}`…) se convierten solas en expresiones. Una frase con tarea lleva «esta» (o «esa»): en
+// pantalla el código y el título van en la línea de abajo; en voz, `src/nombrarTarea.ts` pone la tarea en lugar de «esta».
 // ---------------------------------------------------------------------------
 
 /** Un agente con lo que se dice de él en esta conversación. */
@@ -329,7 +367,11 @@ interface Ctx extends Omit<ContextoCharla, "a" | "b" | "agentes"> {
 
 /** Quién dice cada frase: «S» tiene el dato; «O» es el otro. */
 type Rol = "S" | "O";
-type Renglon = readonly [Rol, string, (string | null)?] | null;
+/**
+ * Una frase: quién la dice, su texto (con `{huecos}`), la clave de la tarea que lleva (se busca en `Datos.c`) y «d» si es una
+ * frase fija con un dato (el motivo de algo, cuántos en la cola…) para que la IA no la trate como una frase cualquiera.
+ */
+type Renglon = readonly [Rol, string, string?, "d"?];
 
 interface Datos {
   S?: Quien;
@@ -342,379 +384,886 @@ interface Datos {
   sujeto?: string | readonly string[];
   /** Otro tema que esta conversación también cuenta (la respuesta de «rol» trae lo que terminó o su cola): sobre el mismo sujeto, también espera 10 min. */
   tambien?: Tema | null;
-  [k: string]: unknown;
+  /** Lo que reemplaza a cada `{hueco}` del texto. */
+  v?: Readonly<Record<string, string>>;
+  /** El código de la tarea de cada clave de las frases. */
+  c?: Readonly<Record<string, string | null | undefined>>;
 }
 
 interface Variante {
   id: string;
   tema: Tema;
   si: (c: Ctx) => Datos | null | false | undefined;
-  lineas: (d: Datos & { S: Quien; O: Quien }, c: Ctx) => Renglon[];
+  lin: readonly Renglon[];
 }
 
 const V: Variante[] = [];
-const v = (id: string, tema: Tema, si: Variante["si"], lineas: Variante["lineas"]) => V.push({ id, tema, si, lineas });
+const u = (id: string, tema: Tema, si: Variante["si"], lin: readonly Renglon[]) => V.push({ id, tema, si, lin });
 
 /** Los que cuentan los contadores del encabezado: con filtro, solo las salas del filtro (JST-176). */
 const contados = (c: Ctx) => (c.filtro?.length ? c.agentes.filter((x) => c.filtro!.includes(x.prefijo)) : c.agentes);
 
-/** Quien tiene el dato es de quien se habla (§1.7). */
-const deS = (S: Quien | undefined) => S && { S, sujeto: S.id };
-
 // --- Terminó algo (peso 5): de los dos, quien no lo contó en los últimos 10 min
 const conHecho = (c: Ctx) => [c.a, c.b].filter((x) => x.t?.hecho && c.nuevo("termino", x.id));
-v("termino-1", "termino", (c) => deS(conHecho(c)[0]), ({ S }) => [
-  ["S", "Acabo de terminar esta.", S.t!.hecho],
-  ["O", "¡Bien! ¿Fue complicado?"],
-  ["S", "Tuvo lo suyo, pero salió."],
-  ["O", "Genial, una menos en el tablero."],
-]);
-v("termino-2", "termino", (c) => {
+const deHecho = (c: Ctx, f: (S: Quien) => Partial<Datos> | false = () => ({})) => {
   const S = conHecho(c)[0];
-  // «Esta otra.» cuenta también su cola.
-  return S && { S, sujeto: S.id, tambien: S.t!.sigue?.estado === "todo" ? "cola" : null };
-}, ({ S }) => [
-  ["S", "Por fin cerré esta.", S.t!.hecho],
-  ["O", "¡Buena! ¿Y qué viene ahora?"],
-  S.t!.sigue?.estado === "todo" ? ["S", "Esta otra.", S.t!.sigue.codigo] : ["S", "Nada por ahora. Café."],
+  if (!S) return null;
+  const extra = f(S);
+  return extra ? { S, sujeto: S.id, ...extra, c: { hecho: S.t!.hecho, ...(extra.c ?? {}) } } : null;
+};
+u("termino-1", "termino", (c) => deHecho(c), [
+  ["S", "Terminé esta.", "hecho"],
+  ["O", "Bien. ¿Fue complicado?"],
+  ["S", "Tuvo lo suyo, pero salió."],
+  ["O", "Una menos en el tablero."],
 ]);
-v("termino-3", "termino", (c) => deS(conHecho(c)[0]), ({ S }) => [
+// «Después viene esta.» cuenta también su cola.
+u("termino-2", "termino", (c) => deHecho(c, (S) => S.t!.sigue?.estado === "todo" && { tambien: "cola", c: { sigue: S.t!.sigue.codigo } }), [
+  ["S", "Por fin cerré esta.", "hecho"],
+  ["O", "Buena. ¿Y qué viene ahora?"],
+  ["S", "Después viene esta.", "sigue"],
+]);
+u("termino-3", "termino", (c) => deHecho(c, (S) => !S.t!.sigue && {}), [
+  ["S", "Por fin cerré esta.", "hecho"],
+  ["O", "¿Y ahora qué?"],
+  ["S", "Nada en cola por ahora. Un cafecito."],
+  ["O", "Te lo ganaste."],
+]);
+u("termino-4", "termino", (c) => deHecho(c), [
   ["O", "¿Cómo te fue con la última?"],
-  ["S", "Bien, ya está lista.", S.t!.hecho],
-  ["O", "Bacán."],
+  ["S", "Bien, ya cerré esta.", "hecho"],
+  ["O", "Me alegro."],
 ]);
-v("termino-4", "termino", (c) => conHecho(c).length === 2 && { S: c.a, O: c.b, sujeto: [c.a.id, c.b.id] }, ({ S, O }) => [
-  ["S", "Cerré esta hace un rato.", S.t!.hecho],
-  ["O", "Yo también terminé una.", O.t!.hecho],
-  ["S", "Nos ganamos el café."],
+u("termino-5", "termino", (c) => conHecho(c).length === 2 && { S: c.a, O: c.b, sujeto: [c.a.id, c.b.id], c: { hecho: c.a.t!.hecho, hecho2: c.b.t!.hecho } }, [
+  ["S", "Cerré esta hace un rato.", "hecho"],
+  ["O", "Yo también cerré esta.", "hecho2"],
+  ["S", "Buena racha, entonces."],
+]);
+u("termino-6", "termino", (c) => deHecho(c), [
+  ["O", "Vi que cerraste una tarea."],
+  ["S", "Sí, esta.", "hecho"],
+  ["O", "¿Cuánto te costó?"],
+  ["S", "Menos de lo que pensaba."],
+]);
+u("termino-7", "termino", (c) => deHecho(c), [
+  ["S", "Listo, esta ya salió.", "hecho"],
+  ["O", "Se siente bien tachar una, ¿no?"],
+  ["S", "Es lo mejor de la pega."],
+]);
+u("termino-8", "termino", (c) => deHecho(c), [
+  ["O", "¿Terminaste algo?"],
+  ["S", "Esta, la última que cerré.", "hecho"],
+  ["O", "Bien ahí."],
 ]);
 
 // --- Su cola (peso 3), en revisión (2) y espera otra (1): el tema de lo primero de su cola, según su estado
 const TEMA_COLA: Readonly<Record<EstadoCola, Tema>> = { todo: "cola", in_review: "revision", blocked: "espera-otra" };
 const conSigue = (c: Ctx, estado: EstadoCola) => [c.a, c.b].filter((x) => x.t?.sigue?.estado === estado && c.nuevo(TEMA_COLA[estado], x.id));
-v("cola-1", "cola", (c) => deS(conSigue(c, "todo")[0]), ({ S }) => [
+const deSigue = (c: Ctx, estado: EstadoCola, ok: (S: Quien) => boolean = () => true) => {
+  const S = conSigue(c, estado).find(ok);
+  return S ? { S, sujeto: S.id, c: { sigue: S.t!.sigue!.codigo } } : null;
+};
+const COLA = (c: Ctx, ok?: (S: Quien) => boolean) => deSigue(c, "todo", ok);
+u("cola-1", "cola", (c) => COLA(c), [
   ["O", "¿Qué te toca ahora?"],
-  ["S", "Esta, apenas me llamen.", S.t!.sigue!.codigo],
-  ["O", "Ánimo."],
+  ["S", "Esta, apenas me llamen.", "sigue"],
+  ["O", "Te avisan, entonces."],
 ]);
-v("cola-2", "cola", (c) => deS(conSigue(c, "todo")[0]), ({ S }) => [
-  ["S", "Me toca esta.", S.t!.sigue!.codigo],
-  ["O", "¿Harta pega?"],
-  ["S", "Ya veremos. Primero, café."],
+u("cola-2", "cola", (c) => COLA(c), [
+  ["S", "Me toca esta.", "sigue"],
+  ["O", "¿Mucha pega por delante?"],
+  ["S", "Lo justo, nada más."],
 ]);
-v("cola-3", "cola", (c) => deS(conSigue(c, "todo").find((x) => (x.t!.enCola ?? 0) >= 3)), ({ S }) => [
+u("cola-3", "cola", (c) => COLA(c, (x) => (x.t!.enCola ?? 0) >= 3), [
   ["O", "¿Tienes mucho en cola?"],
-  ["S", "Tres, por lo menos."],
-  ["O", "¡Uf! ¿Por cuál partes?"],
-  ["S", "Por esta.", S.t!.sigue!.codigo],
+  ["S", "Tres, por lo menos.", undefined, "d"],
+  ["O", "Uf. ¿Por cuál partes?"],
+  ["S", "Por esta.", "sigue"],
 ]);
-v("revision-1", "revision", (c) => deS(conSigue(c, "in_review")[0]), ({ S }) => [
-  ["S", "Dejé esta en revisión.", S.t!.sigue!.codigo],
+u("cola-4", "cola", (c) => COLA(c), [
+  ["S", "Tengo esta esperando turno.", "sigue"],
+  ["O", "¿Y cuándo arrancas?"],
+  ["S", "Apenas me asignen el run."],
+]);
+u("cola-5", "cola", (c) => COLA(c), [
+  ["O", "¿Qué sigue en tu lista?"],
+  ["S", "Esta.", "sigue"],
+  ["O", "Suena a buen plan."],
+]);
+u("cola-6", "cola", (c) => COLA(c), [
+  ["S", "Voy con esta apenas pueda.", "sigue"],
+  ["O", "¿Ya sabes por dónde partir?"],
+  ["S", "Todavía no, pero ahí vamos."],
+]);
+u("cola-7", "cola", (c) => COLA(c), [
+  ["S", "Tengo la cola ordenada: primero esta.", "sigue"],
+  ["O", "Eso es tener método."],
+]);
+u("cola-8", "cola", (c) => COLA(c, (x) => x.t!.enCola === 2), [
+  ["O", "¿Cuántas tienes pendientes?"],
+  ["S", "Un par, nada más.", undefined, "d"],
+  ["O", "Se lleva bien."],
+]);
+u("cola-9", "cola", (c) => COLA(c, (x) => x.t!.enCola === 1), [
+  ["O", "¿Mucho por delante?"],
+  ["S", "Una sola: esta.", "sigue", "d"],
+  ["O", "Eso es poco."],
+]);
+
+const REV = (c: Ctx) => deSigue(c, "in_review");
+u("revision-1", "revision", REV, [
+  ["S", "Tengo esta en revisión.", "sigue"],
   ["O", "Ojalá pase a la primera."],
 ]);
-v("revision-2", "revision", (c) => deS(conSigue(c, "in_review")[0]), ({ S }) => [
+u("revision-2", "revision", REV, [
   ["O", "¿En qué estás?"],
-  ["S", "Esperando que revisen esta.", S.t!.sigue!.codigo],
-  ["O", "Paciencia, ya la van a ver."],
+  ["S", "Esperando que revisen esta.", "sigue"],
+  ["O", "Paciencia, ya llegará su turno."],
 ]);
-v("espera-otra-1", "espera-otra", (c) => deS(conSigue(c, "blocked")[0]), ({ S }) => [
-  ["S", "Esta espera a que termine otra.", S.t!.sigue!.codigo],
-  ["O", "Bueno, mientras tanto, café."],
+u("revision-3", "revision", REV, [
+  ["S", "Esta quedó en revisión.", "sigue"],
+  ["O", "¿Quién revisa?"],
+  ["S", "Eso se decide aparte."],
+]);
+u("revision-4", "revision", REV, [
+  ["O", "¿Algo pendiente por tu lado?"],
+  ["S", "Que revisen esta.", "sigue"],
+  ["O", "Entonces toca esperar la revisión."],
+]);
+u("revision-5", "revision", REV, [
+  ["S", "Esta pasó a revisión.", "sigue"],
+  ["O", "¿Quedó bien?"],
+  ["S", "Eso lo dirá la revisión."],
+]);
+u("revision-6", "revision", REV, [
+  ["S", "Esta ya está en revisión.", "sigue"],
+  ["O", "Entonces te queda respirar."],
+]);
+
+// «Espera otra» y «bloqueada» cuentan lo mismo (la tarea bloqueada de su cola): cada una marca a la otra con `tambien`, para que
+// una no salga a continuación de la otra sobre la misma persona (JST-415). Un bloqueo no dice por qué (puede esperar a otra tarea,
+// a una persona o a algo de afuera): ninguna frase afirma el motivo.
+const OTRA = (c: Ctx) => {
+  const d = deSigue(c, "blocked");
+  return d && { ...d, tambien: "bloqueada" as const };
+};
+u("espera-otra-1", "espera-otra", OTRA, [
+  ["S", "Esta quedó en espera.", "sigue"],
+  ["O", "Entonces toca esperar."],
+]);
+u("espera-otra-2", "espera-otra", OTRA, [
+  ["O", "¿Cómo va lo tuyo?"],
+  ["S", "Parado: esta no puede avanzar.", "sigue"],
+  ["O", "Qué lata, pero así es."],
+]);
+u("espera-otra-3", "espera-otra", OTRA, [
+  ["S", "Esta no se mueve por ahora.", "sigue"],
+  ["O", "¿Esperando a quién?"],
+  ["S", "Eso se ve en la tarea."],
+]);
+u("espera-otra-4", "espera-otra", OTRA, [
+  ["O", "¿Algo te frena?"],
+  ["S", "Esta, por ahora.", "sigue"],
+  ["O", "Mejor no forzar."],
+]);
+u("espera-otra-5", "espera-otra", OTRA, [
+  ["S", "No puedo avanzar con esta.", "sigue"],
+  ["O", "¿Falta algo?"],
+  ["S", "Eso parece."],
+  ["O", "Que se acomoden las piezas."],
+]);
+u("espera-otra-6", "espera-otra", OTRA, [
+  ["S", "Mientras siga bloqueada, esta no avanza.", "sigue"],
+  ["O", "Así son los bloqueos."],
+]);
+
+// --- Una tarea bloqueada (peso 3, JST-415): lo dice quien la tiene, con la tarea bloqueada de su cola
+const BLOQ = (c: Ctx) => {
+  const S = [c.a, c.b].find((x) => x.t?.bloqueada && c.nuevo("bloqueada", x.id));
+  return S ? { S, sujeto: S.id, tambien: "espera-otra" as const, c: { bloq: S.t!.bloqueada!.codigo } } : null;
+};
+u("bloqueada-1", "bloqueada", BLOQ, [
+  ["S", "Estoy trabado con esta.", "bloq"],
+  ["O", "¿Qué te falta?"],
+  ["S", "Que se destrabe."],
+]);
+u("bloqueada-2", "bloqueada", BLOQ, [
+  ["O", "Te noto frenado."],
+  ["S", "Sí, con esta no avanzo.", "bloq"],
+  ["O", "¿Se puede destrabar?"],
+  ["S", "Cuando se destrabe, sigo."],
+]);
+u("bloqueada-3", "bloqueada", BLOQ, [
+  ["S", "Esta se bloqueó.", "bloq"],
+  ["O", "¿Por qué?"],
+  ["S", "Eso se ve en la tarea."],
+  ["O", "Entonces, a esperar."],
+]);
+u("bloqueada-4", "bloqueada", BLOQ, [
+  ["O", "¿Qué tienes bloqueado?"],
+  ["S", "Esta.", "bloq"],
+  ["O", "¿Alguien puede ayudarte?"],
+  ["S", "Si la destraban, listo."],
+]);
+u("bloqueada-5", "bloqueada", BLOQ, [
+  ["S", "Con esta no puedo avanzar.", "bloq"],
+  ["O", "¿Tiene solución rápida?"],
+  ["S", "Ojalá, ya veremos."],
+]);
+u("bloqueada-6", "bloqueada", BLOQ, [
+  ["S", "Tengo una bloqueada, y es esta.", "bloq"],
+  ["O", "Esas son las más pesadas."],
+]);
+u("bloqueada-7", "bloqueada", BLOQ, [
+  ["O", "¿Cómo vas con lo bloqueado?"],
+  ["S", "Sigo esperando por esta.", "bloq"],
+  ["O", "Paciencia, entonces."],
 ]);
 
 // --- Quién te espera (peso 4)
 const QUE_ESPERA: Record<TipoEspera, string> = { tarjeta: "una respuesta", decision: "una decisión", aprobacion: "una aprobación", revision: "una revisión" };
 const esperando = (c: Ctx) => c.terceros.filter((x) => x.need && x.espera?.codigo);
-v("te-espera-1", "te-espera", (c) => {
-  const X = esperando(c)[0];
-  return X && { X, sujeto: X.id };
-}, ({ X }) => {
-  const x = X as Quien;
-  return [
-    ["S", `${x.quien} está esperando ${x.espera?.tipo ? QUE_ESPERA[x.espera.tipo] : "una respuesta"}.`],
-    ["O", "¿Por esta?", x.espera?.codigo],
-    ["S", "Esa. Ojalá le contesten luego."],
-  ];
-});
-v("te-espera-2", "te-espera", (c) => {
-  const X = esperando(c).find((x) => x.minEsperando >= 60 && x.espera?.codigo);
-  return X && { X, sujeto: X.id };
-}, ({ X }) => {
-  const x = X as Quien;
-  return [
-    ["S", `${x.quien} lleva ${x.minEsperando >= 120 ? `${Math.floor(x.minEsperando / 60)} horas` : "una hora"} esperando.`],
-    ["O", "¿Por cuál?"],
-    ["S", "Por esta.", x.espera!.codigo],
-    ["O", "Ya le van a contestar."],
-  ];
-});
-v("te-espera-3", "te-espera", (c) => {
+const algoDe = (x: Quien) => (x.espera?.tipo ? QUE_ESPERA[x.espera.tipo] : "una respuesta");
+const dichoMin = (min: number) => duracionHablada(min * 60_000);
+const ESPERA = (c: Ctx, ok: (x: Quien) => boolean = () => true) => {
+  const X = esperando(c).find(ok);
+  return X && { sujeto: X.id, v: { q: X.quien, algo: algoDe(X), dur: dichoMin(X.minEsperando) }, c: { espera: X.espera!.codigo } };
+};
+const MUCHO = (x: Quien) => x.minEsperando >= 60;
+const VARIOS = (c: Ctx) => {
   const n = contados(c).filter((x) => x.need).length;
-  return n >= 3 && { n, sujeto: "n" };
-}, ({ n }) => [
-  ["S", `Hay ${n as number} esperando respuesta.`],
+  return n >= 3 && { sujeto: "n", v: { n: String(n) } };
+};
+u("te-espera-1", "te-espera", (c) => ESPERA(c), [
+  ["S", "{q} está esperando {algo}."],
+  ["O", "¿Por esta?", "espera"],
+  ["S", "Eso. Ojalá le contesten luego."],
+]);
+u("te-espera-2", "te-espera", (c) => ESPERA(c, MUCHO), [
+  ["S", "{q} lleva {dur} esperando."],
+  ["O", "¿Por cuál?"],
+  ["S", "Por esta.", "espera"],
+  ["O", "Se le está haciendo largo."],
+]);
+u("te-espera-3", "te-espera", VARIOS, [
+  ["S", "Hay {n} esperando respuesta."],
   ["O", "Uf, harta cola."],
 ]);
+u("te-espera-4", "te-espera", (c) => ESPERA(c), [
+  ["O", "¿Viste que {q} necesita algo?"],
+  ["S", "Sí, es por esta.", "espera"],
+  ["O", "Que alguien lo atienda."],
+]);
+u("te-espera-5", "te-espera", (c) => ESPERA(c), [
+  ["S", "{q} levantó la mano."],
+  ["O", "¿Para qué?"],
+  ["S", "Espera {algo}, por esta.", "espera"],
+  ["O", "Alguien debería atender eso."],
+]);
+u("te-espera-6", "te-espera", (c) => ESPERA(c, MUCHO), [
+  ["O", "{q} lleva un buen rato esperando."],
+  ["S", "{dur}, ni más ni menos."],
+  ["O", "Eso ya es harto."],
+]);
+u("te-espera-7", "te-espera", VARIOS, [
+  ["O", "¿Cuántos esperan respuesta?"],
+  ["S", "{n}, por lo que veo."],
+  ["O", "Que alguien se ponga al día."],
+]);
 
-// --- A quién le falló algo (peso 4)
+// --- A quién le falló algo (peso 4). Sin el motivo (no se conoce) hay variantes que no lo necesitan.
 const conError = (c: Ctx) => c.terceros.filter((x) => x.st === "error");
-v("error-1", "error", (c) => {
-  const X = conError(c)[0];
-  return X && { X, sujeto: X.id };
-}, ({ X }) => {
-  const x = X as Quien;
-  return [
-    ["S", `A ${x.quien} le falló el run.`],
-    ["O", "¿Qué le pasó?"],
-    ["S", motivoError(x.motivo)],
-    ["O", "Uf. Ojalá lo vean luego."],
-  ];
-});
-v("error-2", "error", (c) => {
-  const X = conError(c).find((x) => x.run?.codigo);
-  return X && { X, sujeto: X.id };
-}, ({ X }) => {
-  const x = X as Quien;
-  return [
-    ["O", `¿Viste que ${x.quien} tiene un error?`],
-    ["S", "Sí, en esta.", x.run!.codigo],
-    ["O", "Ojalá se arregle luego."],
-  ];
-});
-v("error-3", "error", (c) => {
+const ERROR = (c: Ctx, ok: (x: Quien) => boolean = () => true) => {
+  const X = conError(c).find(ok);
+  // Sin tarea: el run que se ve del agente puede estar en cola y no ser el que falló, así que ninguna frase nombra una tarea.
+  return X && { sujeto: X.id, v: { q: X.quien, mot: motivoError(X.motivo) ?? "" } };
+};
+const CON_MOTIVO = (x: Quien) => !!motivoError(x.motivo);
+const DOS_ERRORES = (c: Ctx) => {
   const n = contados(c).filter((x) => x.st === "error").length;
-  return n >= 2 && { n, sujeto: "n" };
-}, ({ n }) => [
-  ["S", `Hay ${n as number} con error.`],
+  return n >= 2 && { sujeto: "n", v: { n: String(n) } };
+};
+u("error-1", "error", (c) => ERROR(c, CON_MOTIVO), [
+  ["S", "A {q} le falló el run."],
+  ["O", "¿Qué le pasó?"],
+  ["S", "{mot}"],
+  ["O", "Uf. Ojalá lo vean luego."],
+]);
+u("error-2", "error", (c) => ERROR(c), [
+  ["O", "¿Viste que {q} tiene un error?"],
+  ["S", "Sí, algo le falló."],
+  ["O", "Ojalá se arregle luego."],
+]);
+u("error-3", "error", DOS_ERRORES, [
+  ["S", "Hay {n} con error."],
   ["O", "Mal día para los runs."],
+  ["S", "Habrá que mirar qué pasó."],
+]);
+u("error-4", "error", (c) => ERROR(c), [
+  ["S", "{q} tiene un run con error."],
+  ["O", "¿Se sabe por qué?"],
+  ["S", "Eso hay que mirarlo en el detalle."],
+  ["O", "Entonces, a mirar."],
+]);
+u("error-5", "error", (c) => ERROR(c), [
+  ["S", "Falló lo que hacía {q}."],
+  ["O", "¿Se sabe cuál era?"],
+  ["S", "Eso hay que mirarlo en su detalle."],
+]);
+u("error-6", "error", (c) => ERROR(c), [
+  ["O", "¿Quién está con error?"],
+  ["S", "Es {q}, con un error."],
+  ["O", "Ah, ya veo."],
+]);
+u("error-7", "error", (c) => ERROR(c, CON_MOTIVO), [
+  ["S", "{q} paró con un error."],
+  ["O", "¿Cuál fue?"],
+  ["S", "{mot}"],
+  ["O", "Podría ser peor."],
+]);
+u("error-8", "error", DOS_ERRORES, [
+  ["O", "¿Hay más de uno con error?"],
+  ["S", "Sí, {n}."],
+  ["O", "Alguien tiene pega."],
 ]);
 
 // --- Quién está en pausa (peso 1)
-v("pausa-1", "pausa", (c) => {
-  const X = c.terceros.find((x) => x.st === "pausa");
-  return X && { X, sujeto: X.id };
-}, ({ X }) => {
-  const x = X as Quien;
-  return [
-    ["S", `${x.quien} sigue en pausa.`],
-    ["O", "¿Y eso?"],
-    ["S", motivoPausa(x.motivo)],
-    ["O", "Ya volverá."],
-  ];
-});
+const enPausa = (c: Ctx) => c.terceros.filter((x) => x.st === "pausa");
+const PAUSA = (c: Ctx, ok: (motivo: string | null) => boolean = () => true) => {
+  const X = enPausa(c).find((x) => ok(motivoPausa(x.motivo)));
+  return X && { sujeto: X.id, v: { q: X.quien, motp: motivoPausa(X.motivo) ?? "" } };
+};
+u("pausa-1", "pausa", (c) => PAUSA(c, (m) => !!m), [
+  ["S", "{q} sigue en pausa."],
+  ["O", "¿Y eso?"],
+  ["S", "{motp}"],
+  ["O", "Ya volverá."],
+]);
+u("pausa-2", "pausa", (c) => PAUSA(c), [
+  ["O", "¿{q} no está trabajando?"],
+  ["S", "No, está en pausa."],
+  ["O", "Por algo será."],
+]);
+u("pausa-3", "pausa", (c) => PAUSA(c, (m) => m === "Alguien le puso pausa."), [
+  ["S", "Alguien le puso pausa a {q}."],
+  ["O", "Algo habrá visto."],
+]);
+u("pausa-4", "pausa", (c) => PAUSA(c), [
+  ["O", "¿Qué pasa con {q}?"],
+  ["S", "Está en pausa."],
+  ["O", "Qué raro tanta quietud."],
+]);
+u("pausa-5", "pausa", (c) => PAUSA(c, (m) => m === "Por presupuesto."), [
+  ["S", "{q} está en pausa por presupuesto."],
+  ["O", "Las cuentas mandan."],
+]);
+u("pausa-6", "pausa", (c) => PAUSA(c, (m) => m === "Espera una aprobación."), [
+  ["S", "{q} espera una aprobación para seguir."],
+  ["O", "Entonces está en manos de la persona."],
+]);
+u("pausa-7", "pausa", (c) => PAUSA(c), [
+  ["S", "{q} sigue en pausa."],
+  ["O", "Un descanso más largo, nomás."],
+  ["S", "Ojalá vuelva pronto."],
+]);
 
 // --- Cuántos trabajan (peso 2): el contador «trabajando»
 const trabajando = (c: Ctx) => contados(c).filter((x) => x.st === "trabaja").length;
-v("trabajan-1", "trabajan", (c) => trabajando(c) >= 8 && { n: trabajando(c) }, ({ n }) => [
-  ["S", `Hay ${n as number} trabajando ahora.`],
-  ["O", "Entonces es buen momento para un café."],
-]);
-v("trabajan-2", "trabajan", (c) => trabajando(c) >= 8 && { n: trabajando(c) }, ({ n }) => [
-  ["O", "¿Mucha pega hoy?"],
-  ["S", `${n as number} trabajando, y nosotros acá.`],
-  ["O", "Alguien tiene que cuidar el café."],
-]);
-v("trabajan-3", "trabajan", (c) => {
+const TRABAJAN = (c: Ctx, min: number, max: number) => {
   const n = trabajando(c);
-  return n >= 3 && n < 8 && { n };
-}, ({ n }) => [
+  return n >= min && n <= max && { v: { n: String(n), poc: n === 1 ? "Uno solo" : "Solo dos" } };
+};
+u("trabajan-1", "trabajan", (c) => TRABAJAN(c, 8, Infinity), [
+  ["S", "Hay {n} trabajando ahora."],
+  ["O", "Harta actividad."],
+]);
+u("trabajan-2", "trabajan", (c) => TRABAJAN(c, 8, Infinity), [
+  ["O", "¿Mucha pega?"],
+  ["S", "{n} trabajando, y nosotros acá."],
+  ["O", "Alguien tiene que cuidar el sofá."],
+]);
+u("trabajan-3", "trabajan", (c) => TRABAJAN(c, 8, Infinity), [
+  ["S", "Se mueve la oficina: {n} trabajando."],
+  ["O", "Nosotros, de descanso."],
+]);
+u("trabajan-4", "trabajan", (c) => TRABAJAN(c, 3, 7), [
   ["S", "¿Cuántos están trabajando?"],
-  ["O", `${n as number}. Un día normal.`],
+  ["O", "{n}. Un día normal."],
 ]);
-v("trabajan-4", "trabajan", (c) => {
-  const n = trabajando(c);
-  return n >= 1 && n <= 2 && { n };
-}, ({ n }) => [
-  ["S", `${n === 1 ? "Uno solo" : "Solo dos"} trabajando.`],
+u("trabajan-5", "trabajan", (c) => TRABAJAN(c, 3, 7), [
+  ["O", "¿Cómo está el movimiento?"],
+  ["S", "{n} en acción."],
+  ["O", "Ni mucho ni poco."],
+]);
+u("trabajan-6", "trabajan", (c) => TRABAJAN(c, 3, 7), [
+  ["S", "Van {n} trabajando."],
+  ["O", "Se nota que hay ritmo."],
+]);
+u("trabajan-7", "trabajan", (c) => TRABAJAN(c, 1, 2), [
+  ["S", "{poc} trabajando."],
   ["O", "Día tranquilo, entonces."],
 ]);
-v("trabajan-5", "trabajan", (c) => trabajando(c) === 0 && {}, () => [
+u("trabajan-8", "trabajan", (c) => TRABAJAN(c, 1, 2), [
+  ["O", "¿Cómo está el piso?"],
+  ["S", "Bastante quieto."],
+  ["O", "Se agradece la calma."],
+]);
+u("trabajan-9", "trabajan", (c) => TRABAJAN(c, 1, 2), [
+  ["S", "Queda poca gente en acción."],
+  ["O", "Aprovechemos el silencio."],
+]);
+u("trabajan-10", "trabajan", (c) => TRABAJAN(c, 0, 0), [
   ["S", "Nadie está trabajando."],
   ["O", "Silencio total. Se escucha el refri."],
 ]);
+u("trabajan-11", "trabajan", (c) => TRABAJAN(c, 0, 0), [
+  ["O", "¿Hay alguien trabajando?"],
+  ["S", "Ni un alma."],
+  ["O", "Qué quietud."],
+]);
+u("trabajan-12", "trabajan", (c) => TRABAJAN(c, 0, 0), [
+  ["S", "La oficina está en calma."],
+  ["O", "Hasta el sofá se aburre."],
+]);
 
 // --- Cómo le va al otro en su rol (peso 2): la respuesta, de sus temas si están guardados
-/** La respuesta (frase, tarea, lo que dice el otro) y el tema que también cuenta: lo que terminó o su cola. */
-const comoVa = (t: Temas | null): readonly [string, string | null, string, Tema | null] =>
-  !t
-    ? ["Ahí vamos, de a poco.", null, "Ánimo.", null]
-    : t.hecho
-      ? ["Bien. Hoy cerré esta.", t.hecho, "Bacán.", "termino"]
-      : (t.enCola ?? 0) >= 3
-        ? ["Harta pega: tres en cola.", null, "Ánimo.", "cola"]
-        : t.sigue
-          ? ["Bien, con esta en cola.", t.sigue.codigo, "Me alegro.", TEMA_COLA[t.sigue.estado]]
-          : ["Tranqui. Sin nada en cola.", null, "Qué envidia.", null];
-v("rol-1", "rol", (c) => ({ S: c.b, O: c.a, sujeto: c.b.id, tambien: comoVa(c.b.t)[3] }), ({ S }) => {
-  const r = comoVa(S.t);
-  return [["O", `¿Cómo va ${rolTema(S)}?`], ["S", r[0], r[1]], ["O", r[2]]];
-});
+type EstadoRol = "sin" | "hecho" | "mucha" | "sigue" | "nada";
+const estadoRol = (t: Temas | null): EstadoRol => (!t ? "sin" : t.hecho ? "hecho" : (t.enCola ?? 0) >= 3 ? "mucha" : t.sigue ? "sigue" : "nada");
+/** Otro tema que también cuenta la respuesta: lo que terminó o su cola. */
+const tambienRol = (t: Temas | null): Tema | null => {
+  const e = estadoRol(t);
+  return e === "hecho" ? "termino" : e === "mucha" ? "cola" : e === "sigue" ? TEMA_COLA[t!.sigue!.estado] : null;
+};
+const ROL = (estado: EstadoRol) => (c: Ctx) => {
+  const S = c.b;
+  if (estadoRol(S.t) !== estado) return null;
+  return { S, O: c.a, sujeto: S.id, tambien: tambienRol(S.t), v: { rol: rolTema(S) }, c: { hecho: S.t?.hecho, sigue: S.t?.sigue?.codigo } };
+};
+u("rol-1", "rol", ROL("sin"), [
+  ["O", "¿Cómo va {rol}?"],
+  ["S", "Ahí vamos, de a poco."],
+  ["O", "Eso es lo importante."],
+]);
+u("rol-2", "rol", ROL("hecho"), [
+  ["O", "¿Cómo va {rol}?"],
+  ["S", "Bien. Cerré esta.", "hecho"],
+  ["O", "Excelente."],
+]);
+u("rol-3", "rol", ROL("mucha"), [
+  ["O", "¿Y {rol}, cómo viene?"],
+  ["S", "Harta pega: varias en cola.", undefined, "d"],
+  ["O", "A ir de a una."],
+]);
+u("rol-4", "rol", ROL("sigue"), [
+  ["O", "¿Cómo va {rol}?"],
+  ["S", "Bien, con esta por delante.", "sigue"],
+  ["O", "Me alegro."],
+]);
+u("rol-5", "rol", ROL("nada"), [
+  ["O", "¿Cómo anda {rol}?"],
+  ["S", "Tranqui. Sin nada en cola.", undefined, "d"],
+  ["O", "Qué envidia."],
+]);
+u("rol-6", "rol", ROL("sin"), [
+  ["O", "¿En qué andas con {rol}?"],
+  ["S", "Viendo qué sale."],
+  ["O", "Ya aparecerá algo."],
+]);
+u("rol-7", "rol", ROL("hecho"), [
+  ["O", "¿Cómo viene {rol}?"],
+  ["S", "Cerré esta.", "hecho"],
+  ["O", "Eso se celebra."],
+]);
+u("rol-8", "rol", ROL("sigue"), [
+  ["O", "¿Cómo viene {rol}?"],
+  ["S", "Tengo esta por delante.", "sigue"],
+  ["O", "Suerte con esa."],
+]);
 
 // --- Qué hace alguien de su sala (peso 2)
 const enSuSala = (c: Ctx) => c.terceros.filter((x) => x.prefijo === c.prefijo && x.st === "trabaja" && x.run?.codigo);
-const lleva = (min: number) => (min >= 120 ? `${Math.floor(min / 60)} horas` : `${Math.floor(min / 5) * 5} minutos`);
-v("sala-1", "sala", (c) => {
-  const Y = enSuSala(c).find((x) => x.minRun >= 30 && !x.run!.enCola);
-  return Y && { Y, sujeto: Y.id };
-}, ({ Y }) => {
-  const y = Y as Quien;
-  return [
-    ["S", `${y.corto} lleva ${lleva(y.minRun)} con esta.`, y.run!.codigo],
-    ["O", "Mejor no interrumpir."],
-  ];
-});
-v("sala-2", "sala", (c) => {
-  const Y = enSuSala(c).find((x) => x.minRun < 5 && !x.run!.enCola && x.run!.desde);
-  return Y && { Y, sujeto: Y.id };
-}, ({ Y }) => {
-  const y = Y as Quien;
-  return [
-    ["S", `${y.corto} recién empezó esta.`, y.run!.codigo],
-    ["O", "Después le llevamos un café."],
-  ];
-});
-v("sala-3", "sala", (c) => {
-  const Y = enSuSala(c).find((x) => x.run!.enCola);
-  return Y && { Y, sujeto: Y.id };
-}, ({ Y }) => {
-  const y = Y as Quien;
-  return [
-    ["S", `${y.corto} está en cola con esta.`, y.run!.codigo],
-    ["O", "Le toca esperar su turno."],
-  ];
-});
-v("sala-4", "sala", (c) => {
-  const Y = enSuSala(c).find((x) => !x.run!.enCola);
-  return Y && { Y, sujeto: Y.id };
-}, ({ Y }) => {
-  const y = Y as Quien;
-  return [
-    ["O", `¿En qué anda ${y.corto}?`],
-    ["S", "En esta.", y.run!.codigo],
-    ["O", "Ah, buena."],
-  ];
-});
+const SALA = (c: Ctx, ok: (y: Quien) => boolean) => {
+  const Y = enSuSala(c).find(ok);
+  return Y && { sujeto: Y.id, v: { q: Y.corto, dur: dichoMin(Y.minRun) }, c: { run: Y.run!.codigo } };
+};
+const LLEVA = (y: Quien) => y.minRun >= 30 && !y.run!.enCola;
+u("sala-1", "sala", (c) => SALA(c, LLEVA), [
+  ["S", "{q} lleva {dur} con esta.", "run"],
+  ["O", "Mejor no interrumpir."],
+]);
+u("sala-2", "sala", (c) => SALA(c, (y) => y.minRun < 5 && !y.run!.enCola && !!y.run!.desde), [
+  ["S", "{q} recién empezó esta.", "run"],
+  ["O", "Que le vaya bien."],
+]);
+u("sala-3", "sala", (c) => SALA(c, (y) => y.run!.enCola), [
+  ["S", "{q} está en cola con esta.", "run"],
+  ["O", "Le toca esperar su turno."],
+]);
+u("sala-4", "sala", (c) => SALA(c, (y) => !y.run!.enCola), [
+  ["O", "¿En qué anda {q}?"],
+  ["S", "En esta.", "run"],
+  ["O", "Ah, buena."],
+]);
+u("sala-5", "sala", (c) => SALA(c, (y) => !y.run!.enCola), [
+  ["S", "{q} está a full con esta.", "run"],
+  ["O", "Ese ritmo da gusto."],
+]);
+u("sala-6", "sala", (c) => SALA(c, LLEVA), [
+  ["O", "{q} lleva un buen rato con lo suyo."],
+  ["S", "Va {dur} con esta.", "run"],
+  ["O", "Qué constancia."],
+]);
+u("sala-7", "sala", (c) => SALA(c, (y) => !y.run!.enCola), [
+  ["O", "¿Quién anda ocupado?"],
+  ["S", "{q}, con esta.", "run"],
+  ["O", "Entonces, silencio."],
+]);
 
 // --- Cómo están en otra empresa (peso 1): los contadores de esa sala
-v("empresa-1", "empresa", (c) => {
+const OTRA_EMPRESA = (ok: (t: number, e: number) => boolean) => (c: Ctx) => {
   const otras = [...new Set(c.agentes.map((x) => x.prefijo))].filter((p) => p !== c.prefijo && c.empresa(p));
   if (otras.length === 0) return null;
   const p = c.eleccion && otras.includes(c.eleccion) ? c.eleccion : otras[Math.floor(c.azar() * otras.length)]!;
   const de = c.agentes.filter((x) => x.prefijo === p);
-  return { E: c.empresa(p), n: de.filter((x) => x.st === "trabaja").length, k: de.filter((x) => x.need).length, sujeto: p };
-}, ({ E, n, k }) => {
-  const t = n as number;
-  const e = k as number;
-  return [
-    ["S", `¿Cómo están en ${E as string}?`],
-    ["O", t === 0 ? "Tranquilos. Nadie trabajando." : e > 0 ? `${t} trabajando y ${e} esperando respuesta.` : `${t} trabajando.`],
-    ["S", t >= 3 ? "Harta pega por allá." : "Mejor para ellos."],
-  ];
-});
+  const t = de.filter((x) => x.st === "trabaja").length;
+  const e = de.filter((x) => x.need).length;
+  return ok(t, e) ? { sujeto: p, v: { emp: c.empresa(p), n: String(t), esp: String(e) } } : null;
+};
+u("empresa-1", "empresa", OTRA_EMPRESA((t) => t === 0), [
+  ["S", "¿Cómo están en {emp}?"],
+  ["O", "Tranquilos. Nadie trabajando.", undefined, "d"],
+  ["S", "Qué suerte."],
+]);
+u("empresa-2", "empresa", OTRA_EMPRESA((t, e) => t >= 3 && e > 0), [
+  ["S", "¿Cómo están en {emp}?"],
+  ["O", "{n} trabajando y {esp} esperando respuesta."],
+  ["S", "Harta pega por allá."],
+]);
+u("empresa-3", "empresa", OTRA_EMPRESA((t, e) => t >= 1 && t <= 2 && e > 0), [
+  ["S", "¿Cómo están en {emp}?"],
+  ["O", "{n} trabajando y {esp} esperando respuesta."],
+  ["S", "Poco movimiento, pero con gente esperando."],
+]);
+u("empresa-4", "empresa", OTRA_EMPRESA((t, e) => t >= 3 && e === 0), [
+  ["S", "¿Cómo están en {emp}?"],
+  ["O", "{n} trabajando."],
+  ["S", "Se mueven bien."],
+]);
+u("empresa-5", "empresa", OTRA_EMPRESA((t, e) => t >= 1 && t <= 2 && e === 0), [
+  ["S", "¿Cómo están en {emp}?"],
+  ["O", "{n} trabajando."],
+  ["S", "Mejor para ellos."],
+]);
+u("empresa-6", "empresa", OTRA_EMPRESA((t) => t > 0), [
+  ["S", "¿Qué se sabe de {emp}?"],
+  ["O", "Se mueven: {n} trabajando."],
+  ["S", "Buena señal."],
+]);
+u("empresa-7", "empresa", OTRA_EMPRESA((t) => t > 0), [
+  ["O", "Me dicen que en {emp} hay movimiento."],
+  ["S", "¿Cuánto?"],
+  ["O", "{n} trabajando."],
+]);
+u("empresa-8", "empresa", OTRA_EMPRESA((_t, e) => e > 0), [
+  ["S", "En {emp} hay gente esperando respuesta."],
+  ["O", "¿Cuántos?"],
+  ["S", "Son {esp}."],
+]);
+u("empresa-9", "empresa", OTRA_EMPRESA((t) => t === 0), [
+  ["O", "En {emp} está todo quieto."],
+  ["S", "¿Nadie trabajando?"],
+  ["O", "Nadie."],
+]);
+
+// --- La hora y el día (peso 1, JST-415): según el reloj del navegador, sin decir ninguna hora con números
+const reloj = (c: Ctx) => {
+  const f = new Date(c.reloj);
+  return { dia: f.getDay(), h: f.getHours() };
+};
+const RELOJ = (ok: (dia: number, h: number) => boolean) => (c: Ctx) => {
+  const { dia, h } = reloj(c);
+  return ok(dia, h) && c.nuevo("reloj", "reloj") ? { sujeto: "reloj" } : null;
+};
+const LABORAL = (dia: number) => dia >= 1 && dia <= 5;
+const LUNES_TEMPRANO = RELOJ((d, h) => d === 1 && h >= 6 && h < 12);
+const VIERNES_TARDE = RELOJ((d, h) => d === 5 && h >= 15 && h < 21);
+const ALMUERZO = RELOJ((d, h) => LABORAL(d) && h >= 12 && h < 15);
+const DE_NOCHE = RELOJ((_d, h) => h >= 22 || h < 5);
+u("reloj-1", "reloj", (c) => trabajando(c) > 0 && LUNES_TEMPRANO(c), [
+  ["S", "Lunes temprano y ya hay movimiento."],
+  ["O", "Los lunes arrancan con todo."],
+]);
+u("reloj-2", "reloj", LUNES_TEMPRANO, [
+  ["O", "¿Cómo se siente el lunes?"],
+  ["S", "Con ganas de que sea martes."],
+  ["O", "Eso dicen todos."],
+]);
+u("reloj-3", "reloj", VIERNES_TARDE, [
+  ["S", "Viernes en la tarde: toca cerrar la semana."],
+  ["O", "Ojalá sin sorpresas."],
+]);
+u("reloj-4", "reloj", VIERNES_TARDE, [
+  ["O", "Se acerca el fin de semana."],
+  ["S", "Mejor no desplegar nada hoy."],
+  ["O", "Ni en broma."],
+]);
+u("reloj-5", "reloj", ALMUERZO, [
+  ["S", "Ya va siendo hora de almuerzo."],
+  ["O", "Se nota en el estómago."],
+]);
+u("reloj-6", "reloj", ALMUERZO, [
+  ["O", "¿Qué hay de almuerzo?"],
+  ["S", "Lo que haya, con tal de comer."],
+]);
+u("reloj-7", "reloj", DE_NOCHE, [
+  ["S", "Qué tarde se hizo."],
+  ["O", "Para los agentes, la noche también es pega."],
+]);
+u("reloj-8", "reloj", DE_NOCHE, [
+  ["O", "A esta hora ya debería haber silencio."],
+  ["S", "Los agentes no dormimos."],
+]);
+u("reloj-9", "reloj", RELOJ((d, h) => d === 6 && h >= 5 && h < 22), [
+  ["S", "Sábado y la oficina sigue abierta."],
+  ["O", "Al menos se trabaja tranquilo."],
+]);
+u("reloj-10", "reloj", RELOJ((d, h) => d === 0 && h >= 5 && h < 22), [
+  ["S", "Domingo en la oficina."],
+  ["O", "Se siente el silencio."],
+]);
+u("reloj-11", "reloj", RELOJ((d, h) => (d === 0 || d === 6) && h >= 5 && h < 22), [
+  ["S", "Fin de semana y aquí seguimos."],
+  ["O", "Alguien tiene que prender las luces."],
+]);
+u("reloj-12", "reloj", RELOJ((d, h) => d >= 2 && d <= 5 && h >= 6 && h < 12), [
+  ["S", "Buenos días, oficina."],
+  ["O", "Buenos días. ¿Ya despertaron todos?"],
+]);
+u("reloj-13", "reloj", RELOJ((d, h) => d >= 1 && d <= 4 && h >= 15 && h < 21), [
+  ["O", "Ya se va la tarde."],
+  ["S", "Se pasó volando."],
+]);
+u("reloj-14", "reloj", RELOJ((d, h) => d === 3 && h >= 6 && h < 22), [
+  ["S", "Miércoles: la mitad de la semana."],
+  ["O", "Cuesta abajo desde aquí."],
+]);
+
+// --- Cuánto tardó (peso 2, JST-415): solo si se sabe cuándo empezó y cuándo terminó
+const tardo = (x: Quien) => (x.t?.hecho && x.t.hechoEn != null ? duracionDeTarea(x.t.hechoInicio, x.t.hechoEn) : null);
+const TARDO = (c: Ctx) => {
+  const S = [c.a, c.b].find((x) => tardo(x) && c.nuevo("tardo", x.id));
+  return S ? { S, sujeto: S.id, tambien: "termino" as const, v: { dur: tardo(S)! }, c: { hecho: S.t!.hecho } } : null;
+};
+u("tardo-1", "tardo", TARDO, [
+  ["S", "Esa me tomó {dur}.", "hecho"],
+  ["O", "Es bueno saberlo."],
+]);
+u("tardo-2", "tardo", TARDO, [
+  ["O", "¿Cuánto te demoraste en esta?", "hecho"],
+  ["S", "Fueron {dur}."],
+  ["O", "Quedó anotado."],
+]);
+u("tardo-3", "tardo", TARDO, [
+  ["S", "Terminé esta en {dur}.", "hecho"],
+  ["O", "Gracias por el dato."],
+]);
+u("tardo-4", "tardo", TARDO, [
+  ["S", "Me costó {dur} cerrar esta.", "hecho"],
+  ["O", "¿Valió la pena?"],
+  ["S", "Siempre vale cerrar una."],
+]);
+u("tardo-5", "tardo", TARDO, [
+  ["O", "Esa que cerraste, ¿cuánto tomó?", "hecho"],
+  ["S", "Fueron {dur}."],
+  ["O", "Ya veo."],
+]);
+u("tardo-6", "tardo", TARDO, [
+  ["S", "Calculo que esta me llevó {dur}.", "hecho"],
+  ["O", "Cifra para el registro."],
+]);
+u("tardo-7", "tardo", TARDO, [
+  ["S", "Entre una cosa y otra, {dur} en esta.", "hecho"],
+  ["O", "Cada tarea tiene su ritmo."],
+]);
+
+// --- Una racha (peso 2, JST-415): varias terminadas hoy que la página vio por el canal en vivo (nada se lee de más)
+export const MIN_RACHA_TERMINADAS = 3;
+const RACHA = (c: Ctx) => {
+  const S = [c.a, c.b].find((x) => (x.t?.racha ?? 0) >= MIN_RACHA_TERMINADAS && c.nuevo("racha", x.id));
+  return S ? { S, sujeto: S.id, tambien: "termino" as const, v: { n: String(S.t!.racha) } } : null;
+};
+u("racha-1", "racha", RACHA, [
+  ["S", "Ya van {n} que cierro hoy."],
+  ["O", "Estás en racha."],
+]);
+u("racha-2", "racha", RACHA, [
+  ["O", "Te veo cerrando una tras otra."],
+  ["S", "Van {n} hoy."],
+  ["O", "Que no pare la racha."],
+]);
+u("racha-3", "racha", RACHA, [
+  ["S", "{n} cerradas y sigo."],
+  ["O", "Eso es ritmo."],
+]);
+u("racha-4", "racha", RACHA, [
+  ["O", "¿Cuántas llevas?"],
+  ["S", "{n} cerradas hoy."],
+  ["O", "Buen día de pega."],
+]);
+u("racha-5", "racha", RACHA, [
+  ["S", "Hoy me salieron {n}."],
+  ["O", "Qué productivo."],
+]);
+u("racha-6", "racha", RACHA, [
+  ["S", "Llevo {n} tareas listas."],
+  ["O", "Entonces te mereces el sofá."],
+]);
+
+// --- Una entrega (peso 3, JST-415): alguien de la pareja acaba de recibir o de pasar una tarea (la mesa y el sobre)
+/** Una entrega cuenta como «reciente» este rato. */
+export const ENTREGA_RECIENTE_MS = 15 * 60_000;
+const ENTREGA = (rol: "recibe" | "pasa") => (c: Ctx) => {
+  for (const S of [c.a, c.b]) {
+    if (!c.nuevo("entrega", S.id)) continue;
+    const e = (c.entregas ?? []).find((x) => (rol === "recibe" ? x.a : x.de) === S.id && c.reloj - x.en >= 0 && c.reloj - x.en <= ENTREGA_RECIENTE_MS);
+    if (!e) continue;
+    const otro = c.agentes.find((x) => x.id === (rol === "recibe" ? e.de : e.a));
+    if (!otro) continue;
+    return { S, O: S.id === c.a.id ? c.b : c.a, sujeto: S.id, v: { q: otro.quien }, c: { entrega: e.codigo } };
+  }
+  return null;
+};
+u("entrega-1", "entrega", ENTREGA("recibe"), [
+  ["S", "{q} me pasó esta.", "entrega"],
+  ["O", "¿Ya sabes por dónde empezar?"],
+  ["S", "Primero me ubico."],
+]);
+u("entrega-2", "entrega", ENTREGA("recibe"), [
+  ["O", "Vi que te llegó algo nuevo."],
+  ["S", "Sí, esta.", "entrega"],
+  ["O", "Que te rinda."],
+]);
+u("entrega-3", "entrega", ENTREGA("recibe"), [
+  ["S", "Recibí esta hace un rato.", "entrega"],
+  ["O", "¿Con prisa?"],
+  ["S", "Con calma, pero sin pausa."],
+]);
+u("entrega-4", "entrega", ENTREGA("pasa"), [
+  ["S", "Le pasé esta a {q}.", "entrega"],
+  ["O", "¿Con instrucciones?"],
+  ["S", "Las que van en la tarea."],
+]);
+u("entrega-5", "entrega", ENTREGA("pasa"), [
+  ["O", "¿Qué pasó con esta?", "entrega"],
+  ["S", "Quedó en manos de {q}."],
+  ["O", "Mejor en buenas manos."],
+]);
+u("entrega-6", "entrega", ENTREGA("pasa"), [
+  ["S", "Ya entregué esta.", "entrega"],
+  ["O", "Una preocupación menos."],
+]);
+u("entrega-7", "entrega", ENTREGA("recibe"), [
+  ["O", "¿Quién te pasó algo?"],
+  ["S", "{q}, esta.", "entrega"],
+  ["O", "Buena señal que se coordinen."],
+]);
 
 // --- Bromas fijas (§1.5): cuando no hay nada que contar, y 1 de cada 5 para variar
-export const BROMAS: ReadonlyArray<ReadonlyArray<readonly [Rol, string]>> = [
-  [["S", "¿Quién rompió el build?"], ["O", "Yo no, estaba en el descanso."]],
-  [["S", "Funciona en mi máquina."], ["O", "Entonces mandemos tu máquina a producción."]],
-  [["S", "¿Probaste apagarlo y prenderlo?"], ["O", "Tres veces."], ["S", "¿Y?"], ["O", "Ahora no prende."]],
-  [["S", "¿Otra reunión?"], ["O", "Pudo haber sido un correo."]],
-  [["S", "No es un bug."], ["O", "¿Ah, no?"], ["S", "Es una funcionalidad sorpresa."]],
-  [["S", "¿Quién escribió este código?"], ["O", "Yo, hace un mes."], ["S", "¿Y qué hace?"], ["O", "Ya no me acuerdo."]],
-  [["S", "Actualicé las dependencias."], ["O", "¿Y?"], ["S", "Ahora no compila nada."]],
-  [["S", "¿Deploy el viernes?"], ["O", "Ni en broma."]],
-  [["S", "Me falta un café para funcionar."], ["O", "A mí me faltan dos."]],
-  [["S", "¿Comentaste el código?"], ["O", "// algún día"]],
-  [["S", "¿Cuántas pestañas tienes abiertas?"], ["O", "Las suficientes para que suene el ventilador."]],
-  [["S", "Este café está más cargado que el servidor."], ["O", "Por eso todos teclean tan rápido."]],
-];
-BROMAS.forEach((l, i) => v(`broma-${i + 1}`, "broma", () => ({}), () => [...l]));
+export { BROMAS };
+BROMAS.forEach((l, i) => u(`broma-${i + 1}`, "broma", () => ({}), l.map(([rol, texto]) => [rol, texto] as const)));
 
 /** Todas las variantes, para las pruebas. */
 export const VARIANTES: ReadonlyArray<{ id: string; tema: Tema }> = V.map(({ id, tema }) => ({ id, tema }));
-
-// --- Frases sueltas (§1.6)
-export const SUELTAS: readonly string[] = ["☕", "Pausa para el café.", "Mmm…", "¿Y ahora qué?", "Un cafecito y vuelvo.", "A ver qué sale.", "Qué rico este café.", "Cinco minutos más…", "♪ ♫"];
-
-// --- Mascotas (§3)
-export type IdMascota = "gato" | "perro" | "conejo" | "robot";
-export const DICEN: Readonly<Record<IdMascota, readonly string[]>> = {
-  gato: ["¡Miau!", "Mrrr…", "¡Miau! ♥"],
-  perro: ["¡Guau!", "¡Guau, guau!", "♥"],
-  conejo: ["♥", "♥ ♥", "*snif, snif*"],
-  robot: ["Bip bup", "Bip bip bup", "Limpiando…"],
-};
 
 // ---------------------------------------------------------------------------
 // Lo que la voz puede decir (0.6.0, JST-226; punto 8 del spike de JST-224)
 // ---------------------------------------------------------------------------
 
-/**
- * Las frases fijas de las conversaciones, una por una, tal como las arman las
- * variantes de arriba (sin nombres ni números). El worker solo hace audios de
- * lo que puede rearmar: estas, las plantillas de abajo y las bromas. Si se
- * agrega o cambia una frase arriba, va aquí también (lo revisa
- * `tests/vozOficina.spec.ts`, que arma miles de conversaciones al azar).
- */
-const FIJAS_VARIANTES: readonly string[] = [
-  // terminó algo
-  "Acabo de terminar esta.", "¡Bien! ¿Fue complicado?", "Tuvo lo suyo, pero salió.", "Genial, una menos en el tablero.",
-  "Por fin cerré esta.", "¡Buena! ¿Y qué viene ahora?", "Esta otra.", "Nada por ahora. Café.",
-  "¿Cómo te fue con la última?", "Bien, ya está lista.", "Bacán.",
-  "Cerré esta hace un rato.", "Yo también terminé una.", "Nos ganamos el café.",
-  // su cola, en revisión, espera otra
-  "¿Qué te toca ahora?", "Esta, apenas me llamen.", "Ánimo.",
-  "Me toca esta.", "¿Harta pega?", "Ya veremos. Primero, café.",
-  "¿Tienes mucho en cola?", "Tres, por lo menos.", "¡Uf! ¿Por cuál partes?", "Por esta.",
-  "Dejé esta en revisión.", "Ojalá pase a la primera.",
-  "¿En qué estás?", "Esperando que revisen esta.", "Paciencia, ya la van a ver.",
-  "Esta espera a que termine otra.", "Bueno, mientras tanto, café.",
-  // quién te espera, a quién le falló algo, en pausa
-  "¿Por esta?", "Esa. Ojalá le contesten luego.", "¿Por cuál?", "Ya le van a contestar.", "Uf, harta cola.",
-  "¿Qué le pasó?", "Uf. Ojalá lo vean luego.", "Sí, en esta.", "Ojalá se arregle luego.", "Mal día para los runs.",
-  "¿Y eso?", "Ya volverá.",
-  // cuántos trabajan
-  "Entonces es buen momento para un café.", "¿Mucha pega hoy?", "Alguien tiene que cuidar el café.", "¿Cuántos están trabajando?",
-  "Uno solo trabajando.", "Solo dos trabajando.", "Día tranquilo, entonces.", "Nadie está trabajando.", "Silencio total. Se escucha el refri.",
-  // cómo le va en su rol (las respuestas de `comoVa`)
-  "Ahí vamos, de a poco.", "Bien. Hoy cerré esta.", "Harta pega: tres en cola.", "Bien, con esta en cola.", "Me alegro.", "Tranqui. Sin nada en cola.", "Qué envidia.",
-  // qué hace alguien de su sala, cómo están en otra empresa
-  "Mejor no interrumpir.", "Después le llevamos un café.", "Le toca esperar su turno.", "En esta.", "Ah, buena.",
-  "Tranquilos. Nadie trabajando.", "Harta pega por allá.", "Mejor para ellos.",
-];
-
-/** Las frases sueltas que llevan una tarea en la línea de abajo (§1.6). */
-export const SUELTAS_CON_DATO: readonly string[] = ["Después viene esta.", "Esta ya está. Me gané el café."];
-
-const MOTIVOS: readonly string[] = [...new Set(["limit", "timeout", "test", "permiso", "crash", "otro"].map((m) => motivoError(m === "otro" ? null : m)).concat(["budget", "approval", "manual", "otro"].map((m) => motivoPausa(m === "otro" ? null : m))))];
-const ROLES: readonly string[] = [...new Set([...ROL_TEMA.map(([, t]) => t), ...Object.values(ROL_API), "la pega"])];
-
-/** Todas las frases fijas de una conversación: las de las variantes, los motivos, «¿Cómo va …?» y las bromas. */
-export const FRASES_FIJAS: ReadonlySet<string> = new Set([...FIJAS_VARIANTES, ...MOTIVOS, ...ROLES.map((r) => `¿Cómo va ${r}?`), ...BROMAS.flatMap((b) => b.map(([, t]) => t))]);
+export { SUELTAS, SUELTAS_CON_DATO, SUELTAS_CON_DATO_COLA, SUELTAS_CON_DATO_RECIEN, SUELTAS_GENERALES, SUELTAS_POR_ESTADO, DICEN, REACCIONES, MASCOTA_DE_REACCION, fraseDeMascota };
+export type { EstadoSuelta, IdMascota, Reaccion };
 
 /** Un nombre dentro de una frase («Ingeniero/a de Betalandia», «QA»): letras, números y pocos signos, hasta 80. */
 export const NOMBRE_EN_FRASE = "[\\p{L}\\p{N}][\\p{L}\\p{N} .,'’/&+()\\-]{0,79}";
-const N = NOMBRE_EN_FRASE;
 const NUM = "\\d{1,4}";
-/** Las frases con un nombre o un número (las de arriba con `${…}`), como expresiones. */
-export const PLANTILLAS: readonly RegExp[] = [
-  `${N} está esperando (?:una respuesta|una decisión|una aprobación|una revisión)\\.`,
-  `${N} lleva (?:${NUM} horas|una hora) esperando\\.`,
-  `Hay ${NUM} esperando respuesta\\.`,
-  `A ${N} le falló el run\\.`,
-  `¿Viste que ${N} tiene un error\\?`,
-  `Hay ${NUM} con error\\.`,
-  `${N} sigue en pausa\\.`,
-  `Hay ${NUM} trabajando ahora\\.`,
-  `${NUM} trabajando, y nosotros acá\\.`,
-  `${NUM}\\. Un día normal\\.`,
-  `${N} lleva (?:${NUM} horas|${NUM} minutos) con esta\\.`,
-  `${N} recién empezó esta\\.`,
-  `${N} está en cola con esta\\.`,
-  `¿En qué anda ${N}\\?`,
-  `¿Cómo están en ${N}\\?`,
-  `${NUM} trabajando y ${NUM} esperando respuesta\\.`,
-  `${NUM} trabajando\\.`,
-].map((p) => new RegExp(`^${p}$`, "u"));
+const esc = (t: string) => t.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&");
+const alt = (xs: readonly string[]) => `(?:${[...new Set(xs)].map(esc).join("|")})`;
+
+const ROLES: readonly string[] = [...new Set([...ROL_TEMA.map(([, t]) => t), ...Object.values(ROL_API), "la pega"])];
+export const MOTIVOS_ERROR: readonly string[] = Object.values(TEXTO_ERROR);
+export const MOTIVOS_PAUSA: readonly string[] = ["Por presupuesto.", "Espera una aprobación.", "Alguien le puso pausa."];
+const QUE_ESPERA_TEXTOS = Object.values(QUE_ESPERA);
+/** Lo que dice `duracionHablada` (`src/duracion.ts`): «un minuto», «12 minutos», «media hora», «una hora y media», «2 días». */
+const DURACION = "(?:menos de un minuto|un minuto|\\d{1,3} minutos|media hora|una hora(?: y media)?|\\d{1,3} horas(?: y media)?|\\d{1,3} días)";
+
+/** Qué puede ir en cada `{hueco}` de una frase y cómo se llama para la IA (`null`: la IA no lo ve como hueco; sus valores son fijos). */
+const TIPOS_HUECO: Readonly<Record<string, { re: string; hueco: string | null }>> = {
+  q: { re: NOMBRE_EN_FRASE, hueco: "agente" },
+  emp: { re: NOMBRE_EN_FRASE, hueco: "empresa" },
+  n: { re: NUM, hueco: "n" },
+  esp: { re: NUM, hueco: "esperando" },
+  // JST-415: una duración con su unidad («2 horas») tiene su propio hueco: con `{n}` la IA la trataba como una cantidad («Hay {n} esperando» → «Hay 2 horas esperando»).
+  dur: { re: DURACION, hueco: "tiempo" },
+  rol: { re: alt(ROLES), hueco: "rol" },
+  algo: { re: alt(QUE_ESPERA_TEXTOS), hueco: null },
+  mot: { re: alt(MOTIVOS_ERROR), hueco: null },
+  motp: { re: alt(MOTIVOS_PAUSA), hueco: null },
+  poc: { re: alt(["Uno solo", "Solo dos"]), hueco: null },
+};
+
+interface Plantilla {
+  texto: string;
+  re: RegExp;
+  /** Qué hueco va en cada grupo `g0`, `g1`… */
+  huecos: string[];
+}
+
+/** La expresión de una frase con `{huecos}`; `null` si no tiene (es fija). */
+function compilar(texto: string): Plantilla | null {
+  if (!/\{[a-z]+\}/.test(texto)) return null;
+  const huecos: string[] = [];
+  const re = texto
+    .split(/(\{[a-z]+\})/)
+    .map((p) => {
+      const m = /^\{([a-z]+)\}$/.exec(p);
+      if (!m) return esc(p);
+      const tipo = TIPOS_HUECO[m[1]!];
+      if (!tipo) throw new Error(`Hueco desconocido {${m[1]}} en «${texto}»`);
+      huecos.push(m[1]!);
+      return `(?<g${huecos.length - 1}>${tipo.re})`;
+    })
+    .join("");
+  return { texto, re: new RegExp(`^${re}$`, "u"), huecos };
+}
+
+const PLANTILLAS_TODAS: Plantilla[] = [];
+const FIJAS_DE_VARIANTES = new Set<string>();
+/** Frases fijas que traen un dato sin código ni número (cuántos en la cola, el motivo…). */
+const FIJAS_CON_DATO = new Set<string>();
+{
+  const vistas = new Set<string>();
+  for (const x of V) {
+    for (const [, texto, , d] of x.lin) {
+      const p = compilar(texto);
+      if (p) {
+        if (!vistas.has(texto)) PLANTILLAS_TODAS.push(p);
+        vistas.add(texto);
+      } else {
+        FIJAS_DE_VARIANTES.add(texto);
+        if (d === "d") FIJAS_CON_DATO.add(texto);
+      }
+    }
+  }
+}
+
+/**
+ * Las frases fijas de las conversaciones, una por una (sin nombres ni números). El worker solo hace audios de lo que puede
+ * rearmar: estas, las plantillas de abajo y las bromas. Salen solas de las variantes de arriba: nada que mantener aparte
+ * (`tests/vozOficina.spec.ts` arma miles de conversaciones al azar y revisa que todo esté aquí).
+ */
+export const FRASES_FIJAS: ReadonlySet<string> = new Set([...FIJAS_DE_VARIANTES, ...BROMAS.flatMap((b) => b.map(([, t]) => t))]);
+
+/** Las frases con un nombre o un número (las de arriba con `{huecos}`), como expresiones. */
+export const PLANTILLAS: readonly RegExp[] = PLANTILLAS_TODAS.map((p) => p.re);
 
 /** Los datos que reemplazan los huecos de una apertura generada por la IA. */
 export interface AperturaRellena {
@@ -724,42 +1273,40 @@ export interface AperturaRellena {
 
 export const huecosDe = (plantilla: string): string[] => [...plantilla.matchAll(/\{([a-z]+)\}/g)].map((m) => m[1]!);
 
+const plantillaDe = (texto: string): { p: Plantilla; grupos: Record<string, string> } | null => {
+  for (const p of PLANTILLAS_TODAS) {
+    const m = p.re.exec(texto);
+    if (m) return { p, grupos: { ...m.groups } as Record<string, string> };
+  }
+  return null;
+};
+
 /** La apertura de hoy como plantilla y los valores actuales de sus huecos. */
 export function aperturaDe(l: Pick<Linea, "texto" | "codigo">): AperturaRellena {
   let plantilla = l.texto;
   const datos: Record<string, string> = {};
   const poner = (nombre: string, valor: string) => {
+    if (datos[nombre] !== undefined) return;
     datos[nombre] = valor;
     plantilla = plantilla.replace(valor, `{${nombre}}`);
   };
+  const t = plantillaDe(l.texto);
+  if (t) {
+    t.p.huecos.forEach((tipo, i) => {
+      const hueco = TIPOS_HUECO[tipo]!.hueco;
+      const valor = t.grupos[`g${i}`];
+      if (hueco && valor) poner(hueco, valor);
+    });
+  }
   if (l.codigo) {
-    const tarea = l.texto.match(/\besta\b/i)?.[0];
+    const tarea = l.texto.match(DEMOSTRATIVO)?.[0];
     if (tarea) poner("tarea", tarea);
   }
-  const i = PLANTILLAS.findIndex((re) => re.test(l.texto));
-  const m = (re: RegExp) => l.texto.match(re);
-  let x: RegExpMatchArray | null = null;
-  if (i === 0 && (x = m(/^(.+?) está esperando /))) poner("agente", x[1]!);
-  else if (i === 1 && (x = m(/^(.+?) lleva (.+?) esperando\.$/))) {
-    poner("agente", x[1]!);
-    poner("n", x[2]!);
-  } else if ((i === 2 || i === 5 || i === 7 || i === 8 || i === 9 || i === 16) && (x = m(/\d+/))) poner("n", x[0]);
-  else if (i === 3 && (x = m(/^A (.+?) le falló /))) poner("agente", x[1]!);
-  else if (i === 4 && (x = m(/^¿Viste que (.+?) tiene /))) poner("agente", x[1]!);
-  else if (i === 6 && (x = m(/^(.+?) sigue /))) poner("agente", x[1]!);
-  else if (i === 10 && (x = m(/^(.+?) lleva (.+?) con esta\.$/))) {
-    poner("agente", x[1]!);
-    poner("n", x[2]!);
-  } else if (i === 11 && (x = m(/^(.+?) recién /))) poner("agente", x[1]!);
-  else if (i === 12 && (x = m(/^(.+?) está /))) poner("agente", x[1]!);
-  else if (i === 13 && (x = m(/^¿En qué anda (.+?)\?$/))) poner("agente", x[1]!);
-  else if (i === 14 && (x = m(/^¿Cómo están en (.+?)\?$/))) poner("empresa", x[1]!);
-  else if (i === 15 && (x = m(/^(\d+) trabajando y (\d+) /))) {
-    poner("n", x[1]!);
-    poner("esperando", x[2]!);
-  } else if (i < 0 && (x = m(/^¿Cómo va (.+)\?$/)) && ROLES.includes(x[1]!)) poner("rol", x[1]!);
   return { plantilla, datos };
 }
+
+/** El «esta» o «esa» de una frase con tarea (no «está»): lo que reemplaza el hueco `{tarea}`. */
+const DEMOSTRATIVO = /(?<![\p{L}\p{N}])(?:esta|esa)(?![\p{L}\p{N}])/iu;
 
 export function rellenarHuecos(plantilla: string, datos: Readonly<Record<string, string>>): string | null {
   let texto = plantilla;
@@ -798,20 +1345,12 @@ export function fraseSuelta(texto: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Las frases que traen un dato sin código, número ni nombre: el motivo de un
- * error o de una pausa, la respuesta de «¿Cómo va …?», lo de la cola y los
- * contadores dichos en palabras (el `CON_DATO` del prompt v4 del spike).
+ * Una frase de hoy con un dato: con tarea, con un número, con un nombre (una plantilla con huecos), una de las fijas que
+ * traen un dato sin código ni número (cuántos hay en la cola, «Nadie trabajando»…, marcadas en las variantes) o una de las
+ * frases del prompt v4 del spike.
  */
-const CON_DATO: ReadonlySet<string> = new Set([
-  ...MOTIVOS,
-  "Tranquilos. Nadie trabajando.", "Tres, por lo menos.", "Nada por ahora. Café.",
-  "Ahí vamos, de a poco.", "Bien. Hoy cerré esta.", "Harta pega: tres en cola.", "Bien, con esta en cola.", "Tranqui. Sin nada en cola.",
-  "Nadie está trabajando.", "Uno solo trabajando.", "Solo dos trabajando.",
-]);
-
-/** Una frase de hoy con un dato: con tarea, con un número, con un nombre (una plantilla) o una de `CON_DATO`. */
 export function conDato(l: Pick<Linea, "texto" | "codigo">): boolean {
-  return !!l.codigo || /\d/.test(l.texto) || CON_DATO.has(l.texto) || PLANTILLAS.some((re) => re.test(l.texto));
+  return !!l.codigo || /\d/.test(l.texto) || FIJAS_CON_DATO.has(l.texto) || plantillaDe(l.texto) !== null;
 }
 
 /** Hasta cuántas frases en total tiene una conversación con el final de la IA. */
@@ -849,9 +1388,14 @@ export function claveDeFinal(variante: string, fijas: readonly Pick<Linea, "text
       partes.push(l.texto);
       continue;
     }
-    const i = PLANTILLAS.findIndex((re) => re.test(l.texto));
-    if (i < 0) return null;
-    partes.push(`P${i}(${(l.texto.match(/\d+/g) ?? []).map((d) => cubeta(Number(d))).join(",")})`);
+    const t = plantillaDe(l.texto);
+    if (!t) return null;
+    // Los valores que no son datos (el motivo de un error, qué espera alguien) quedan en la clave; los nombres y los números, no.
+    let id = t.p.texto;
+    t.p.huecos.forEach((tipo, i) => {
+      if (TIPOS_HUECO[tipo]!.hueco === null) id = id.replace(`{${tipo}}`, t.grupos[`g${i}`]!);
+    });
+    partes.push(`P[${id}](${(l.texto.match(/\d+/g) ?? []).map((d) => cubeta(Number(d))).join(",")})`);
   }
   return `${variante}|${partes.join("/")}`;
 }
@@ -908,7 +1452,25 @@ export function unirFinal(fijas: readonly Linea[], frases: readonly string[], a:
 // Elegir sin repetir (§1.7)
 // ---------------------------------------------------------------------------
 
-export const PESO: Readonly<Record<Tema, number>> = { termino: 5, "te-espera": 4, error: 4, cola: 3, revision: 2, trabajan: 2, rol: 2, sala: 2, broma: 2, "espera-otra": 1, pausa: 1, empresa: 1 };
+export const PESO: Readonly<Record<Tema, number>> = {
+  termino: 5,
+  "te-espera": 4,
+  error: 4,
+  cola: 3,
+  bloqueada: 3,
+  entrega: 3,
+  revision: 2,
+  trabajan: 2,
+  rol: 2,
+  sala: 2,
+  tardo: 2,
+  racha: 2,
+  broma: 2,
+  "espera-otra": 1,
+  pausa: 1,
+  empresa: 1,
+  reloj: 1,
+};
 /** Cada variante espera 8 conversaciones del piso; un tema, 2 de su sala; el mismo tema sobre la misma persona, 10 min. */
 export const NO_VARIANTE = 8;
 export const NO_TEMA_SALA = 2;
@@ -950,9 +1512,9 @@ export class Guionista {
   private readonly sujetos = new Map<string, number>();
   private mazoBromas: string[] = [];
   private ultimaBroma: string | null = null;
-  private mazoSueltas: string[] = [];
   private sueltasDichas: string[] = [];
-  private readonly mascotas = new Map<IdMascota, number>();
+  /** Lo último que dijo cada mascota («t:gato» al tocarla, «r:gato» al reaccionar): no repite la anterior (JST-415). */
+  private readonly ultimaMascota = new Map<string, string>();
   /** 0.7.0: la reserva de la IA de Chrome (`null`: las frases de siempre) y el último final dicho de cada clave. */
   private ia: FuenteIa | null = null;
   /** Con la IA elegida, lo ya dicho también frena las fijas mientras el modelo carga (JST-369). */
@@ -1019,7 +1581,7 @@ export class Guionista {
       if (!d) continue;
       if (!forzar && claves(x, d).some((k) => this.dicho(k, c.ahora))) continue;
       const lineas = this.lineasDe(x, d, c);
-      if (lineas.some((l) => this.fueDicha(l.texto))) continue;
+      if (!lineas || lineas.some((l) => this.fueDicha(l.texto))) continue;
       out.push({ x, d });
     }
     return out;
@@ -1070,7 +1632,7 @@ export class Guionista {
     if (!elegida) return null;
     const { x, d } = elegida;
     const deHoy = this.lineasDe(x, d, c);
-    if (deHoy.length < 2) return null;
+    if (!deHoy || deHoy.length < 2) return null;
     const { lineas, ia } = this.conFinal(x, deHoy, c);
     this.variantes.push(x.id);
     if (this.variantes.length > 50) this.variantes = this.variantes.slice(-NO_VARIANTE);
@@ -1120,6 +1682,7 @@ export class Guionista {
       const d = x.si(c);
       if (!d) continue;
       const lineas = this.lineasDe(x, d, c);
+      if (!lineas) continue;
       const n = fijasDe(lineas);
       if (lineas.length < 2 || n === 0) continue;
       const clave = claveDeFinal(x.id, lineas.slice(0, n));
@@ -1128,18 +1691,22 @@ export class Guionista {
     return out;
   }
 
-  /** Las frases de una variante con sus datos: quién dice cada una y la tarea de la línea de abajo. */
-  private lineasDe(x: Variante, d: Datos, c: Ctx): Linea[] {
+  /**
+   * Las frases de una variante con sus datos: quién dice cada una y la tarea de la línea de abajo. `null` si falta un
+   * dato (un hueco sin valor o una tarea sin código): esa variante no se puede decir.
+   */
+  private lineasDe(x: Variante, d: Datos, c: Ctx): Linea[] | null {
     const S = d.S ?? c.a;
     const O = d.O ?? (S.id === c.a.id ? c.b : c.a);
-    return x
-      .lineas({ ...d, S, O }, c)
-      .filter((r): r is NonNullable<Renglon> => !!r)
-      .map(([rol, texto, codigo]): Linea => {
-        const q = rol === "S" ? S : O;
-        const cod = codigo ?? null;
-        return { quien: q.id, texto, codigo: cod, titulo: cod ? this.tituloDe(c, cod) : null };
-      });
+    const out: Linea[] = [];
+    for (const [rol, plantilla, clave] of x.lin) {
+      const texto = rellenarHuecos(plantilla, d.v ?? {});
+      if (texto === null || texto.trim() === "") return null;
+      const cod = clave ? (d.c?.[clave] ?? null) : null;
+      if (clave && !cod) return null;
+      out.push({ quien: (rol === "S" ? S : O).id, texto, codigo: cod, titulo: cod ? this.tituloDe(c, cod) : null });
+    }
+    return out;
   }
 
   /**
@@ -1161,7 +1728,7 @@ export class Guionista {
     const d = x.si(c);
     if (!d) return null;
     const lineas = this.lineasDe(x, d, c);
-    if (lineas.length < 2) return null;
+    if (!lineas || lineas.length < 2) return null;
     const sujeto = d.sujeto !== undefined ? { sujeto: d.sujeto } : {};
     if (!g.ia) return { tema: x.tema, variante: x.id, lineas, ...sujeto };
     // La misma broma, apertura y final de la IA; sin la IA elegida, se descarta.
@@ -1183,16 +1750,19 @@ export class Guionista {
     for (const x of [c.a, c.b]) {
       if (x.t?.hecho === codigo && x.t.tituloHecho) return x.t.tituloHecho;
       if (x.t?.sigue?.codigo === codigo && x.t.sigue.titulo) return x.t.sigue.titulo;
+      if (x.t?.bloqueada?.codigo === codigo && x.t.bloqueada.titulo) return x.t.bloqueada.titulo;
     }
     return c.titulo(codigo);
   }
 
   /**
    * Una frase suelta para alguien solo en el descanso (§1.6): 1 de cada 3, de
-   * sus temas guardados (sin leer nada); si no, del mazo de las fijas. Con la IA
-   * elegida no se repite nada dicho en la hora: sin otra variante, se calla.
+   * sus temas guardados (sin leer nada); si no, de las fijas. JST-415: `estados` (cómo está quien habla: libre hace mucho,
+   * recién terminó, hay quien espera a la persona, tiene cola) elige frases de su estado (6 de cada 10 veces) y deja las
+   * con tarea solo para quien terminó hace poco o tiene cola; sin `estados`, no se mira (como antes). Con la IA elegida no
+   * se repite nada dicho en la hora: sin otra variante, se calla.
    */
-  suelta(quien: string, temas: Temas | null, azar: () => number, titulo: (codigo: string) => string | null = () => null): Linea | null {
+  suelta(quien: string, temas: Temas | null, azar: () => number, titulo: (codigo: string) => string | null = () => null, estados?: ReadonlySet<EstadoSuelta>): Linea | null {
     if (this.ia) {
       const t = this.ia.suelta(azar, this.sueltasDichas.slice(-NO_SUELTA));
       if (t) {
@@ -1201,38 +1771,59 @@ export class Guionista {
         return { quien, texto: t, codigo: null, titulo: null };
       }
     }
+    const recientes = () => this.sueltasDichas.slice(-NO_SUELTA);
+    const anotar = (clave: string) => {
+      this.sueltasDichas.push(clave);
+      if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
+    };
     if (azar() < SUELTA_CON_DATO) {
-      const conDato: Array<[string, string | null | undefined, string | null | undefined]> = [
-        ["Después viene esta.", temas?.sigue?.estado === "todo" ? temas.sigue.codigo : null, temas?.sigue?.titulo],
-        ["Esta ya está. Me gané el café.", temas?.hecho, temas?.tituloHecho],
-      ];
-      for (const [texto, codigo, nombre] of conDato) {
-        const clave = `${texto}:${codigo}`;
-        if (!codigo || this.sueltasDichas.slice(-NO_SUELTA).includes(clave) || this.fueDicha(texto)) continue;
-        this.sueltasDichas.push(clave);
-        return { quien, texto, codigo, titulo: nombre ?? titulo(codigo) };
+      const hecho = !!temas?.hecho && (!estados || estados.has("recien"));
+      const sigue = temas?.sigue?.estado === "todo" && (!estados || estados.has("cola"));
+      const candidatas: Array<{ texto: string; codigo: string; nombre: string | null | undefined }> = [];
+      if (sigue) for (const texto of SUELTAS_CON_DATO_COLA) candidatas.push({ texto, codigo: temas!.sigue!.codigo, nombre: temas!.sigue!.titulo });
+      if (hecho) for (const texto of SUELTAS_CON_DATO_RECIEN) candidatas.push({ texto, codigo: temas!.hecho!, nombre: temas!.tituloHecho });
+      const libres = candidatas.filter((x) => !recientes().includes(`${x.texto}:${x.codigo}`) && !this.fueDicha(x.texto));
+      if (libres.length > 0) {
+        const x = libres[Math.floor(azar() * libres.length)]!;
+        anotar(`${x.texto}:${x.codigo}`);
+        return { quien, texto: x.texto, codigo: x.codigo, titulo: x.nombre ?? titulo(x.codigo) };
       }
     }
-    for (let k = 0; k < SUELTAS.length * 3; k++) {
-      if (this.mazoSueltas.length === 0) this.mazoSueltas = barajar(SUELTAS, azar);
-      const s = this.mazoSueltas.shift()!;
-      if (this.sueltasDichas.slice(-NO_SUELTA).includes(s) || this.fueDicha(s)) continue;
-      this.sueltasDichas.push(s);
-      if (this.sueltasDichas.length > 50) this.sueltasDichas = this.sueltasDichas.slice(-NO_SUELTA);
-      return { quien, texto: s, codigo: null, titulo: null };
+    const delEstado = estados ? [...estados].flatMap((e) => SUELTAS_POR_ESTADO[e]) : [];
+    const buenas = (lista: readonly string[]) => lista.filter((t) => !recientes().includes(t) && !this.fueDicha(t));
+    const propias = buenas(delEstado);
+    const generales = buenas(SUELTAS_GENERALES);
+    const pool = propias.length > 0 && (generales.length === 0 || azar() < 0.6) ? propias : generales;
+    if (pool.length > 0) {
+      const t = pool[Math.floor(azar() * pool.length)]!;
+      anotar(t);
+      return { quien, texto: t, codigo: null, titulo: null };
     }
     return this.ia || this.memoriaIa ? null : { quien, texto: "☕", codigo: null, titulo: null };
   }
 
-  /** Lo que dice una mascota: con la IA elegida tampoco repite una fija dicha en la hora. */
+  /** Una frase de la lista que no es la última que dijo esa mascota (ni una dicha en la hora, con la IA elegida). */
+  private fraseMascota(clave: string, lista: readonly string[], azar: () => number): string | null {
+    const ultima = this.ultimaMascota.get(clave) ?? null;
+    const libres = lista.filter((t) => t !== ultima && !this.fueDicha(t));
+    if (libres.length === 0) return null;
+    const t = libres[Math.floor(azar() * libres.length)]!;
+    this.ultimaMascota.set(clave, t);
+    return t;
+  }
+
+  /** Lo que dice una mascota al tocarla: una de sus 8 frases, sin repetir la anterior (con la IA elegida, también lo que ella escribe). */
   mascota(id: IdMascota, azar: () => number = Math.random): string | null {
     const generada = this.ia?.mascota(id, azar);
     if (generada) return generada;
-    const l = DICEN[id];
-    const i = ((this.mascotas.get(id) ?? -1) + 1) % l.length;
-    this.mascotas.set(id, i);
-    const fija = l[i]!;
-    return this.fueDicha(fija) ? null : fija;
+    return this.fraseMascota(`t:${id}`, DICEN[id], azar);
+  }
+
+  /** Lo que dice una mascota al reaccionar a lo que pasa cerca (JST-415): quién es y qué dice, sin repetir su anterior. */
+  reaccion(tipo: Reaccion, azar: () => number = Math.random): { id: IdMascota; texto: string } | null {
+    const id = MASCOTA_DE_REACCION[tipo];
+    const texto = this.fraseMascota(`r:${id}`, REACCIONES[id], azar);
+    return texto ? { id, texto } : null;
   }
 
   /**

@@ -79,7 +79,7 @@ describe("frases que se generan", () => {
     const resumenes = p.filter((t) => /agentes/.test(t.texto));
     expect(resumenes.every((t) => t.voz.id === VOZ_RESUMEN)).toBe(true);
     expect(resumenes.map((t) => t.texto)).toEqual(expect.arrayContaining(["2 agentes te necesitan.", "3 agentes terminaron.", "3 agentes empezaron."]));
-    expect(resumenes.length).toBe(4 * 2);
+    expect(resumenes.length).toBe(6 * 2);
     // 0.5.0 (JST-167): «tengo un error» con cada uno de los 6 motivos (por agente con las 2 presentaciones con nombre, y
     // suelta en cada voz) y la muestra de «▶ Probar» de cada voz.
     expect(de("a")).toEqual(expect.arrayContaining([
@@ -91,7 +91,8 @@ describe("frases que se generan", () => {
     expect(p.filter((t) => t.texto === "Instalar la Oficina global en la real.").length).toBe(9);
     // 0.8.0 (JST-241): y la pregunta de «▶ Probar» con «Te necesito», una por voz.
     expect(p.filter((t) => t.texto === "¿Instalo la versión nueva ahora?").length).toBe(9);
-    expect(p.length).toBe(3 * 8 + 9 * 4 + 8 + 3 * 6 * 2 + 9 * 6 + 9 + 9);
+    // JST-415: 6 frases (con «quedé bloqueado» y «te lo dejo para revisar») y 7 motivos (con «se le acabó el tiempo»).
+    expect(p.length).toBe(3 * 12 + 9 * 6 + 12 + 3 * 7 * 2 + 9 * 7 + 9 + 9);
     // Sin repetidos.
     expect(new Set(p.map((t) => claveAudio(t.voz.id, t.texto))).size).toBe(p.length);
   });

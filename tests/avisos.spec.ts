@@ -203,11 +203,16 @@ describe("voces (§8)", () => {
   });
 });
 
+// JST-415: lo que un ajuste guardado de antes recibe por omisión.
+const NUEVAS_FRASES = { bloq: true, recordar: true, volver: true, hitos: true };
+
 describe("ajustes (§6)", () => {
   it("vienen apagados (el sonido encendido, «empecé» sin marcar)", () => {
     expect(leerAjustes(null)).toEqual(AJUSTES_POR_OMISION);
     expect(AJUSTES_POR_OMISION).toMatchObject({ avisos: false, voces: false, sonido: true, presentacion: "nombre-empresa" });
-    expect(AJUSTES_POR_OMISION.frases).toEqual({ toca: true, error: true, fin: true, emp: false });
+    expect(AJUSTES_POR_OMISION.frases).toEqual({ toca: true, error: true, fin: true, emp: false, bloq: true, recordar: true, volver: true, hitos: true });
+    // JST-415: el nivel viene en «normal».
+    expect(AJUSTES_POR_OMISION.nivel).toBe("normal");
   });
 
   it("un JSON roto o campos raros vuelven a lo de por omisión", () => {
@@ -223,7 +228,7 @@ describe("ajustes (§6)", () => {
     expect(AJUSTES_POR_OMISION.charlas).toBe(true);
     // Lo que guarda la 0.3.8 en `localStorage` (sin `charlas`): todo igual, y las conversaciones encendidas.
     const de038 = { avisos: true, sonido: false, voces: true, frases: { toca: true, error: false, fin: true, emp: true }, presentacion: "nombre", mascotas: false };
-    expect(leerAjustes(JSON.stringify(de038))).toEqual({ ...de038, charlas: true, detalle: AJUSTES_POR_OMISION.detalle, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(leerAjustes(JSON.stringify(de038))).toEqual({ ...de038, frases: { ...de038.frases, ...NUEVAS_FRASES }, nivel: "normal", charlas: true, detalle: AJUSTES_POR_OMISION.detalle, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
     // Apagado se guarda y se lee apagado; un valor raro vuelve a encendido.
     expect(leerAjustes(JSON.stringify({ ...de038, charlas: false })).charlas).toBe(false);
     expect(leerAjustes(JSON.stringify({ charlas: "no" })).charlas).toBe(true);
@@ -329,16 +334,17 @@ describe("la voz dice de qué se trata: el motivo del error (6 que se reconocen)
     expect(motivoDeError("bad token", "hermes_gateway_auth_failed")).toBe("no pudo conectarse");
     expect(motivoDeError("The computer went to sleep", null)).toBe("la Mac se durmió");
     expect(motivoDeError(null, "acpx_session_init_failed")).toBe("no alcanzó a empezar");
-    expect(motivoDeError("Timed out", "timed_out")).toBe("no alcanzó a empezar");
-    expect(MOTIVOS_ERROR).toHaveLength(6);
+    // JST-415: pasarse del tiempo es «se le acabó el tiempo» (como dicen las conversaciones), no «no alcanzó a empezar».
+    expect(motivoDeError("Timed out", "timed_out")).toBe("se le acabó el tiempo");
+    expect(MOTIVOS_ERROR).toHaveLength(7);
   });
 
   it("un run que se pasa del tiempo: Paperclip lo deja `timed_out` con `errorCode: \"timeout\"` (JST-193)", () => {
     // Como el run 7db54305 de la QA de JST-168 (sonda `sleep 100` con `timeoutSec: 3`).
-    expect(motivoDeError("Timed out after 3s", "timeout")).toBe("no alcanzó a empezar");
-    expect(motivoDeError(null, "timeout")).toBe("no alcanzó a empezar");
+    expect(motivoDeError("Timed out after 3s", "timeout")).toBe("se le acabó el tiempo");
+    expect(motivoDeError(null, "timeout")).toBe("se le acabó el tiempo");
     expect(textoVoz("Chief of staff", "JSTM", "error", "nombre-empresa", { motivo: motivoDeError("Timed out after 3s", "timeout") })).toBe(
-      "Chief of staff, de JSTM: tengo un error: no alcanzó a empezar.",
+      "Chief of staff, de JSTM: tengo un error: se le acabó el tiempo.",
     );
   });
 
@@ -351,7 +357,7 @@ describe("la voz dice de qué se trata: el motivo del error (6 que se reconocen)
 
 describe("ajustes 0.5.0: «y de qué se trata» por frase", () => {
   it("viene prendido en las 4 y solo cuenta si su frase está prendida", () => {
-    expect(AJUSTES_POR_OMISION.detalle).toEqual({ toca: true, error: true, fin: true, emp: true });
+    expect(AJUSTES_POR_OMISION.detalle).toEqual({ toca: true, error: true, fin: true, emp: true, bloq: true });
     expect(conDetalle(AJUSTES_POR_OMISION, "fin")).toBe(true);
     // «Empecé» viene apagada: su detalle no cuenta, pero conserva su valor.
     expect(conDetalle(AJUSTES_POR_OMISION, "emp")).toBe(false);
@@ -360,13 +366,13 @@ describe("ajustes 0.5.0: «y de qué se trata» por frase", () => {
 
   it("lo que guardó la 0.4.0 (sin `detalle`) se lee igual, con las 4 prendidas", () => {
     const de040 = { avisos: true, sonido: false, voces: true, frases: { toca: true, error: false, fin: true, emp: true }, presentacion: "nombre", mascotas: false, charlas: false };
-    expect(leerAjustes(JSON.stringify(de040))).toEqual({ ...de040, detalle: { toca: true, error: true, fin: true, emp: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(leerAjustes(JSON.stringify(de040))).toEqual({ ...de040, frases: { ...de040.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { toca: true, error: true, fin: true, emp: true, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
   });
 
   it("apagado se guarda y se lee apagado; lo raro vuelve a prendido; lo demás no cambia", () => {
-    const g = { ...AJUSTES_POR_OMISION, detalle: { toca: false, error: true, fin: false, emp: true } };
+    const g = { ...AJUSTES_POR_OMISION, detalle: { toca: false, error: true, fin: false, emp: true, bloq: true } };
     expect(leerAjustes(JSON.stringify(g))).toEqual(g);
-    expect(leerAjustes(JSON.stringify({ detalle: { toca: "no", fin: false } })).detalle).toEqual({ toca: true, error: true, fin: false, emp: true });
+    expect(leerAjustes(JSON.stringify({ detalle: { toca: "no", fin: false } })).detalle).toEqual({ toca: true, error: true, fin: false, emp: true, bloq: true });
     expect(leerAjustes(JSON.stringify({ detalle: "todo" })).detalle).toEqual(AJUSTES_POR_OMISION.detalle);
     expect(leerAjustes(JSON.stringify({ detalle: null })).detalle).toEqual(AJUSTES_POR_OMISION.detalle);
     expect(conDetalle(leerAjustes(JSON.stringify(g)), "fin")).toBe(false);
@@ -394,7 +400,7 @@ describe("ajustes 0.6.0: qué se lee de la oficina (JST-225 §6)", () => {
 
   it("lo que guardó la 0.5.3 se lee igual y queda con `leer` por omisión: quien tenía las voces prendidas oye las conversaciones", () => {
     const a = leerAjustes(JSON.stringify(de053));
-    expect(a).toEqual({ ...de053, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
+    expect(a).toEqual({ ...de053, frases: { ...de053.frases, ...NUEVAS_FRASES }, nivel: "normal", detalle: { ...de053.detalle, bloq: true }, leer: AJUSTES_POR_OMISION.leer, vozMas: false, vistoLeer: false, iaFuente: "ia", iaVisto: false });
     expect(leeOficina(a, "charlas")).toBe(true);
     for (const t of ["entregas", "mascotas", "sueltas", "hora"] as const) expect(leeOficina(a, t)).toBe(false);
     // Con el punto violeta en «Voces» hasta que abra el panel.

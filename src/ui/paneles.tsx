@@ -8,7 +8,7 @@
 // avisos los da la vigía (`vigia.ts`) y los ajustes quedan en el navegador.
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type AnchorHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { usePluginToast } from "@paperclipai/plugin-sdk/ui";
-import { bannerTv, cuerpoAviso, MUESTRA_PREGUNTA, MUESTRA_VOZ, nombreCorto, PIDE_MUESTRA, TEXTO_MUESTRA, textoVoz, TTL_AVISO, type DetalleVoz, type Frase, type Llegada, type Presentacion } from "../avisos.js";
+import { bannerTv, cuerpoAviso, MUESTRA_PREGUNTA, MUESTRA_VOZ, nombreCorto, PIDE_MUESTRA, TEXTO_MUESTRA, textoVoz, TTL_AVISO, type ClaveFrase, type DetalleVoz, type Llegada, type Presentacion } from "../avisos.js";
 import { comparar } from "../lista.js";
 import { chipDe } from "../responder.js";
 import { PAGE_ROUTE } from "../shared.js";
@@ -16,7 +16,8 @@ import { msg, t } from "../i18n.js";
 import { vozDeAgente, vozPorId } from "../voces.js";
 import { tituloVisible } from "../estado.js";
 import { hace, type AgenteVista } from "../vista.js";
-import { cambiarAjustes, conDetalle, puntoVoces, useAjustes, type TipoLeer } from "./ajustes.js";
+import { cambiarAjustes, conDetalle, puntoVoces, useAjustes, type FraseExtra, type TipoLeer } from "./ajustes.js";
+import { permiteExtras } from "../nivel.js";
 import { Capa, useEsc } from "./capas.js";
 import { CajaPersonaje, cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
 import { cargarIndice, useIndiceVoces, useVocesSinGenerar } from "./audiosVoces.js";
@@ -270,14 +271,22 @@ function PanelAvisos({ agentes }: { agentes: readonly AgenteVista[] }) {
 // Panel «Voces» (§8)
 // ---------------------------------------------------------------------------
 
-/** Las 4 frases y, en su misma fila (0.5.0, JST-163), el interruptor chico de «y de qué se trata»: la pregunta (0.8.0), la tarea o el motivo. */
-const FRASES_PANEL: ReadonlyArray<{ k: Frase; texto: string; pista: string | null; det: string }> = [
+/** Las frases y, en su misma fila (0.5.0, JST-163), el interruptor chico de «y de qué se trata»: la pregunta (0.8.0), la tarea o el motivo. */
+const FRASES_PANEL: ReadonlyArray<{ k: ClaveFrase; texto: string; pista: string | null; det: string }> = [
   { k: "toca", texto: msg("«Te necesito»"), pista: null, det: msg("la pregunta") },
   { k: "error", texto: msg("«Tengo un error»"), pista: null, det: msg("el motivo") },
-  { k: "fin", texto: msg("«Terminé»"), pista: msg("Cuando su tarea pasa a revisión o a terminada"), det: msg("la tarea") },
+  { k: "fin", texto: msg("«Terminé»"), pista: msg("Cuando termina su tarea, y «te lo dejo para revisar» cuando la pasa a revisión"), det: msg("la tarea") },
+  { k: "bloq", texto: msg("«Quedé bloqueado»"), pista: msg("Cuando una tarea que vio trabajar pasa a bloqueada · solo con «Normal» o «Conversador»"), det: msg("la tarea") },
   { k: "emp", texto: msg("«Empecé»"), pista: msg("Cuando toma una tarea nueva · pasa seguido"), det: msg("la tarea") },
 ];
-const ORDEN_EJEMPLO: readonly Frase[] = ["toca", "error", "fin", "emp"];
+const ORDEN_EJEMPLO: readonly ClaveFrase[] = ["toca", "error", "fin", "emp"];
+
+/** JST-415: lo que la oficina dice además, sin «de qué se trata»: solo suena con el nivel «Normal» o «Conversador» (Ambiente). */
+const EXTRAS_PANEL: ReadonlyArray<{ k: FraseExtra; texto: string; pista: string }> = [
+  { k: "recordar", texto: msg("«Siguen esperándote»"), pista: msg("Un recordatorio si alguien lleva entre 30 min y 24 h esperándote (a los 30 min, 2 h y 6 h)") },
+  { k: "volver", texto: msg("Al volver a la pestaña"), pista: msg("Una frase con lo nuevo si estuviste fuera 15 min o más") },
+  { k: "hitos", texto: msg("Rachas y hitos"), pista: msg("«Tercer error seguido» y «ya no queda nadie trabajando»") },
+];
 
 const PRESENTACIONES: ReadonlyArray<{ k: Presentacion; texto: string }> = [
   { k: "nombre-empresa", texto: msg("Nombre y empresa") },
@@ -335,7 +344,7 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
   }, [companyId]);
   // El ejemplo (y «Probar»): el primero que te espera, con «terminé» si está prendida (si no, la primera prendida), y su
   // detalle si está prendido. La tarea es una muestra fija; la pregunta (0.8.0), «¿Instalo la versión nueva ahora?»; el motivo, «límite de uso».
-  const fraseEj: Frase = aj.frases.fin ? "fin" : (ORDEN_EJEMPLO.find((f) => aj.frases[f]) ?? "fin");
+  const fraseEj: ClaveFrase = aj.frases.fin ? "fin" : (ORDEN_EJEMPLO.find((f) => aj.frases[f]) ?? "fin");
   const corto = ejemplo ? nombreCorto(ejemplo.nombre) : "Líder técnico";
   const empresa = ejemplo?.empresa ?? "Betalandia";
   const conDet = conDetalle(aj, fraseEj) && (fraseEj === "error" || !sinMac);
@@ -421,6 +430,22 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
                 </span>
                 <span>{noMac ? t("no disponible") : t(f.det)}</span>
               </button>
+            </div>
+          );
+        })}
+        {EXTRAS_PANEL.map((f) => {
+          const on = aj.frases[f.k];
+          const nivelOk = permiteExtras(aj.nivel);
+          return (
+            <div key={f.k} className={cx("of-vz-fila is-sola", on && nivelOk && "is-on")}>
+              <label className={cx("of-vz-ev", on && "is-on", !nivelOk && "is-off")} title={nivelOk ? undefined : t("Con el nivel «Tranquilo» no suena")}>
+                <input type="checkbox" checked={on} onChange={() => cambiarAjustes({ frases: { ...aj.frases, [f.k]: !on } })} />
+                <span className="of-vz-mk">{on ? <Icono nombre="check" tam={12} /> : null}</span>
+                <span>
+                  <b>{t(f.texto)}</b>
+                  <em>{nivelOk ? t(f.pista) : t("Con el nivel «Tranquilo» no suena")}</em>
+                </span>
+              </label>
             </div>
           );
         })}

@@ -3,7 +3,8 @@
 // «Conversaciones» abren sus paneles de siempre (`PanelVoces`, `PanelConversaciones`) anclados a este botón, con el mismo
 // menú abierto único de `paneles.tsx`; «Mascotas» es un interruptor que no cierra el menú. En celular no se usa.
 import { useEffect, useRef, type KeyboardEvent } from "react";
-import { t } from "../i18n.js";
+import { msg, t } from "../i18n.js";
+import { NIVELES, type Nivel } from "../nivel.js";
 import type { AgenteVista } from "../vista.js";
 import { cambiarAjustes, puntoIa, puntoVoces, useAjustes } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
@@ -11,6 +12,14 @@ import { useEstadoIa } from "./ia.js";
 import { PanelConversaciones, resumenConversaciones, useEfectosConversaciones } from "./menuConversaciones.js";
 import { abrirMenu, PanelVoces, Popover, useMenuAbierto } from "./paneles.js";
 import { cx, Icono } from "./piso.js";
+
+/** JST-415: cuánto habla la oficina: el nombre de cada nivel y su línea de ayuda. */
+const NOMBRE_NIVEL: Readonly<Record<Nivel, string>> = { tranquilo: msg("Tranquilo"), normal: msg("Normal"), conversador: msg("Conversador") };
+const AYUDA_NIVEL: Readonly<Record<Nivel, string>> = {
+  tranquilo: msg("Solo lo importante: «te necesito», errores y «terminé»."),
+  normal: msg("Lo de siempre, más bloqueos, un recordatorio por hora, el resumen al volver y las rachas."),
+  conversador: msg("Todo lo de Normal, con recordatorios cada 20 min."),
+};
 
 /** Lo que dicen las filas de «Voces» y «Mascotas» (la de «Conversaciones» sale de `resumenConversaciones`). */
 export function estadoVoces(voces: boolean): string {
@@ -87,6 +96,19 @@ export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) 
           <span className="of-amb-st">{estadoConv}</span>
           <Icono nombre="chevron-right" tam={12} className="of-amb-cv" />
         </button>
+        <div className="of-amb-nivel">
+          <span className="of-vz-k" id="of-amb-nivel">
+            {t("Cuánto habla")}
+          </span>
+          <div className="of-seg" role="group" aria-labelledby="of-amb-nivel">
+            {NIVELES.map((n) => (
+              <button key={n} type="button" aria-pressed={aj.nivel === n} onClick={() => cambiarAjustes({ nivel: n })}>
+                {t(NOMBRE_NIVEL[n])}
+              </button>
+            ))}
+          </div>
+          <p className="of-amb-ayuda">{t(AYUDA_NIVEL[aj.nivel])}</p>
+        </div>
       </div>
     ) : null;
 

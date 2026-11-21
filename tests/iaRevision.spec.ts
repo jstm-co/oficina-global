@@ -160,6 +160,14 @@ describe("aperturas, bromas, mascotas y casi repeticiones (0.13.0)", () => {
     expect(revisarApertura("{agente} trabaja en {tarea}. Ya lleva {n}.", "{agente} lleva {n} con {tarea}.")).toEqual([]);
   });
 
+  it("{tiempo} (una duración con su unidad) se exige intacto y no lleva la unidad escrita al lado (JST-415)", () => {
+    const plantilla = "{agente} lleva {tiempo} esperando.";
+    expect(revisarApertura("Qué largo se hace {tiempo} para {agente}.", plantilla)).toEqual([]);
+    expect(revisarApertura("Qué largo se hace {n} para {agente}.", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("Qué largo se hace el rato para {agente}.", plantilla)).toContain("huecos distintos de la plantilla");
+    expect(revisarApertura("Qué largo se hacen {tiempo} horas para {agente}.", plantilla)).toContain("unidad de tiempo fuera de {n}");
+  });
+
   it("las bromas tienen dos frases y las mascotas no reutilizan el respaldo fijo ni suenan como otra especie", () => {
     expect(revisarBroma(["¿Café o té?", "Café, por favor."])).toEqual([]);
     expect(revisarBroma(["Solo una."])).toContain("una broma tiene 2 frases");
@@ -236,7 +244,7 @@ describe("inicios válidos y huecos mal escritos (0.14.4, JST-361)", () => {
   });
 
   it("los sonidos de la mascota pueden empezar su frase", () => {
-    for (const t of ["Miau.", "Miau, miau.", "Mrrr, qué rico el sol."]) expect(revisarMascota("gato", t), t).toEqual([]);
+    for (const t of ["Miau.", "Miau, miau, miau.", "Mrrr, qué rico."]) expect(revisarMascota("gato", t), t).toEqual([]);
     expect(revisarMascota("gato", "Miau, tarea resuelta.")).toEqual(["nombre de hueco"]);
     expect(revisarMascota("perro", "Guau, guau.")).toEqual([]);
     expect(revisarMascota("robot", "Bip, bip.")).toEqual([]);

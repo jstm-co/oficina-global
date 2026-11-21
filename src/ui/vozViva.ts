@@ -13,7 +13,7 @@ import { instalacion } from "./audiosVoces.js";
 const REPETIR_MS = 10 * 60_000;
 const pedidos = new Map<string, number>();
 
-const claveDe = (p: PedidoVoz) => `${p.agenteId}|${p.frase}|${p.presentacion}|${p.corto}|${p.empresa}|${p.tarea}${p.pide ? `|${p.pide.tipo}|${p.pide.mas}|${p.pide.texto}` : ""}`;
+const claveDe = (p: PedidoVoz) => `${p.agenteId}|${p.frase}|${p.presentacion}|${p.corto}|${p.empresa}|${p.tarea}${p.pide ? `|${p.pide.tipo}|${p.pide.mas}|${p.pide.texto}` : ""}${p.duracion ? `|${p.duracion}` : ""}`;
 
 /** Lo más que el worker tiene abierta una espera (`ESPERA_MAX_MS`: el RPC corta a los 30 s); para esperar más, se le vuelve a preguntar. */
 const POR_LLAMADA_MS = 25_000;

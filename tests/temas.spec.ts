@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventoVivo, TareaRef } from "../src/shared.js";
 import { TitulosConocidos } from "../src/rotulo.js";
-import { CACHE_TEMAS_MS, LectorTemas, TERMINADA_MS, primeraDeCola, terminadaDeEvento } from "../src/temas.js";
+import { CACHE_TEMAS_MS, LectorTemas, TERMINADA_MS, bloqueadaDeCola, primeraDeCola, terminadaDeEvento } from "../src/temas.js";
 
 describe("lo primero de la cola", () => {
   const t = (identifier: string | null, status: string): TareaRef => ({ id: identifier ?? "x", identifier, title: "Una tarea", status });
@@ -78,7 +78,7 @@ describe("lector de temas con caché de 10 min", () => {
     vi.stubGlobal("fetch", f);
     const lector = new LectorTemas({ base: "" }, () => AHORA);
     const temas = await lector.leer({ id: "a1", companyId: "c1" });
-    expect(temas).toEqual({ hecho: "JST-91", tituloHecho: "Lo que terminó", sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
+    expect(temas).toMatchObject({ hecho: "JST-91", tituloHecho: "Lo que terminó", sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
     expect(urls(f).sort()).toEqual([URL_COLA, URL_TERMINADA].sort());
     // Con la sesión del usuario, en el mismo origen.
     expect(f.mock.calls[0]![1]).toMatchObject({ credentials: "include" });
@@ -91,7 +91,7 @@ describe("lector de temas con caché de 10 min", () => {
     const lector = new LectorTemas({ base: "" }, () => t);
     await lector.leer({ id: "a1", companyId: "c1" });
     t += CACHE_TEMAS_MS - 1_000;
-    expect(lector.guardado("a1")).toEqual({ hecho: "JST-91", tituloHecho: "Lo que terminó", sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
+    expect(lector.guardado("a1")).toMatchObject({ hecho: "JST-91", tituloHecho: "Lo que terminó", sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
     await lector.leer({ id: "a1", companyId: "c1" });
     expect(f).toHaveBeenCalledTimes(2);
     t += 2_000;
@@ -146,7 +146,7 @@ describe("lector de temas con caché de 10 min", () => {
     expect((await viejo.leer({ id: "a1", companyId: "c1" })).hecho).toBeNull();
     vi.stubGlobal("fetch", api({ terminadaHace: null }));
     const sin = new LectorTemas({ base: "" }, () => AHORA);
-    expect(await sin.leer({ id: "a1", companyId: "c1" })).toEqual({ hecho: null, tituloHecho: null, sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
+    expect(await sin.leer({ id: "a1", companyId: "c1" })).toMatchObject({ hecho: null, tituloHecho: null, sigue: { codigo: "JST-98", estado: "todo", titulo: "En cola" }, enCola: 2 });
   });
 
   it("si una lectura falla, la promesa falla y no se guarda nada (el próximo turno vuelve a leer)", async () => {
@@ -207,5 +207,50 @@ describe("nombres de las tareas para el rótulo (JST-138 §2)", () => {
     expect(titulos.titulo("BET-432")).toBe("Otro nombre");
     titulos.conocer("BET-1", null);
     expect(titulos.titulo("BET-1")).toBeNull();
+  });
+});
+
+describe("temas nuevos de JST-415: bloqueada, cuándo empezó y racha del día", () => {
+  it("la tarea bloqueada sale de la misma lectura de la cola: la primera bloqueada, aunque haya otra antes", async () => {
+    expect(bloqueadaDeCola([{ id: "i1", identifier: "JST-1", title: "A", status: "todo" }, { id: "i2", identifier: "JST-2", title: "B", status: "blocked" }])).toEqual({ codigo: "JST-2", titulo: "B" });
+    expect(bloqueadaDeCola([{ id: "i1", identifier: "JST-1", title: "A", status: "todo" }])).toBeNull();
+    const f = api();
+    vi.stubGlobal("fetch", f);
+    const lector = new LectorTemas({ base: "" }, () => AHORA);
+    expect(await lector.leer({ id: "a1", companyId: "c1" })).toMatchObject({ bloqueada: { codigo: "JST-90", titulo: "Bloqueada" } });
+    // Sin lecturas de más: las mismas 2 de siempre.
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("cuánto tardó: la lectura de lo terminado trae el inicio si la API lo da; si no, queda sin inicio y no se inventa", async () => {
+    const inicio = new Date(AHORA - 3 * 3_600_000).toISOString();
+    const fin = new Date(AHORA - 60 * 60_000).toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => (url.includes("status=done") ? [{ id: "t1", identifier: "JST-91", title: "X", status: "done", startedAt: inicio, completedAt: fin }] : []),
+      })),
+    );
+    const con = await new LectorTemas({ base: "" }, () => AHORA).leer({ id: "a1", companyId: "c1" });
+    expect(con).toMatchObject({ hecho: "JST-91", hechoEn: Date.parse(fin), hechoInicio: Date.parse(inicio) });
+    vi.stubGlobal("fetch", api());
+    const sin = await new LectorTemas({ base: "" }, () => AHORA).leer({ id: "a1", companyId: "c1" });
+    expect(sin.hechoInicio).toBeNull();
+  });
+
+  it("la racha cuenta solo lo que la página vio terminar hoy por el canal en vivo, sin repetir una tarea", async () => {
+    vi.stubGlobal("fetch", api());
+    const lector = new LectorTemas({ base: "" }, () => AHORA);
+    await lector.leer({ id: "a1", companyId: "c1" });
+    expect(lector.guardado("a1")?.racha).toBeUndefined();
+    const fin = (codigo: string, min: number) => lector.alEvento(evento({ action: "issue.updated", agentId: "a1", details: { identifier: codigo, changes: { status: { to: "done" } } } }, new Date(AHORA - min * 60_000).toISOString()));
+    fin("JST-1", 30);
+    fin("JST-2", 20);
+    fin("JST-2", 10);
+    expect(lector.guardado("a1")?.racha).toBe(2);
+    fin("JST-3", 5);
+    expect(lector.guardado("a1")?.racha).toBe(3);
   });
 });

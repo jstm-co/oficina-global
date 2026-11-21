@@ -340,6 +340,10 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-amb-sw.is-on { background: var(--of-s-toca); }
 .of-amb-sw.is-on > i { transform: translateX(12px); }
 .of-hpop.is-ambiente { width: 300px; padding: 6px; }
+/* JST-415: «Cuánto habla» (el nivel), debajo de las tres filas */
+.of-amb-nivel { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; padding: 8px 8px 4px; border-top: 1px solid var(--of-border); }
+.of-amb-nivel .of-seg button:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-amb-ayuda { margin: 0; font-size: 12px; line-height: 16px; color: var(--of-muted-fg); white-space: normal; }
 @media (prefers-reduced-motion: reduce) { .of-amb-sw, .of-amb-sw > i { transition: none; } }
 /* Franja «Te necesitan»: 36 px siempre; si los ítems no caben, se desplaza en horizontal sin barra. */
 .of-te { display: flex; align-items: center; gap: 10px; height: 36px; min-width: 0; }

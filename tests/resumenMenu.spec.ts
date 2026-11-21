@@ -232,3 +232,21 @@ describe("no responde ninguna empresa (JST-262)", () => {
     expect(r.numeros()).toMatchObject({ ninguna: false, hecho: 8, cola: 4, fallan: ["BET"] });
   });
 });
+
+describe("«mientras no estabas» al abrir cuenta con la misma capa de datos (JST-415)", () => {
+  it("cuántas se terminaron desde ese momento, por una lectura de lo terminado y otra de lo abierto por empresa", async () => {
+    const r = control({});
+    expect(await r.hechasDesde(AHORA - 2 * 3_600_000)).toBe(12);
+    // Dos lecturas por empresa (2 empresas): ni una más, y sin las cadenas de padres (eso es para leer el Resumen).
+    expect(llamadas.filter((u) => /\/issues\?/.test(u))).toHaveLength(4);
+    expect(cadenasPedidas()).toBe(0);
+    // Lo terminado hace 30 min no cuenta si la visita fue hace 10.
+    expect(await control({}).hechasDesde(AHORA - 10 * 60_000)).toBe(0);
+  });
+
+  it("si no responde ninguna empresa, `null` (no 0); sin Oficina, tampoco", async () => {
+    fallanListas = true;
+    expect(await control({}).hechasDesde(AHORA - 3_600_000)).toBeNull();
+    expect(await new ControlResumen().hechasDesde(AHORA - 3_600_000)).toBeNull();
+  });
+});

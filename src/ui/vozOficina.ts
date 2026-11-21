@@ -23,11 +23,11 @@ import { ESPERA_HORA_MS, TurnoVoz, type LoOficina, type Ocupa } from "../turnoVo
 import { VOZ_EXTRA_MS, type HechoVoz, type TipoMascota, type Vida, type VozVida } from "../vida.js";
 import { archivoVivo, duracionAudio, vozDeAgente, type IndiceVoces } from "../voces.js";
 import { conLetras, horaParaVoz, paraLeer, pedidosDeCharla, textoOficina, VOCES_MASCOTA, type PedidoOficina } from "../vozOficina.js";
-import { DICEN } from "../charlas.js";
+import { DICEN, REACCIONES } from "../charlas.js";
 import { ajustes, alCambiarAjustes, leeOficina, type TipoLeer } from "./ajustes.js";
 import { archivoDeBlob, cargarIndice, instalacion, pedirArchivo, yaBajado } from "./audiosVoces.js";
 import { alCambiarAvisos, alHablarAviso, audioDesbloqueado, avisoActivo, callarOficina, cuandoSeDesbloquee, tocarOficina } from "./sonido.js";
-import { escucharVoz, publicarVoz } from "./vigia.js";
+import { escucharVoz, publicarVoz, reclamar } from "./vigia.js";
 import { estadoVozViva } from "./vozViva.js";
 
 /** Lo más que se espera un audio que debería estar (la frase suelta, la mascota) antes de botarla. */
@@ -36,8 +36,8 @@ const ESPERA_ARCHIVO_MS = 1_000;
 const ESPERA_SOBRE_MS = 3_000;
 /** La entrega en la mesa: lo que el worker tiene para preparar sus audios mientras caminan (después esta pestaña los baja). */
 const ESPERA_MESA_MS = 10_000;
-/** Lo que dicen las mascotas: lo que se espera al worker la primera vez (son 9 frases cortas de Edge). */
-const ESPERA_MASCOTAS_MS = 20_000;
+/** Lo que dicen las mascotas: lo que se espera al worker la primera vez (son ~44 frases cortas de Edge, 8 por mascota y sus reacciones). */
+const ESPERA_MASCOTAS_MS = 45_000;
 /** «¡Dale!» va a los 1,5 s, o cuando termina quien entrega (JST-225 §4). */
 const DALE_MS = 1_500;
 /** Un aviso de otra pestaña que no avisó que terminó (se cerró): se da por terminado a los 30 s. */
@@ -141,7 +141,7 @@ if (typeof window !== "undefined") {
   });
   // El 🔊 de los avisos: en «✓ listo» (terminé) o en la mano (te necesito), mientras dura su voz.
   alHablarAviso((s) => {
-    const tipo = s.frase === "fin" ? "listo" : s.frase === "toca" ? "mano" : null;
+    const tipo = s.frase === "fin" || s.frase === "rev" ? "listo" : s.frase === "toca" ? "mano" : null;
     if (!tipo || !s.agenteId) return;
     fijarMarca({ tipo, clave: s.agenteId }, s.voz ?? Math.max(0, s.hasta - Date.now()));
   });
@@ -211,6 +211,11 @@ export class VozDePiso implements VozVida {
 
   lee(t: "charlas" | "entregas" | "mascotas" | "sueltas"): boolean {
     return Date.now() >= sinWorkerHasta && leeOficina(ajustes(), t);
+  }
+
+  /** JST-415: la reacción de una mascota sale en cada pestaña; su voz, en una sola (la primera que la reclama). */
+  reclamar(clave: string): boolean {
+    return reclamar(clave);
   }
 
   libreParaCharla(): boolean {
@@ -429,7 +434,7 @@ export class VozDePiso implements VozVida {
 
   /** Una frase suelta: solo en un hueco y una por minuto; si su audio no está, se bota (y se pide para la próxima). */
   private async suelta(h: Extract<HechoVoz, { tipo: "suelta" }>): Promise<void> {
-    const p: PedidoOficina = { clase: "suelta", agenteId: h.quien, texto: h.linea.texto, tarea: h.linea.codigo ? h.linea.titulo : null };
+    const p: PedidoOficina = { clase: "suelta", agenteId: h.quien, texto: h.linea.texto, tarea: h.linea.codigo ? h.linea.titulo : null, ...(h.linea.codigo && !h.linea.titulo ? { sinTitulo: true } : {}) };
     const texto = textoOficina(p);
     if (!texto || !conLetras(paraLeer(texto)) || !turno.puede("suelta")) return;
     const t0 = Date.now();
@@ -459,15 +464,16 @@ export class VozDePiso implements VozVida {
   }
 
   /**
-   * Con «Mascotas» prendida, lo que dicen las 4 se pide una vez (son 9 frases,
-   * con Edge): así la que tocas suena al tiro. Apagada, no se pide nada.
+   * Con «Mascotas» prendida, lo que dicen las 4 se pide una vez (8 frases cada
+   * una y lo que dicen al reaccionar, con Edge): así la que tocas suena al tiro.
+   * Apagada, no se pide nada.
    */
   pedirMascotas(): void {
     if (this.mascotasPedidas || !pisos.has(this) || !this.lee("mascotas")) return;
     const companyId = this.vida.unaEmpresa();
     if (!companyId) return;
     this.mascotasPedidas = true;
-    const todas = (Object.keys(DICEN) as TipoMascota[]).flatMap((m) => DICEN[m].filter((t) => conLetras(paraLeer(t))).map((t): PedidoOficina => ({ clase: "mascota", agenteId: null, mascota: m, texto: t })));
+    const todas = (Object.keys(DICEN) as TipoMascota[]).flatMap((m) => [...DICEN[m], ...REACCIONES[m]].filter((t) => conLetras(paraLeer(t))).map((t): PedidoOficina => ({ clase: "mascota", agenteId: null, mascota: m, texto: t })));
     void this.bajar(companyId, todas, ESPERA_MASCOTAS_MS);
   }
 

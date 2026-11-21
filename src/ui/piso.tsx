@@ -45,6 +45,7 @@ import { PATHS, type NombreIcono } from "./iconos.js";
 import { registrarVida } from "./reloj.js";
 import { repartirGlobos } from "./repartir.js";
 import { ANIMACIONES, EFECTOS_ANIM, MASCOTAS_ANIM, PIEZAS, TAM, animacionDe, filaDe, filaMascota, type Animacion, type AnimMascota, type Efecto } from "./sprites.js";
+import { terminadaDeEvento } from "../temas.js";
 import { temasDe, titulosDe, useHorasDelPiso, usePestanaOculta, type EmpresaVista } from "./useOficina.js";
 import { useAudioDesbloqueado, useMarcaVoz, VozDePiso, type MarcaVoz } from "./vozOficina.js";
 
@@ -1314,7 +1315,7 @@ function useVida(
     };
   });
   // Idempotente: lo que cambió (el estado de alguien, el plano, las opciones) se aplica en esta misma pasada.
-  vida.sincronizar(plano, lista, activas, { rm: o.rm, charlas, mascotas, mascotasSolas: tv, cargando, oculta, releyendo: sync?.releyendo() ?? false, filtro });
+  vida.sincronizar(plano, lista, activas, { rm: o.rm, charlas, mascotas, mascotasSolas: tv, cargando, oculta, releyendo: sync?.releyendo() ?? false, filtro, nivel: ajustes.nivel });
   // 0.6.0: con las voces prendidas, la oficina a la vista y el audio desbloqueado (el primer clic), la vida le cuenta a la voz.
   const voz = conVoz && ajustes.voces && desbloqueado && !oculta && !cargando ? vozRef.current : null;
   vida.fijarVoz(voz);
@@ -1340,6 +1341,9 @@ function useVida(
     return sync.alEventoVivo((_, evento) => {
       const e = entregaDeEvento(evento);
       if (e) vida.entrega(e.de, e.a, e.codigo);
+      // JST-415: el perro celebra cuando una TAREA pasa a terminada (no con cualquier run exitoso).
+      const hecha = terminadaDeEvento(evento);
+      if (hecha) vida.tareaTerminada(hecha.en);
       const p = evento.payload;
       if (evento.type === "heartbeat.run.status" && typeof p.agentId === "string" && typeof p.status === "string" && TERMINADOS.has(p.status)) {
         vida.terminoRun(p.agentId, typeof p.runId === "string" ? p.runId : null, p.status);

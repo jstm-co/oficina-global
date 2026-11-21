@@ -5,6 +5,8 @@ import { hash } from "./aspecto.js";
 import { ETIQUETA_ROL, tituloVisible, type Espera } from "./estado.js";
 import { t } from "./i18n.js";
 import { CORTOS_INSTANCIA } from "./instancia.js";
+import { textoRacha } from "./dichos.js";
+import { categoriaError, MOTIVO_VOZ } from "./motivoError.js";
 import { analizarPregunta, normalizarRol, sinRolDelante, tareaParaVoz } from "./paraVoz.js";
 import { chipDe } from "./responder.js";
 import type { AgenteVista } from "./vista.js";
@@ -241,14 +243,25 @@ export function bannerTv(l: Llegada): { fuerte: string; resto: string } {
 // Voces
 // ---------------------------------------------------------------------------
 
-export type Frase = "toca" | "error" | "fin" | "emp";
+/**
+ * Las frases que dice un agente. JST-415: «rev» («te lo dejo para revisar», una tarea que pasa a revisión) y «bloq»
+ * («quedé bloqueado»). «Rev» no tiene casilla propia: va con «terminé» (`claveDeFrase`).
+ */
+export type Frase = "toca" | "error" | "fin" | "emp" | "bloq" | "rev";
 
 export const FRASES: Readonly<Record<Frase, { texto: string; resumen: (n: number) => string }>> = {
   toca: { texto: "te necesito", resumen: (n) => `${n} agentes te necesitan` },
   error: { texto: "tengo un error", resumen: (n) => `${n} agentes tienen un error` },
   fin: { texto: "terminé", resumen: (n) => `${n} agentes terminaron` },
   emp: { texto: "empecé", resumen: (n) => `${n} agentes empezaron` },
+  bloq: { texto: "quedé bloqueado", resumen: (n) => `${n} agentes quedaron bloqueados` },
+  rev: { texto: "te lo dejo para revisar", resumen: (n) => `${n} agentes te dejaron algo para revisar` },
 };
+
+/** Las frases con su propia casilla (y su propio «de qué se trata»): todas menos «rev», que va con «terminé». */
+export type ClaveFrase = Exclude<Frase, "rev">;
+export const CLAVES_FRASE: readonly ClaveFrase[] = ["toca", "error", "fin", "emp", "bloq"];
+export const claveDeFrase = (f: Frase): ClaveFrase => (f === "rev" ? "fin" : f);
 
 export type Presentacion = "nombre-empresa" | "nombre" | "frase";
 
@@ -261,8 +274,12 @@ export type Presentacion = "nombre-empresa" | "nombre" | "frase";
 export interface DetalleVoz {
   /** El nombre de la tarea, entero: se corta con `tareaParaVoz`. */
   tarea?: string | null;
-  /** Uno de los 6 motivos que se reconocen (`motivoDeError`). */
+  /** Uno de los 7 motivos que se reconocen (`motivoDeError`). */
   motivo?: string | null;
+  /** JST-415: cuánto tardó, dicho («12 minutos»): «terminé en 12 minutos». Solo con «terminé» y «te lo dejo para revisar». */
+  duracion?: string | null;
+  /** JST-415: cuántos errores seguidos lleva el agente (3 o más): «tercer error seguido: …». Solo con «tengo un error». */
+  racha?: number | null;
   /** «Te necesito» (0.8.0): lo que espera. */
   pide?: PideVoz | null;
 }
@@ -331,11 +348,20 @@ export function textoVoz(corto: string, empresa: string, f: Frase, p: Presentaci
     frase = pide.frase;
     extra = pide.extra;
   } else if (f === "error") {
+    const racha = textoRacha(detalle?.racha);
+    if (racha) frase = racha;
     if (detalle?.motivo) frase = `${frase}: ${detalle.motivo}`;
+  } else if (f === "bloq") {
+    // JST-415: «quedé bloqueado en Instalar la 0.8.0.»
+    const t = detalle?.tarea ? tareaParaVoz(detalle.tarea) : "";
+    if (t) frase = `${frase} en ${t}`;
   } else if (detalle?.tarea) {
     const t = tareaParaVoz(detalle.tarea);
     if (t) extra = ` ${punto(may(t))}`;
   }
+  // JST-415: cuánto tardó. «Terminé en 12 minutos. Diseño…»; «te lo dejo para revisar. Diseño… Tardé 12 minutos.»
+  if (detalle?.duracion && f === "fin") frase = `${frase} en ${detalle.duracion}`;
+  else if (detalle?.duracion && f === "rev") extra += ` Tardé ${detalle.duracion}.`;
   // Lo que espera puede terminar en «?» («…de la casilla ¿Es usuario invitado?»): sin otro punto (JST-266).
   if (p === "frase") return `${punto(may(frase))}${extra}`;
   if (p === "nombre") return `${corto}: ${punto(frase)}${extra}`;
@@ -411,8 +437,8 @@ export function pideDe(esperas: readonly Espera[], roles: ReadonlySet<string> = 
   return de("pregunta", e.titulo) ?? de("pregunta", e.pregunta);
 }
 
-/** Los 6 motivos de error que se reconocen (spike de JST-161), con lo que trae `heartbeat.run.status`. */
-export const MOTIVOS_ERROR = ["límite de uso", "problema con la carpeta de trabajo", "se cortó", "no pudo conectarse", "la Mac se durmió", "no alcanzó a empezar"] as const;
+/** Los 7 motivos de error que se reconocen (spike de JST-161), con lo que trae `heartbeat.run.status`. */
+export const MOTIVOS_ERROR = ["límite de uso", "problema con la carpeta de trabajo", "se cortó", "no pudo conectarse", "la Mac se durmió", "no alcanzó a empezar", "se le acabó el tiempo"] as const;
 export type MotivoError = (typeof MOTIVOS_ERROR)[number];
 
 /**
@@ -420,18 +446,14 @@ export type MotivoError = (typeof MOTIVOS_ERROR)[number];
  * criterios del `spike`), o `null` si no se reconoce: dice «tengo un error»,
  * como antes. La hora del límite («vuelve a las 5:40») no se dice.
  * Un run que se pasa del tiempo queda `status: "timed_out"` con
- * `errorCode: "timeout"` (JST-193): se aceptan los dos nombres.
+ * `errorCode: "timeout"` (JST-193): se aceptan los dos nombres. JST-415: eso
+ * ya no es «no alcanzó a empezar» sino «se le acabó el tiempo» (como dicen las
+ * conversaciones); «no alcanzó a empezar» queda para una sesión que no abrió.
  */
 export function motivoDeError(error: unknown, errorCode: unknown): MotivoError | null {
-  const e = typeof error === "string" ? error : "";
-  const c = typeof errorCode === "string" ? errorCode : "";
-  if (c === "provider_quota" || /quota|rate.?limit|usage limit|session limit|hit your .*limit|\b429\b/i.test(e)) return "límite de uso";
-  if (/asleep|went to sleep/i.test(e)) return "la Mac se durmió";
-  if (c === "process_lost" || c === "orphaned_running_run" || /disconnected|process_exit/i.test(e)) return "se cortó";
-  if (c === "workspace_validation_failed" || c === "setup_failed") return "problema con la carpeta de trabajo";
-  if (c.includes("auth")) return "no pudo conectarse";
-  if (c === "acpx_session_init_failed" || c === "timeout" || c === "timed_out") return "no alcanzó a empezar";
-  return null;
+  // JST-415: la categoría sale del clasificador común (`motivoError.ts`), el mismo que usan las conversaciones.
+  const c = categoriaError(error, errorCode);
+  return c ? (MOTIVO_VOZ[c] as MotivoError | null) : null;
 }
 
 /** La muestra fija de «▶ Probar» (se graba una vez por voz al instalar) y su motivo. */
@@ -478,6 +500,8 @@ export interface Pendiente {
   creado: number;
   /** De qué se trata (0.5.0): solo si esa frase lo lleva prendido. Un resumen no lo dice. */
   detalle?: DetalleVoz | null;
+  /** JST-415: una frase ya armada (recordatorio, «mientras no estabas», hitos): se dice tal cual, no se junta con otras y no lleva detalle. */
+  libre?: string;
 }
 
 export const COLA_MAX = 3;
@@ -503,11 +527,11 @@ export class ColaVoces {
     return this.cola;
   }
 
-  poner(frase: Frase, agente: { id: string; corto: string; empresa: string }, ahora: number, detalle: DetalleVoz | null = null): void {
+  poner(frase: Frase, agente: { id: string; corto: string; empresa: string }, ahora: number, detalle: DetalleVoz | null = null, libre: string | null = null): void {
     this.llegadasRecientes = this.llegadasRecientes.filter((t) => ahora - t < VENTANA_GRUPO_MS);
     this.llegadasRecientes.push(ahora);
     this.limpiar(ahora);
-    const iguales = this.cola.filter((p) => p.frase === frase);
+    const iguales = libre ? [] : this.cola.filter((p) => p.frase === frase && !p.libre);
     const resumen = this.llegadasRecientes.length > COLA_MAX || this.cola.length >= COLA_MAX;
     if (iguales.length > 0 && resumen) {
       // Todas las de esa frase que esperan pasan a ser una sola: «3 agentes terminaron».
@@ -518,7 +542,7 @@ export class ColaVoces {
       return;
     }
     if (this.cola.length >= COLA_MAX) return;
-    this.cola.push({ frase, agentes: [agente], creado: ahora, detalle });
+    this.cola.push({ frase, agentes: [agente], creado: ahora, detalle, ...(libre ? { libre } : {}) });
   }
 
   /** La siguiente frase que toca decir, o `null`. */
@@ -539,6 +563,7 @@ export class ColaVoces {
 
 /** El texto de una frase de la cola: la del agente, o el resumen si son varios. */
 export function textoPendiente(p: Pendiente, presentacion: Presentacion): string {
+  if (p.libre) return p.libre;
   if (p.agentes.length > 1) return `${FRASES[p.frase].resumen(p.agentes.length)}.`;
   const a = p.agentes[0]!;
   return textoVoz(a.corto, a.empresa, p.frase, presentacion);
@@ -560,7 +585,7 @@ export function textoPendienteDetalle(p: Pendiente, presentacion: Presentacion):
  * detalle.
  */
 export function cadenaDetalle(p: Pendiente, presentacion: Presentacion): { cadena: string[]; subtitulo: string | null } | null {
-  if (p.agentes.length !== 1 || !p.detalle) return null;
+  if (p.agentes.length !== 1 || !p.detalle || p.libre) return null;
   const a = p.agentes[0]!;
   const base = textoVoz(a.corto, a.empresa, p.frase, presentacion);
   const cadena: string[] = [];
@@ -568,5 +593,23 @@ export function cadenaDetalle(p: Pendiente, presentacion: Presentacion): { caden
   poner(textoVoz(a.corto, a.empresa, p.frase, presentacion, p.detalle));
   const conPregunta = p.frase === "toca" && p.detalle.pide && cadena.length > 0;
   if (conPregunta) poner(textoVoz(a.corto, a.empresa, p.frase, presentacion, { tarea: p.detalle.tarea }));
+  // JST-415: la duración no se prepara por adelantado: si su audio no llega, suena el de la tarea (el de siempre) y no se dice de más.
+  else if (p.detalle.duracion && cadena.length > 0) poner(textoVoz(a.corto, a.empresa, p.frase, presentacion, { tarea: p.detalle.tarea, motivo: p.detalle.motivo }));
   return cadena.length ? { cadena, subtitulo: conPregunta ? cadena[0]! : null } : null;
+}
+
+/**
+ * Lo que va después de «por» en el recordatorio de espera (JST-415): lo que espera la más antigua de ese agente
+ * (`esperas`, con la que avisa primero), o `null` si no queda nada que decir. Con una pregunta, «con la pregunta
+ * ¿…?»; con una aprobación, una revisión o el plan, «por ‹su título o su tarea›».
+ */
+export function porQueEspera(esperas: readonly Espera[], roles: ReadonlySet<string> = new Set()): string | null {
+  const pide = pideDe(esperas, roles);
+  if (!pide) return null;
+  if (pide.tipo === "pregunta") {
+    const q = analizarPregunta(pide.texto.slice(0, LETRAS_PIDE));
+    return q ? `con la pregunta ${q.texto}` : null;
+  }
+  const t = tareaParaVoz(pide.texto.slice(0, LETRAS_PIDE));
+  return t ? `por ${t}` : null;
 }

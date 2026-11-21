@@ -53,7 +53,8 @@ export interface Trabajo {
   archivo: string;
 }
 
-const ORDEN_FRASES: readonly Frase[] = ["toca", "error", "fin", "emp"];
+/** JST-415: suma «bloq» («quedé bloqueado») y «rev» («te lo dejo para revisar»). */
+const ORDEN_FRASES: readonly Frase[] = ["toca", "error", "fin", "emp", "bloq", "rev"];
 /** Las que se dicen con nombre; «Solo la frase» va aparte, una por voz. */
 const PRESENTACIONES: readonly Presentacion[] = ["nombre-empresa", "nombre"];
 
