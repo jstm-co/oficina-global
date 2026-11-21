@@ -1,17 +1,19 @@
 // «🔊 Leer contexto» en la ventana de responder (JST-321, design-spec de JST-320 rev 2, A · En la fila de la tarea).
 // Es el mismo lector de la barra de arriba (`contexto`, uno por pestaña del navegador) y el mismo texto
-// (`textoDeTarea`): aquí solo cambia dónde va el botón y qué hace al cambiar de pestaña, enviar o cerrar.
+// (`informeDeTarea`): aquí solo cambia dónde va el botón y qué hace al cambiar de pestaña, enviar o cerrar.
 //
 // - Lee la tarea de la pestaña activa: `espera.identifier ?? espera.issueId` (`tareaDeEspera`).
 // - Los mismos 5 estados y textos de la barra; «Detener» lleva ■ (`square`) y no ✕, porque la ventana ya
 //   tiene una ✕ que la cierra.
 // - Celular: solo el ícono (zona de 44 × 44, ficha de 32 × 32; la fila sigue en 22 px).
-// - Sin voz en español: las frases van dentro de la ventana, bajo la fila de la tarea.
+// - El informe va escrito dentro de la ventana, bajo la fila de la tarea (JST-414), siempre que se lee.
 // - Si la ventana está abierta sobre la página de esa misma tarea, el botón de la barra y este muestran lo mismo:
 //   es un solo lector.
-import { contexto, EscritoContexto, ICONO, TEXTO, useContexto } from "./contextoBarra.js";
+import { contexto, ICONO, TEXTO, useContexto } from "./contextoBarra.js";
+import { PanelContexto } from "./contextoEscrito.js";
+import { lugarDeLectura, soltarDe, tocarEn, type LugarContexto } from "./contextoLugar.js";
+import { useNivelContexto } from "./contextoNivel.js";
 import { t } from "../i18n.js";
-import { textoDeTarea } from "./botonContexto.js";
 import type { EstadoContexto } from "./contextoLector.js";
 import { cx, Icono } from "./piso.js";
 
@@ -31,12 +33,19 @@ export const leeEsta = (tarea: string | null): boolean => !!tarea && contexto.ta
  * el efecto de la ventana; aparte para probarlo sin React.
  */
 export function callarSiEsDeOtra(tarea: string | null): void {
-  if (contexto.activo() && contexto.tarea !== tarea) contexto.detener();
+  // También suelta el informe escrito de la otra tarea (JST-414): al volver a esa pestaña no queda a medias.
+  if (contexto.tarea !== tarea && (contexto.activo() || (contexto.frases.length > 0 && lugarDeLectura() === "ventana"))) contexto.soltar();
 }
 
 /** «Enviar» salió (pasó la revisión de «Falta algo»): se calla lo que se lee de esa tarea. */
 export function callarSiLee(tarea: string | null): void {
   if (leeEsta(tarea)) contexto.detener();
+}
+
+/** La ventana se cierra: se calla lo que se lee y, si el informe escrito era de ella, se cierra. */
+export function callarAlCerrar(): void {
+  soltarDe(contexto, "ventana");
+  contexto.detener();
 }
 
 const aria = (e: EstadoContexto, codigo: string): string =>
@@ -50,25 +59,34 @@ const aria = (e: EstadoContexto, codigo: string): string =>
 const titulo = (e: EstadoContexto, codigo: string): string =>
   ({ listo: t("Leer contexto de {codigo}", { codigo }), cargando: t("Cargando…"), leyendo: t("Detener"), fin: t("Leer contexto de {codigo}", { codigo }), error: t("No se pudo cargar {codigo}", { codigo }) })[e];
 
-/** El botón, al final de la fila de la tarea (`.of-rmeta`). */
-export function BotonContextoVentana({ tarea, codigo, celular }: { tarea: string; codigo: string; celular: boolean }) {
+/**
+ * El botón, al final de la fila de la tarea (`.of-rmeta`). También va, con el mismo ícono y los mismos 5 estados, en
+ * cada tarjeta de «Te necesitan» (`chico`: solo el ícono, 24 px) y en la cabecera del modal de tarea (JST-414): `lugar`
+ * dice dónde se deja escrito el informe.
+ */
+export function BotonContextoVentana({ tarea, codigo, celular, lugar = "ventana", chico = false }: { tarea: string; codigo: string; celular: boolean; lugar?: LugarContexto; chico?: boolean }) {
   const c = useContexto();
+  const nivel = useNivelContexto();
+  const soloIcono = celular || chico;
   const e = estadoDe(tarea);
   const n = c.frases.length;
   return (
     <>
       <button
         type="button"
-        className={cx("of-ctx", `is-${e}`, "of-ctx-fila", celular && "is-m")}
+        className={cx("of-ctx", `is-${e}`, chico ? "of-ctx-chico" : lugar === "ventana" && "of-ctx-fila", !chico && celular && "is-m", chico && celular && "is-g")}
         aria-label={aria(e, codigo)}
         title={titulo(e, codigo)}
         aria-busy={e === "cargando" ? true : undefined}
-        onClick={() => c.tocar(tarea, () => textoDeTarea(tarea))}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          tocarEn(c, lugar, tarea, nivel);
+        }}
       >
         {/* «Detener» lleva ■ (`square`); el tamaño lo da `of-ctx-stop` (15 px, 19 en el celular). */}
-        <Icono nombre={e === "leyendo" ? "square" : ICONO[e]} tam={celular ? 18 : 14} className={cx(e === "cargando" && "of-spin", e === "leyendo" && "of-ctx-stop")} />
-        {celular ? null : <span className="of-ctx-t">{TEXTO[e]}</span>}
-        {!celular && e === "leyendo" && n > 0 ? <span className="of-ctx-n">{`${c.k + 1}/${n}`}</span> : null}
+        <Icono nombre={e === "leyendo" ? "square" : ICONO[e]} tam={celular && !chico ? 18 : 14} className={cx(e === "cargando" && "of-spin", e === "leyendo" && "of-ctx-stop")} />
+        {soloIcono ? null : <span className="of-ctx-t">{TEXTO[e]}</span>}
+        {!soloIcono && e === "leyendo" && n > 0 ? <span className="of-ctx-n">{`${c.k + 1}/${n}`}</span> : null}
       </button>
       <span className="of-sr" role="status">
         {e === "fin" ? t("Leído") : e === "error" ? t("No se pudo cargar la tarea") : ""}
@@ -77,11 +95,10 @@ export function BotonContextoVentana({ tarea, codigo, celular }: { tarea: string
   );
 }
 
-/** Sin voz en español: las frases escritas dentro de la ventana, bajo la fila de la tarea, con la que va marcada. */
+/** El informe escrito dentro de la ventana, bajo la fila de la tarea, con la frase que va marcada (JST-414). */
 export function EscritoVentana({ tarea, celular }: { tarea: string; celular: boolean }) {
   const c = useContexto();
-  if (!(c.tarea === tarea && c.estado === "leyendo" && c.sinVoz && c.frases.length > 0)) return null;
-  return <EscritoContexto c={c} celular={celular} dentro />;
+  return <PanelContexto c={c} tarea={tarea} lugar="ventana" celular={celular} dentro />;
 }
 
 /** En el celular, «No se pudo» no tiene texto en el botón: una nota bajo la fila de la tarea, los 4 s del estado. */

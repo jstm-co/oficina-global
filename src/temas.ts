@@ -33,6 +33,13 @@ export interface Temas {
   sigue: { codigo: string; estado: EstadoCola; titulo?: string | null } | null;
   /** Cuántas trae la lectura «cola» (0 a 3; 3 es «3 o más»), sin leer nada más (JST-162 §1.2). */
   enCola?: number;
+  /** JST-415: la primera tarea bloqueada de su cola (la misma lectura «cola»), aunque haya otras primero. */
+  bloqueada?: { codigo: string; titulo?: string | null } | null;
+  /** JST-415: cuándo terminó lo último (ms) y, si se sabe, cuándo lo empezó: de ahí sale «esa me tomó dos horas». */
+  hechoEn?: number | null;
+  hechoInicio?: number | null;
+  /** JST-415: cuántas tareas vio terminar este agente hoy con la página abierta (solo lo que llegó por el canal en vivo). */
+  racha?: number;
 }
 
 /** De las tareas en cola (hasta 3), la primera de `todo`; si no hay, de `in_review`; si no, de `blocked`. */
@@ -42,6 +49,12 @@ export function primeraDeCola(tareas: readonly TareaRef[]): Temas["sigue"] {
     if (t) return { codigo: t.identifier!, estado, titulo: t.title || null };
   }
   return null;
+}
+
+/** La primera tarea bloqueada de la cola (hasta 3), o `null`. */
+export function bloqueadaDeCola(tareas: readonly TareaRef[]): Temas["bloqueada"] {
+  const t = tareas.find((x) => x.status === "blocked" && x.identifier);
+  return t ? { codigo: t.identifier!, titulo: t.title || null } : null;
 }
 
 export interface AgenteTemas {
@@ -71,6 +84,8 @@ export function terminadaDeEvento(evento: EventoVivo): { agenteId: string; codig
 export class LectorTemas {
   private readonly cache = new Map<string, Guardado>();
   private readonly enVivo = new Map<string, { codigo: string; en: number }>();
+  /** JST-415: lo que cada agente terminó hoy (código → cuándo), de los eventos que llegaron con la página abierta. */
+  private readonly hoy = new Map<string, Map<string, number>>();
   private readonly pendientes = new Map<string, Promise<Temas>>();
 
   /** `titulos`: los nombres conocidos de la página, que estas lecturas también llenan (JST-138 §2). */
@@ -85,20 +100,44 @@ export class LectorTemas {
     const t = terminadaDeEvento(evento);
     if (!t) return;
     this.enVivo.set(t.agenteId, { codigo: t.codigo, en: t.en });
+    const dia = new Date(this.ahora()).toDateString();
+    const lista = this.hoy.get(t.agenteId) ?? new Map<string, number>();
+    for (const [k, en] of lista) if (new Date(en).toDateString() !== dia) lista.delete(k);
+    if (new Date(t.en).toDateString() === dia) lista.set(t.codigo, t.en);
+    this.hoy.set(t.agenteId, lista);
     const g = this.cache.get(t.agenteId);
-    if (g) g.temas = { ...g.temas, hecho: t.codigo, tituloHecho: this.titulos?.titulo(t.codigo) ?? null };
+    if (g) {
+      // El inicio solo sirve si es de la misma tarea que se leyó.
+      g.temas = { ...g.temas, hecho: t.codigo, tituloHecho: this.titulos?.titulo(t.codigo) ?? null, hechoEn: t.en, hechoInicio: g.temas.hecho === t.codigo ? (g.temas.hechoInicio ?? null) : null };
+    }
+  }
+
+  /** Cuántas vio terminar hoy ese agente (0 si ninguna). */
+  private racha(agenteId: string): number {
+    const dia = new Date(this.ahora()).toDateString();
+    let n = 0;
+    for (const en of this.hoy.get(agenteId)?.values() ?? []) if (new Date(en).toDateString() === dia) n += 1;
+    return n;
+  }
+
+  private conRacha(agenteId: string, temas: Temas): Temas {
+    const n = this.racha(agenteId);
+    return n > 0 ? { ...temas, racha: n } : temas;
   }
 
   /** Lo guardado de un agente (sin leer nada), o `null` si no hay o ya venció. */
   guardado(agenteId: string): Temas | null {
     const g = this.cache.get(agenteId);
     if (!g || g.hasta <= this.ahora()) return null;
-    return this.conVivo(agenteId, g.temas);
+    return this.conRacha(agenteId, this.conVivo(agenteId, g.temas));
   }
 
   private conVivo(agenteId: string, temas: Temas): Temas {
     const v = this.enVivo.get(agenteId);
-    if (v && this.ahora() - v.en <= TERMINADA_MS) return { ...temas, hecho: v.codigo, tituloHecho: v.codigo === temas.hecho ? temas.tituloHecho : (this.titulos?.titulo(v.codigo) ?? null) };
+    if (v && this.ahora() - v.en <= TERMINADA_MS) {
+      const mismo = v.codigo === temas.hecho;
+      return { ...temas, hecho: v.codigo, tituloHecho: mismo ? temas.tituloHecho : (this.titulos?.titulo(v.codigo) ?? null), hechoEn: v.en, hechoInicio: mismo ? (temas.hechoInicio ?? null) : null };
+    }
     return temas;
   }
 
@@ -120,9 +159,12 @@ export class LectorTemas {
       this.titulos?.conocer(terminada?.identifier, terminada?.titulo);
       for (const t of cola) this.titulos?.conocer(t.identifier, t.title);
       const tituloHecho = !hecho ? null : !conVivo ? (terminada?.titulo ?? null) : (this.titulos?.titulo(hecho) ?? null);
-      const temas: Temas = { hecho, tituloHecho, sigue: primeraDeCola(cola), enCola: cola.length };
+      const hechoEn = !hecho ? null : conVivo ? vivo!.en : (terminada?.en ?? null);
+      // El inicio solo vale si la lectura es de esa misma tarea (con el canal en vivo no se leyó la terminada).
+      const hechoInicio = hecho && !conVivo ? (terminada?.inicio ?? null) : null;
+      const temas: Temas = { hecho, tituloHecho, sigue: primeraDeCola(cola), enCola: cola.length, bloqueada: bloqueadaDeCola(cola), hechoEn, hechoInicio };
       this.cache.set(agente.id, { temas, hasta: this.ahora() + CACHE_TEMAS_MS });
-      return temas;
+      return this.conRacha(agente.id, temas);
     })().finally(() => this.pendientes.delete(agente.id));
     this.pendientes.set(agente.id, promesa);
     return promesa;

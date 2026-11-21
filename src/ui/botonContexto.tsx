@@ -1,59 +1,42 @@
-// Lo que lee «Leer contexto» (JST-269): un resumen de la tarea y su padre para
-// que el usuario entienda por qué le piden una decisión sin leer todo el hilo.
-// Desde la 0.9.6 (JST-276, design-spec de JST-282) el botón va en la barra de
-// arriba (`contextoBarra.tsx`) y la lectura de a una frase en `contextoLector.ts`;
-// aquí queda qué se lee.
+// Lo que lee «Leer contexto» (JST-269): lo que hace falta para decidir sin leer
+// todo el hilo. Desde la 0.9.6 (JST-276, design-spec de JST-282) el botón va en
+// la barra de arriba (`contextoBarra.tsx`) y la lectura de a una frase en
+// `contextoLector.ts`; aquí queda de dónde salen los datos.
 //
 // - Fetch de `/api/issues/:ref` (el código, «JST-181», o el id) con la sesión del
 //   usuario (igual que el resto de la Oficina: `credentials: "include"`, URL relativa).
-// - Fetch de los últimos comentarios de la tarea (máximo 10; se leen 3, sin
-//   los avisos automáticos de Paperclip). El texto lo limpia `contextoVoz.ts`.
-// - Primero dice lo que te preguntan (JST-273): la tarjeta pendiente o, si no
-//   hay, el último comentario «🙋 Te toca» (`contextoPregunta.ts`). Después el
-//   porqué: la tarea, el padre y lo último del hilo, más corto.
-import { preguntaPendiente, teTocaDelHilo } from "./contextoPregunta.js";
-import { enIngles, esComentarioAutomatico, textoParaVoz } from "./contextoVoz.js";
+// - Fetch de los últimos comentarios de la tarea (20) y de sus tarjetas.
+// - Fetch del nombre de los agentes que el informe nombra (quién pregunta, quién
+//   tiene la tarea, quién escribió lo último): hasta 4, y si falla se lee sin nombres.
+// - Qué se dice y en qué orden lo arma `contextoInforme.ts` (JST-414): la pregunta
+//   entera con sus opciones, lo que la tarjeta explica, qué depende de la
+//   respuesta y dónde va el trabajo.
+import { componerInforme, frasesDeInforme, objetos, type ComentarioInforme, type Informe, type NivelInforme, type TareaInforme, type TareaRelacionada } from "./contextoInforme.js";
+import { esComentarioAutomatico } from "./contextoVoz.js";
 import type { Interaccion } from "../shared.js";
 
 // ---------------------------------------------------------------------------
 // Fetch de datos de la tarea
 // ---------------------------------------------------------------------------
 
-interface IssueSummary {
-  id: string;
-  identifier: string | null;
-  title: string;
-  description: string | null;
-  status: string | null;
-  ancestors?: Array<{ id: string; identifier?: string | null; title: string }>;
-}
-
-interface CommentSummary {
-  id: string;
-  body: string;
-  authorName?: string | null;
-  authorType?: string | null;
-  presentation?: { kind?: string | null } | null;
-}
-
-async function fetchIssue(issueId: string): Promise<IssueSummary> {
+async function fetchIssue(issueId: string): Promise<TareaInforme> {
   const r = await fetch(`/api/issues/${encodeURIComponent(issueId)}`, {
     credentials: "include",
     headers: { Accept: "application/json" },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<IssueSummary>;
+  return r.json() as Promise<TareaInforme>;
 }
 
-async function fetchComments(issueId: string): Promise<CommentSummary[]> {
-  // 10 y no 5: los avisos automáticos de Paperclip no se leen (JST-275) y pueden ser varios seguidos.
-  const r = await fetch(`/api/issues/${encodeURIComponent(issueId)}/comments?limit=10&order=desc`, {
+async function fetchComments(issueId: string): Promise<ComentarioInforme[]> {
+  // 20: los avisos automáticos de Paperclip no se leen (JST-275) y pueden ser varios seguidos.
+  const r = await fetch(`/api/issues/${encodeURIComponent(issueId)}/comments?limit=20&order=desc`, {
     credentials: "include",
     headers: { Accept: "application/json" },
-  });
-  if (!r.ok) return [];
+  }).catch(() => null);
+  if (!r?.ok) return [];
   const d = await r.json().catch(() => null);
-  return Array.isArray(d) ? d : (d?.items ?? []);
+  return objetos<ComentarioInforme>(Array.isArray(d) ? d : d?.items);
 }
 
 /** Las tarjetas de la tarea (JST-273): la pendiente dice qué te preguntan. Si falla, se lee sin ella. */
@@ -64,82 +47,48 @@ async function fetchInteracciones(issueId: string): Promise<Interaccion[]> {
   }).catch(() => null);
   if (!r?.ok) return [];
   const d = await r.json().catch(() => null);
-  return Array.isArray(d) ? d : (d?.items ?? []);
+  return objetos<Interaccion>(Array.isArray(d) ? d : d?.items);
 }
 
-// ---------------------------------------------------------------------------
-// Composición del texto del resumen
-// ---------------------------------------------------------------------------
-
-function recortar(texto: string, max: number): string {
-  if (texto.length <= max) return texto;
-  const cortado = texto.slice(0, max);
-  const ultimoEspacio = cortado.lastIndexOf(" ");
-  return (ultimoEspacio > max * 0.6 ? cortado.slice(0, ultimoEspacio) : cortado) + "…";
-}
-
-/** Le queda algo que decir después de limpiarlo: una letra o un número (JST-278). «👍» o «---» no. */
-function seDice(texto: string): boolean {
-  return /[\p{L}\p{N}]/u.test(texto);
-}
-
-/** Con punto al final si no tiene, para que la voz pare antes de lo que sigue («Sí, dale» → «Sí, dale.»). */
-function conPunto(texto: string): string {
-  return /[.!?…:;]$/.test(texto) ? texto : `${texto}.`;
-}
-
-export function componerTexto(issue: IssueSummary, comentarios: CommentSummary[], tarjetas: Interaccion[]): string {
-  const partes: string[] = [];
-
-  // Lo que te preguntan, primero (JST-273): la tarjeta pendiente o el último «🙋 Te toca».
-  const deTarjeta = preguntaPendiente(tarjetas);
-  const teToca = deTarjeta ? null : teTocaDelHilo(comentarios);
-  const pregunta = deTarjeta ?? teToca?.texto ?? null;
-  if (pregunta) partes.push(pregunta);
-
-  // Título y código
-  const codigo = issue.identifier ? `${issue.identifier}: ` : "";
-  partes.push(`${pregunta ? "Es de la tarea" : "Tarea"} ${codigo}${textoParaVoz(issue.title)}.`);
-
-  // Padre (contexto de por qué existe esta tarea)
-  const padre = issue.ancestors?.[0];
-  if (padre) {
-    const codigoPadre = padre.identifier ? `${padre.identifier}: ` : "";
-    partes.push(`Es parte de ${codigoPadre}${textoParaVoz(padre.title)}.`);
-  }
-
-  // Últimos comentarios (los más recientes primero, máximo 3; con pregunta, 2), sin los avisos
-  // automáticos de Paperclip ni lo escrito en inglés (JST-275). Del «Te toca» ya dicho, lo que sigue a su primera frase.
-  // Uno corto también («Sí, dale.»), si después de limpiarlo queda algo que decir (JST-278).
-  // El inglés se mira en lo que se lee, no en el texto entero (JST-310).
-  const comentariosUtiles = comentarios
+/** Los agentes que el informe puede nombrar: quién pregunta, quién tiene la tarea, quién tiene la que la frena y quién escribió lo último. */
+export function agentesDelInforme(tarea: TareaInforme, comentarios: readonly ComentarioInforme[], tarjetas: readonly Interaccion[]): string[] {
+  const pendiente = objetos<Interaccion>(tarjetas).filter((i) => i.status === "pending").sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0))[0];
+  const ultimos = objetos<ComentarioInforme>(comentarios)
     .filter((c) => c.body?.trim() && !esComentarioAutomatico(c))
-    .map((c) => recortar(textoParaVoz(c.id === teToca?.id ? teToca.resto : c.body), 150))
-    .filter((c) => seDice(c) && !enIngles(c))
-    .slice(0, pregunta ? 2 : 3);
-
-  // Descripción (los primeros 300 caracteres, sin markdown; en inglés no se lee: la voz es en español).
-  // El inglés se mira en esos 300 (JST-310): las que crea Paperclip («Review productivity for …»)
-  // empiezan en inglés y terminan con los comentarios del agente en español.
-  // Una corta también: suele ser la pregunta («¿Lo publico hoy?», JST-278).
-  // Con pregunta, el porqué está en el hilo: solo si no hay comentarios.
-  if (issue.description && !(pregunta && comentariosUtiles.length > 0)) {
-    const desc = recortar(textoParaVoz(issue.description), 300);
-    if (seDice(desc) && !enIngles(desc)) {
-      partes.push(`La tarea dice: ${conPunto(desc)}`);
-    }
-  }
-
-  if (comentariosUtiles.length > 0) {
-    partes.push("Lo último en el hilo:");
-    comentariosUtiles.forEach((c) => partes.push(conPunto(c)));
-  }
-
-  return partes.join(" ");
+    .slice()
+    .sort((a, b) => (Date.parse(b.createdAt ?? "") || 0) - (Date.parse(a.createdAt ?? "") || 0))
+    .slice(0, 2);
+  const ids = [pendiente?.createdByAgentId, tarea.assigneeAgentId, ...ultimos.map((c) => c.authorAgentId), objetos<TareaRelacionada>(tarea.blockedBy).find((b) => b.status !== "done" && b.status !== "cancelled")?.assigneeAgentId];
+  return [...new Set(ids.filter((x): x is string => !!x))].slice(0, 4);
 }
 
-/** Lo que dice «Leer contexto» de esa tarea (el código o el id). Falla si no se pudo leer la tarea. */
+/** El nombre de cada agente (`GET /api/agents/:id`). El que falle queda sin nombre: el informe dice «Te esperan». */
+async function fetchNombres(ids: readonly string[]): Promise<Record<string, string>> {
+  const pares = await Promise.all(
+    ids.map(async (id) => {
+      const r = await fetch(`/api/agents/${encodeURIComponent(id)}`, { credentials: "include", headers: { Accept: "application/json" } }).catch(() => null);
+      const d = r?.ok ? ((await r.json().catch(() => null)) as { name?: unknown } | null) : null;
+      return [id, typeof d?.name === "string" ? d.name : null] as const;
+    }),
+  );
+  return Object.fromEntries(pares.filter((p): p is readonly [string, string] => !!p[1]));
+}
+
+/** Lo que se lee de una tarea: el informe (para dejarlo escrito) y sus frases, en orden. */
+export interface Leido {
+  informe: Informe;
+  frases: string[];
+}
+
+/** El informe de esa tarea (el código o el id). Falla si no se pudo leer la tarea. */
+export async function informeDeTarea(ref: string, nivel: NivelInforme = "completo", ahora: number = Date.now()): Promise<Leido> {
+  const [tarea, comentarios, tarjetas] = await Promise.all([fetchIssue(ref), fetchComments(ref), fetchInteracciones(ref)]);
+  const agentes = await fetchNombres(agentesDelInforme(tarea, comentarios, tarjetas)).catch(() => ({}));
+  const informe = componerInforme({ tarea, comentarios, tarjetas, agentes, ahora }, nivel);
+  return { informe, frases: frasesDeInforme(informe) };
+}
+
+/** Lo que dice «Leer contexto» de esa tarea, en un solo texto. */
 export async function textoDeTarea(ref: string): Promise<string> {
-  const [issue, comentarios, tarjetas] = await Promise.all([fetchIssue(ref), fetchComments(ref), fetchInteracciones(ref)]);
-  return componerTexto(issue, comentarios, tarjetas);
+  return (await informeDeTarea(ref)).frases.join(" ");
 }

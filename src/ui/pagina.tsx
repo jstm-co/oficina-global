@@ -34,7 +34,7 @@ import { TareaModal } from "./tarea.js";
 import { esErrorViejo } from "../erroresViejos.js";
 import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
-import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
+import { Banners, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
 import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonAmbiente } from "./menuAmbiente.js";
 import { FranjaTeNecesitan } from "./franjaToca.js";
@@ -52,6 +52,7 @@ import { BotonesAvisos, SubtituloVoz } from "./paneles.js";
 import { cx, EtiquetaEmpresa, Icono, Piso } from "./piso.js";
 import { todosLibres, useAhora, useAnchoVentana, useCelular, useMovimientoReducido, useOficina, usePestanaOculta, useSalasPrevias, useTemaOscuro, type Oficina } from "./useOficina.js";
 import { VentanaResponder } from "./ventana.js";
+import { useAvisoAlAbrir } from "./avisoAlAbrir.js";
 import { useVigia } from "./vigia.js";
 import { VistaTv } from "./vistaTv.js";
 import { Vista3D } from "./vista3d.js";
@@ -289,6 +290,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   const { tip, handlers, ocultar } = useTooltip(!celular);
   const vr = useVentana(oficina);
   const { avisos, mostrar } = useAvisos();
+  useAvisoAlAbrir(oficina, mostrar);
   /** Tu escritorio abierto (JST-163 §14): de qué sala, y el botón desde donde se abrió. */
   const [escritorio, setEscritorio] = useState<{ prefijo: string; el: HTMLElement } | null>(null);
 
@@ -552,7 +554,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             <EstadoVivo oficina={oficina} corto />
             <span className="of-sp" />
             {rm ? <ChipAnimacionReducida soloIcono /> : null}
-            <BotonMascotas celular />
+            <BotonAmbiente agentes={oficina.agentes} empresas={oficina.empresas} celular />
             <BotonConversaciones celular />
             <Menores {...pCont} xs />
             <BotonesAvisos celular agentes={oficina.agentes} rm={rm} />
@@ -600,7 +602,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             {/* Con la vista 3D abierta, va en su barra (el menú abierto es uno para los dos botones). */}
             {en3d ? null : <BotonResumen />}
             <BotonesAvisos celular={false} agentes={oficina.agentes} rm={rm} />
-            <BotonAmbiente agentes={oficina.agentes} />
+            <BotonAmbiente agentes={oficina.agentes} empresas={oficina.empresas} />
             <button type="button" className="of-btn is-sm" title={t("Camina por la oficina en primera persona, desde tu escritorio")} onClick={abrir3d} disabled={!vidaPiso}>
               <Icono nombre="box" tam={14} />
               {t("Vista 3D")}

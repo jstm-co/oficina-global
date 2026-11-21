@@ -118,7 +118,7 @@ describe("«Preparar voces»", () => {
     // Las sueltas de las 10 voces, las de cada agente y los «2 agentes te necesitan» con la voz del Resumen.
     const st = p.v.estadoMotores().preparar;
     expect(st).toMatchObject({ hechas: p.hechos.length, fallas: 0, sinMotor: 0 });
-    expect(p.hechos.length).toBe(10 * 12 + 2 * 20 + 4);
+    expect(p.hechos.length).toBe(10 * 15 + 2 * 26 + 6);
     // Todo publicado donde lo sirve Paperclip.
     expect(existsSync(join(p.publico, archivo))).toBe(true);
     expect(leer<IndiceVoces>(p.publico, "indice.json")).toEqual(indice);
@@ -131,8 +131,8 @@ describe("«Preparar voces»", () => {
     const antes = p.hechos.length;
     p.v.alDia({ agentes: [...AGENTES, { id: "a3", nombre: "QA", empresa: "JSTM" }] });
     await hasta(() => p.v.estadoMotores().preparar.fase === "listo" && p.hechos.length > antes);
-    // Sus 20 frases y los «3 agentes …» (4).
-    expect(p.hechos.length - antes).toBe(20 + 4);
+    // Sus 26 frases y los «3 agentes …» (6).
+    expect(p.hechos.length - antes).toBe(26 + 6);
     expect(leer<IndiceVoces>(p.almacen, "indice.json").agentes.a3).toMatch(/^supertonic-/);
   });
 
@@ -153,7 +153,7 @@ describe("«Preparar voces»", () => {
     await hasta(() => p.v.estadoMotores().preparar.fase === "listo");
     expect(leer<IndiceVoces>(p.almacen, "indice.json").agentes.a1).toBe("lorenzo");
     expect(p.hechos.some((t) => t.voz.motor === "edge")).toBe(false);
-    expect(p.v.estadoMotores().preparar.sinMotor).toBe(20);
+    expect(p.v.estadoMotores().preparar.sinMotor).toBe(26);
   });
 
   it("si no se puede bajar el modelo, lo dice y no graba; apretarlo otra vez lo reintenta", async () => {

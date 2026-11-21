@@ -69,23 +69,23 @@ describe("lo que se elige", () => {
 });
 
 describe("lo que se graba", () => {
-  it("al cambiar la voz de un agente: 20 frases con su nombre y empresa, más las 12 sueltas que ya estaban grabadas", () => {
+  it("al cambiar la voz de un agente: 26 frases con su nombre y empresa, más las 15 sueltas que ya estaban grabadas (JST-415: 6 frases y 7 motivos)", () => {
     const t = trabajosDeAgente({ id: "a1", nombre: "Diseño de Producto", empresa: "JSTM" }, "dora");
-    expect(t).toHaveLength(32);
-    expect(new Set(t.map((x) => x.archivo)).size).toBe(32);
+    expect(t).toHaveLength(41);
+    expect(new Set(t.map((x) => x.archivo)).size).toBe(41);
     expect(t.every((x) => x.voz.id === "dora")).toBe(true);
-    // Las 12 sueltas son las mismas que graba `plan` para cada voz: mismo texto, mismo archivo.
+    // Las 15 sueltas son las mismas que graba `plan` para cada voz: mismo texto, mismo archivo.
     const todas = plan([{ id: "a1", nombre: "Diseño de Producto", empresa: "JSTM", creado: "2026-01-01" }], { a1: "dora" });
     const claves = new Set(todas.filter((x) => x.voz.id === "dora").map((x) => x.archivo));
-    expect(t.filter((x) => claves.has(x.archivo))).toHaveLength(32);
+    expect(t.filter((x) => claves.has(x.archivo))).toHaveLength(41);
   });
 
-  it("«3 agentes te necesitan» para 26 agentes son 100 frases, y para 4, 12 (de 2 a 4 × 4)", () => {
-    expect(textosAvisosJuntos(26)).toHaveLength(100);
-    expect(textosAvisosJuntos(4)).toHaveLength(12);
-    expect(textosAvisosJuntos(1)).toHaveLength(4);
+  it("«3 agentes te necesitan» para 26 agentes son 150 frases, y para 4, 18 (de 2 a 4 × 6)", () => {
+    expect(textosAvisosJuntos(26)).toHaveLength(150);
+    expect(textosAvisosJuntos(4)).toHaveLength(18);
+    expect(textosAvisosJuntos(1)).toHaveLength(6);
     expect(textosAvisosJuntos(3)).toContain("3 agentes te necesitan.");
-    expect(trabajosAvisosJuntos(26, "alex")).toHaveLength(100);
+    expect(trabajosAvisosJuntos(26, "alex")).toHaveLength(150);
   });
 
   it("el generador sigue haciendo los avisos juntos con la voz del Resumen que ya eligió el usuario", () => {

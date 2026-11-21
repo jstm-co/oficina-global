@@ -5,6 +5,7 @@ import {
   aperturaDe,
   claveDeFinal,
   DICEN,
+  FRASES_FIJAS,
   fijasDe,
   Guionista,
   MAX_FRASES_IA,
@@ -16,6 +17,8 @@ import {
   type Guion,
   type IdMascota,
   type Linea,
+  type Tema,
+  SUELTAS_GENERALES,
 } from "../src/charlas.js";
 import type { Temas } from "../src/temas.js";
 
@@ -31,6 +34,19 @@ function ctx(o: { otros?: AgenteCharla[]; temas?: Record<string, Temas>; azar?: 
   return { prefijo: "JST", a, b, agentes: [a, b, ...(o.otros ?? [])], temas: (id) => o.temas?.[id] ?? null, titulo: () => null, reloj: RELOJ, ahora: o.ahora ?? 0, azar: o.azar ?? semilla() };
 }
 const conError = (nombre = "CEO", motivo = "Claude usage limit reached") => ag(nombre, { st: "error", motivo });
+/**
+ * JST-415: cada tema tiene 6 variantes o más y la elección es al azar; estas pruebas piden una en concreto: prueban
+ * semillas hasta que sale (con un guionista nuevo cada vez, con la reserva puesta).
+ */
+function conVariante(id: string, tema: Tema, f: FuenteIa | null, o: Parameters<typeof ctx>[0] = {}): { g: Guionista; r: Guion } {
+  for (let s = 1; s < 400; s++) {
+    const g = new Guionista();
+    if (f) g.fijarIa(f);
+    const r = g.armar(ctx({ ...o, azar: semilla(s) }), tema);
+    if (r?.variante === id) return { g, r };
+  }
+  throw new Error(`No salió ${id}`);
+}
 const lineas = (...t: string[]): Linea[] => t.map((texto, i) => ({ quien: i % 2 ? "Beto" : "Ana", texto, codigo: null, titulo: null }));
 const textos = (g: Guion | null) => g?.lineas.map((l) => l.texto) ?? [];
 
@@ -50,7 +66,7 @@ function fuente(o: { finales?: Record<string, string[]>; sueltas?: string[]; ape
   return { f, pedidos };
 }
 
-const CLAVE_ERROR = "error-1|P3()/¿Qué le pasó?/Se quedó sin cupo, parece.";
+const CLAVE_ERROR = "error-1|P[A {q} le falló el run.]()/¿Qué le pasó?/P[Se quedó sin cupo, parece.]()";
 const APERTURA_ERROR = "¡Qué lata por {agente}!";
 
 describe("qué frases de hoy quedan fijas", () => {
@@ -91,6 +107,16 @@ describe("las aperturas con huecos", () => {
     expect(aperturaDe({ texto: "8 trabajando y 3 esperando respuesta.", codigo: null })).toEqual({ plantilla: "{n} trabajando y {esperando} esperando respuesta.", datos: { n: "8", esperando: "3" } });
   });
 
+  it("una duración tiene su propio hueco {tiempo}, no {n}: la IA no la toma por una cantidad (JST-415)", () => {
+    const l = { texto: "Líder Técnico lleva 2 horas y media esperando.", codigo: null };
+    expect(aperturaDe(l)).toEqual({ plantilla: "{agente} lleva {tiempo} esperando.", datos: { agente: "Líder Técnico", tiempo: "2 horas y media" } });
+    // Una cantidad de gente sigue siendo {n}.
+    expect(aperturaDe({ texto: "Hay 3 esperando respuesta.", codigo: null }).plantilla).toBe("Hay {n} esperando respuesta.");
+    expect(rellenarApertura("Pasaron {tiempo} y {agente} sigue esperando.", l)?.texto).toBe("Pasaron 2 horas y media y Líder Técnico sigue esperando.");
+    // Si la IA escribe {n} donde iba la duración, los huecos no coinciden y se descarta.
+    expect(rellenarApertura("Hay {n} esperando a {agente}.", l)).toBeNull();
+  });
+
   it("rellena solo si la variante tiene exactamente los huecos actuales", () => {
     expect(rellenarApertura(APERTURA_ERROR, { texto: "A CEO le falló el run.", codigo: null })).toEqual({ texto: "¡Qué lata por CEO!", apertura: { plantilla: APERTURA_ERROR, datos: { agente: "CEO" } } });
     expect(rellenarApertura("Sin huecos.", { texto: "A CEO le falló el run.", codigo: null })).toBeNull();
@@ -107,9 +133,7 @@ describe("las aperturas con huecos", () => {
 
 describe("el Guionista con la reserva de la IA", () => {
   it("rellena la apertura con el dato actual y mantiene las fijas y el turno del final", () => {
-    const g = new Guionista();
-    g.fijarIa(fuente({ aperturas: { "error-1": APERTURA_ERROR }, finales: { [CLAVE_ERROR]: ["Uf, qué mal momento."] } }).f);
-    const r = g.armar(ctx({ otros: [conError()] }), "error")!;
+    const { r } = conVariante("error-1", "error", fuente({ aperturas: { "error-1": APERTURA_ERROR }, finales: { [CLAVE_ERROR]: ["Uf, qué mal momento."] } }).f, { otros: [conError()] });
     expect(textos(r)).toEqual(["¡Qué lata por CEO!", "¿Qué le pasó?", "Se quedó sin cupo, parece.", "Uf, qué mal momento."]);
     expect(r.lineas[0]).toMatchObject({ codigo: null, aperturaIa: { plantilla: APERTURA_ERROR, datos: { agente: "CEO" } } });
     expect(r.lineas[3]!.quien).not.toBe(r.lineas[2]!.quien);
@@ -118,23 +142,23 @@ describe("el Guionista con la reserva de la IA", () => {
 
   it("vuelta a las plantillas: sin IA o sin variantes; una apertura sola también sirve", () => {
     const deHoy = ["A CEO le falló el run.", "¿Qué le pasó?", "Se quedó sin cupo, parece.", "Uf. Ojalá lo vean luego."];
-    expect(textos(new Guionista().armar(ctx({ otros: [conError()] }), "error"))).toEqual(deHoy);
-    const sinReserva = new Guionista();
-    sinReserva.fijarIa(fuente().f);
-    expect(textos(sinReserva.armar(ctx({ otros: [conError()] }), "error"))).toEqual(deHoy);
-    const apertura = new Guionista();
-    apertura.fijarIa(fuente({ aperturas: { "error-1": APERTURA_ERROR } }).f);
-    expect(textos(apertura.armar(ctx({ otros: [conError()] }), "error"))).toEqual(["¡Qué lata por CEO!", "¿Qué le pasó?", "Se quedó sin cupo, parece."]);
+    const o = { otros: [conError()] };
+    expect(textos(conVariante("error-1", "error", null, o).r)).toEqual(deHoy);
+    expect(textos(conVariante("error-1", "error", fuente().f, o).r)).toEqual(deHoy);
+    expect(textos(conVariante("error-1", "error", fuente({ aperturas: { "error-1": APERTURA_ERROR } }).f, o).r)).toEqual(["¡Qué lata por CEO!", "¿Qué le pasó?", "Se quedó sin cupo, parece."]);
   });
 
   it("no repite el último final de esa clave", () => {
-    const g = new Guionista();
     const { f, pedidos } = fuente({ finales: { [CLAVE_ERROR]: ["Uf, qué mal momento."] } });
-    g.fijarIa(f);
-    g.armar(ctx({ otros: [conError()] }), "error");
-    for (let i = 0; i < 8; i++) g.armar(ctx({ ahora: i }), "broma");
-    expect(g.armar(ctx({ otros: [conError()], ahora: 3_600_000 }), "error")?.variante).toBe("error-1");
-    expect(pedidos.map((p) => p.evitar)).toEqual([null, "Uf, qué mal momento."]);
+    const { g } = conVariante("error-1", "error", f, { otros: [conError()] });
+    // Otra vez error-1, mucho después (las demás variantes piden otras claves).
+    let vuelve = false;
+    for (let i = 1; i < 60 && !vuelve; i++) {
+      for (let k = 0; k < 8; k++) g.armar(ctx({ ahora: i * 3_600_000 + k }), "broma");
+      vuelve = g.armar(ctx({ otros: [conError()], ahora: i * 3_600_000 + 60_000, azar: semilla(i + 500) }), "error")?.variante === "error-1";
+    }
+    expect(vuelve).toBe(true);
+    expect(pedidos.filter((p) => p.clave === CLAVE_ERROR).map((p) => p.evitar)).toEqual([null, "Uf, qué mal momento."]);
   });
 
   it("las bromas salen enteras de la IA; sin reserva, una de siempre", () => {
@@ -149,9 +173,7 @@ describe("el Guionista con la reserva de la IA", () => {
   });
 
   it("rearmar conserva apertura, final y broma; sin IA o con otro motivo, descarta", () => {
-    const g = new Guionista();
-    g.fijarIa(fuente({ aperturas: { "error-1": APERTURA_ERROR }, finales: { [CLAVE_ERROR]: ["Uf, qué mal momento."] } }).f);
-    const r = g.armar(ctx({ otros: [conError()] }), "error")!;
+    const { g, r } = conVariante("error-1", "error", fuente({ aperturas: { "error-1": APERTURA_ERROR }, finales: { [CLAVE_ERROR]: ["Uf, qué mal momento."] } }).f, { otros: [conError()] });
     expect(textos(g.rearmar(ctx({ otros: [conError()] }), r))).toEqual(textos(r));
     expect(g.rearmar(ctx({ otros: [conError("CEO", "tests failed")] }), r)).toBeNull();
     g.fijarIa(null);
@@ -183,18 +205,22 @@ describe("el Guionista con la reserva de la IA", () => {
       dichas.add(linea.texto);
       dichasAhora.push(linea.texto);
     }
-    expect(dichasAhora).toHaveLength(9);
-    expect(new Set(dichasAhora).size).toBe(9);
+    expect(dichasAhora).toHaveLength(SUELTAS_GENERALES.length);
+    expect(new Set(dichasAhora).size).toBe(SUELTAS_GENERALES.length);
     expect(g.suelta("Ana", null, semilla(31))).toBeNull();
   });
 
   it("con la IA elegida tampoco repite una conversación ni una mascota fija ya dicha", () => {
     const conversacion = new Guionista();
-    conversacion.fijarIa(fuente({ dichas: new Set(["¿Qué le pasó?"]) }).f);
+    // Con todas las frases fijas ya dichas, ninguna variante de «error» sirve (cada una trae alguna fija).
+    conversacion.fijarIa(fuente({ dichas: new Set(FRASES_FIJAS) }).f);
     expect(conversacion.armar(ctx({ otros: [conError()] }), "error")).toBeNull();
     const mascota = new Guionista();
     mascota.fijarIa(fuente({ dichas: new Set([DICEN.gato[0]!]) }).f);
-    expect(mascota.mascota("gato", () => 0)).toBeNull();
+    expect(mascota.mascota("gato", () => 0)).toBe(DICEN.gato[1]);
+    const todas = new Guionista();
+    todas.fijarIa(fuente({ dichas: new Set(DICEN.gato) }).f);
+    expect(todas.mascota("gato", () => 0)).toBeNull();
   });
 
   it("las mascotas usan la variante de su especie y el respaldo rota como hoy", () => {
@@ -216,7 +242,7 @@ describe("lo que se le puede pedir a la IA ahora", () => {
     expect(error.fijas.map((l) => l.texto)).toEqual(["A CEO le falló el run.", "¿Qué le pasó?", "Se quedó sin cupo, parece."]);
     expect(m.some((x) => x.variante.startsWith("broma"))).toBe(false);
     for (const muestra of m) expect(rellenarApertura(muestra.apertura, muestra.fijas[0]!)?.texto, muestra.variante).toBe(muestra.fijas[0]!.texto);
-    expect(g.armar(ctx({ otros: [conError()] }), "error")?.variante).toBe("error-1");
+    expect(g.armar(ctx({ otros: [conError()] }), "error")?.tema).toBe("error");
   });
 });
 

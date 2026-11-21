@@ -153,6 +153,8 @@ interface TareaCompacta {
   status?: string | null;
   completedAt?: string | null;
   updatedAt?: string | null;
+  /** JST-415: cuándo se empezó, si la lectura compacta lo trae (para «esa me tomó dos horas»). */
+  startedAt?: string | null;
 }
 
 /**
@@ -160,7 +162,7 @@ interface TareaCompacta {
  * nombre para el rótulo (JST-138 §2). `en` es cuándo se terminó (o se
  * actualizó por última vez), para contar 24 h.
  */
-export async function terminadaDelAgente(cx: Conexion, companyId: string, agentId: string): Promise<{ identifier: string | null; titulo: string | null; en: number } | null> {
+export async function terminadaDelAgente(cx: Conexion, companyId: string, agentId: string): Promise<{ identifier: string | null; titulo: string | null; en: number; inicio: number | null } | null> {
   const filas = await pedir<TareaCompacta[]>(
     cx,
     `/companies/${encodeURIComponent(companyId)}/issues?assigneeAgentId=${encodeURIComponent(agentId)}&status=done&sortField=updated&sortDir=desc&limit=1&view=compact`,
@@ -168,7 +170,9 @@ export async function terminadaDelAgente(cx: Conexion, companyId: string, agentI
   const t = filas[0];
   if (!t) return null;
   const en = Date.parse(t.completedAt ?? t.updatedAt ?? "");
-  return { identifier: t.identifier ?? null, titulo: t.title || null, en: Number.isNaN(en) ? 0 : en };
+  // Sin `completedAt` el fin es la última actualización: no sirve para decir cuánto tardó.
+  const inicio = t.startedAt && t.completedAt ? Date.parse(t.startedAt) : NaN;
+  return { identifier: t.identifier ?? null, titulo: t.title || null, en: Number.isNaN(en) ? 0 : en, inicio: Number.isNaN(inicio) ? null : inicio };
 }
 
 /** Las primeras 3 tareas de la cola de un agente (`todo`, `blocked` o `in_review`), para las conversaciones. */

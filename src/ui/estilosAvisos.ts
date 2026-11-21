@@ -9,7 +9,7 @@ export const CSS_AVISOS = /* css */ `
 .of-hbtn.is-on svg { color: var(--of-s-toca); }
 .of-hbtn.is-open, .of-hbtn.is-open:hover { background: var(--of-muted); }
 .of-ibtn.of-hbtn { width: 28px; height: 28px; border-radius: 7px; }
-/* Área táctil de 44 px en el celular */
+/* Área de toque de 44 px en el celular */
 .of-ibtn.of-hbtn::before { content: ""; position: absolute; inset: -8px; }
 .of-ibtn.of-hbtn .of-hdot { top: -2px; right: -2px; }
 
@@ -58,6 +58,8 @@ export const CSS_AVISOS = /* css */ `
 .of-vz-list { display: flex; flex-direction: column; gap: 2px; }
 .of-vz-ev { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 6px 8px; border-radius: 7px; cursor: pointer; line-height: 18px; }
 .of-vz-ev:hover { background: var(--of-hover-strong); }
+.of-vz-fila.is-sola > .of-vz-ev { grid-column: 1 / -1; }
+.of-vz-ev.is-off { opacity: 0.55; }
 .of-vz-ev input { position: absolute; left: 8px; top: 7px; width: 16px; height: 16px; margin: 0; opacity: 0; }
 .of-vz-mk { width: 16px; height: 16px; flex: none; margin-top: 1px; border-radius: 4px; border: 1.5px solid var(--of-border-strong); display: grid; place-items: center; color: #fff; }
 .of-vz-ev.is-on .of-vz-mk { background: var(--of-s-toca); border-color: var(--of-s-toca); }
@@ -173,6 +175,8 @@ export const CSS_AVISOS = /* css */ `
 .of-pv.is-err > svg { color: var(--of-danger-fg); }
 .of-pv-motores { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
 .of-pv-motores .of-vz-ev:hover { background: var(--of-hover-strong); }
+.of-vz-fila.is-sola > .of-vz-ev { grid-column: 1 / -1; }
+.of-vz-ev.is-off { opacity: 0.55; }
 .of-pv-motores .of-vz-ev em { line-height: 16px; }
 .of-pv-motores .of-vz-ev.is-no { cursor: not-allowed; opacity: .55; }
 .of-pv-motores .of-vz-ev.is-no:hover { background: transparent; }

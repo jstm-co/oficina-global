@@ -70,14 +70,14 @@ describe("la voz del Resumen y la de «Leer contexto»", () => {
     const v = preparador(raiz, { generar: async (t, d) => (await puerta, hechos.push(t.voz.id), writeFileSync(d, "mp3")) });
     expect(v.elegir({ quien: "resumen", voz: "lorenzo" }).ok).toBe(true);
     await espera();
-    // 3 agentes → de 2 a 3 × 4 frases = 8.
+    // 3 agentes → de 2 a 3 × 6 frases = 12 (JST-415 sumó «quedaron bloqueados» y «te dejaron algo para revisar»).
     const g = v.grabando();
     expect(g).toHaveLength(1);
-    expect(g[0]).toMatchObject({ quien: "resumen", voz: "lorenzo", sigueCon: "catalina", total: 8, enCola: false });
+    expect(g[0]).toMatchObject({ quien: "resumen", voz: "lorenzo", sigueCon: "catalina", total: 12, enCola: false });
     expect(indiceDe(raiz).resumen).toBe("catalina");
     soltar();
     await hasta(() => indiceDe(raiz).resumen === "lorenzo");
-    expect(hechos).toHaveLength(8);
+    expect(hechos).toHaveLength(12);
     expect(hechos.every((x) => x === "lorenzo")).toBe(true);
     expect(indiceDe(raiz).audios[claveAudio("lorenzo", "3 agentes te necesitan.")]).toMatch(/\.mp3$/);
     expect(v.grabando()).toEqual([]);
@@ -109,7 +109,7 @@ describe("la voz de cada agente", () => {
     const r = v.elegir({ ...AGENTE, voz: "catalina" });
     expect(r.ok).toBe(true);
     await espera();
-    expect(v.grabando()).toEqual([{ quien: "agente", agenteId: "a-edge", voz: "catalina", sigueCon: "lorenzo", hechas: 0, total: 32, enCola: false, esperaMac: false, error: false }]);
+    expect(v.grabando()).toEqual([{ quien: "agente", agenteId: "a-edge", voz: "catalina", sigueCon: "lorenzo", hechas: 0, total: 41, enCola: false, esperaMac: false, error: false }]);
     expect(indiceDe(raiz).agentes["a-edge"]).toBe("lorenzo");
     // Lo que tenía queda para «Volver a como estaba», y lo que se graba queda pendiente por si se apaga el worker.
     expect(eleccionDe(raiz).originales["a-edge"]).toEqual({ voz: "lorenzo", corto: "Diseño", empresa: "JSTM" });
@@ -117,7 +117,7 @@ describe("la voz de cada agente", () => {
     soltar();
     await hasta(() => indiceDe(raiz).agentes["a-edge"] === "catalina");
     const i = indiceDe(raiz);
-    expect(Object.keys(i.audios).filter((k) => k.startsWith("catalina|"))).toHaveLength(32);
+    expect(Object.keys(i.audios).filter((k) => k.startsWith("catalina|"))).toHaveLength(41);
     expect(i.audios[claveAudio("catalina", "Diseño, de JSTM: terminé.")]).toMatch(/^[0-9a-f]{20}\.mp3$/);
     expect(v.grabando()).toEqual([]);
     expect(eleccionDe(raiz).pendientes).toEqual({});

@@ -8,7 +8,7 @@ import { CADA_MS, reservaVacia, type DatosReserva } from "../src/ia/reserva.js";
 
 const l = (quien: string, texto: string): Linea => ({ quien, texto, codigo: null, titulo: null });
 const MUESTRAS: MuestraFinal[] = [
-  { clave: "error-1|P3()/¿Qué le pasó?/Se quedó sin cupo, parece.", variante: "error-1", apertura: "A {agente} le falló el run.", fijas: [l("a", "A CEO le falló el run."), l("b", "¿Qué le pasó?"), l("a", "Se quedó sin cupo, parece.")] },
+  { clave: "error-1|P[A {q} le falló el run.]()/¿Qué le pasó?/P[Se quedó sin cupo, parece.]()", variante: "error-1", apertura: "A {agente} le falló el run.", fijas: [l("a", "A CEO le falló el run."), l("b", "¿Qué le pasó?"), l("a", "Se quedó sin cupo, parece.")] },
   { clave: "trabajan-5|Nadie está trabajando.", variante: "trabajan-5", apertura: "Nadie está trabajando.", fijas: [l("a", "Nadie está trabajando.")] },
 ];
 

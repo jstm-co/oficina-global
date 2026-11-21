@@ -19,6 +19,7 @@ import { CSS_TAREA } from "./estilosTarea.js";
 import { CSS_VENTANA } from "./estilosVentana.js";
 import { CSS_VOCES } from "./estilosVoces.js";
 import { CSS_VIDA } from "./estilosVida.js";
+import { CSS_DECORADO } from "./estilosDecorado.js";
 import { HOJAS, BALDOSAS } from "./sprites.js";
 
 const baldosas = (tema: "claro" | "oscuro") =>
@@ -152,7 +153,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 :where(.of, .of-layer) :focus-visible { outline: 2px solid var(--of-ring); outline-offset: 2px; }
 /* En pantallas táctiles el host da 44 px de alto mínimo a todo botón (pointer: coarse) y estiraría los
    interruptores, los botones chicos y las pastillas. La Oficina usa las medidas del diseño; donde hace falta,
-   el área táctil de 44 px va aparte (JST-95 §6) o el control ya mide 44 en el celular. */
+   el área de toque de 44 px va aparte (JST-95 §6) o el control ya mide 44 en el celular. */
 @media (pointer: coarse) { .of :where(button, [role="button"]), .of-layer :where(button, [role="button"]) { min-height: 0; } }
 
 /* ---------- Página ---------- */
@@ -340,6 +341,10 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-amb-sw.is-on { background: var(--of-s-toca); }
 .of-amb-sw.is-on > i { transform: translateX(12px); }
 .of-hpop.is-ambiente { width: 300px; padding: 6px; }
+/* JST-415: «Cuánto habla» (el nivel), debajo de las tres filas */
+.of-amb-nivel { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; padding: 8px 8px 4px; border-top: 1px solid var(--of-border); }
+.of-amb-nivel .of-seg button:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-amb-ayuda { margin: 0; font-size: 12px; line-height: 16px; color: var(--of-muted-fg); white-space: normal; }
 @media (prefers-reduced-motion: reduce) { .of-amb-sw, .of-amb-sw > i { transition: none; } }
 /* Franja «Te necesitan»: 36 px siempre; si los ítems no caben, se desplaza en horizontal sin barra. */
 .of-te { display: flex; align-items: center; gap: 10px; height: 36px; min-width: 0; }
@@ -562,7 +567,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 `;
 
 /** La hoja entera: la de la 0.1.x, las piezas de la 0.2.0 (JST-95), la vida de la 0.3.0 (JST-96) y el Resumen de la 0.9.0 (JST-246), cada una en su archivo. */
-const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_TAREA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES + CSS_3D;
+const HOJA = CSS + CSS_LISTA + CSS_VENTANA + CSS_TAREA + CSS_AVISOS + CSS_VIDA + CSS_ROTULO + CSS_RESUMEN + CSS_CONTEXTO + CSS_VOCES + CSS_3D + CSS_DECORADO;
 
 const STYLE_ID = "jstm-oficina-pixel-estilos";
 

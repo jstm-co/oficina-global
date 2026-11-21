@@ -102,7 +102,8 @@ describe("grupos de la lista (design-spec de JST-95 §3)", () => {
     expect(notaGrupo(dos, true)).toBeNull();
     const uno = agrupar([agente("x", { base: "error" })], false, AHORA)[0]!;
     expect(notaGrupo(uno, false)).toBeNull();
-    const libres = agrupar([agente("x"), agente("y")])[0]!;
+    // Con la hora fija: sin ella usa la de hoy, y a los 31 días de `AHORA` estos dos pasan a «sin uso hace más de 30 días».
+    const libres = agrupar([agente("x"), agente("y")], false, AHORA)[0]!;
     expect(notaGrupo(libres, false)).toBeNull();
   });
 

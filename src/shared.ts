@@ -113,6 +113,8 @@ export interface Interaccion {
   payload: Record<string, unknown>;
   result?: Record<string, unknown> | null;
   createdAt: string;
+  /** El agente que la creó: quien pregunta (JST-414). */
+  createdByAgentId?: string | null;
   resolvedAt?: string | null;
   resolvedByUserId?: string | null;
 }

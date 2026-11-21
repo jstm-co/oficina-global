@@ -59,10 +59,14 @@ function temasAlAzar(azar: () => number): Temas {
     tituloHecho: "Una tarea",
     sigue: azar() < 0.7 ? { codigo: "XX-2", estado: (["todo", "in_review", "blocked"] as const)[Math.floor(azar() * 3)]!, titulo: "Otra tarea" } : null,
     enCola: Math.floor(azar() * 5),
+    hechoEn: azar() < 0.6 ? Date.UTC(2026, 9, 23, 14, 30) : null,
+    hechoInicio: azar() < 0.6 ? Date.UTC(2026, 9, 23, 11, 0) : null,
+    racha: azar() < 0.5 ? 3 + Math.floor(azar() * 6) : undefined,
+    bloqueada: azar() < 0.4 ? { codigo: "XX-3", titulo: "Una trabada" } : null,
   };
 }
 
-const TEMAS: Tema[] = ["termino", "cola", "revision", "espera-otra", "te-espera", "error", "pausa", "trabajan", "rol", "sala", "empresa", "broma"];
+const TEMAS: Tema[] = ["termino", "cola", "revision", "espera-otra", "bloqueada", "te-espera", "error", "pausa", "trabajan", "rol", "sala", "empresa", "reloj", "tardo", "racha", "entrega", "broma"];
 
 describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del spike de JST-224)", () => {
   it("toda frase de una conversación (miles al azar, todos los temas) es fija o de una plantilla", () => {
@@ -79,7 +83,7 @@ describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del
       const b = deSala.filter((x) => x !== a)[Math.floor(azar() * (deSala.length - 1))]!;
       const tm = new Map(ags.map((x) => [x.id, temasAlAzar(azar)]));
       const g = new Guionista().armar(
-        { prefijo, a, b, agentes: ags, temas: (id) => tm.get(id) ?? null, titulo: () => "Una tarea", reloj, ahora: 0, azar, filtro: azar() < 0.2 ? [prefijo] : undefined },
+        { prefijo, a, b, agentes: ags, temas: (id) => tm.get(id) ?? null, titulo: () => "Una tarea", reloj, ahora: 0, azar, filtro: azar() < 0.2 ? [prefijo] : undefined, entregas: azar() < 0.5 ? [{ de: a.id, a: b.id, codigo: "XX-4", en: reloj - 60_000 }, { de: b.id, a: a.id, codigo: "XX-5", en: reloj - 120_000 }] : undefined },
         azar() < 0.8 ? TEMAS[Math.floor(azar() * TEMAS.length)]! : null,
       );
       for (const l of g?.lineas ?? []) {
@@ -108,7 +112,7 @@ describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del
     // ni estados) se acepta como de la IA, sin tarea, para que el worker le ponga su tope por minuto.
     expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "Hola, esto lo escribió otro.", tarea: "JST-1: algo" })).toEqual({ clase: "charla", agenteId: "a", texto: "Hola, esto lo escribió otro.", tarea: null, ia: true });
     expect(validarPedidoOficina({ clase: "suelta", agenteId: "a", texto: "Este café me salva." })).toMatchObject({ ia: true, tarea: null });
-    expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "Bacán." })).not.toHaveProperty("ia");
+    expect(validarPedidoOficina({ clase: "charla", agenteId: "a", texto: "Eso es lo importante." })).not.toHaveProperty("ia");
   });
 
   it("una apertura de la IA solo lleva los datos de sus huecos y una mascota generada pasa la misma revisión", () => {
@@ -143,18 +147,22 @@ describe("el worker solo hace audios de lo que el plugin pudo armar (punto 8 del
 });
 
 describe("qué dice la voz (JST-225 §4)", () => {
-  it("con la tarea, la primera vez, sin el código: «Acabo de terminar esta: Re-QA de la Oficina global.»", () => {
-    expect(conTarea("Acabo de terminar esta.", "JST-91: Re-QA de la Oficina global")).toBe("Acabo de terminar esta: Re-QA de la Oficina global.");
-    expect(conTarea("¿Por esta?", "Instalar la Oficina global en la real")).toBe("¿Por esta? Instalar la Oficina global en la real.");
-    expect(conTarea("Esta ya está. Me gané el café.", "Prueba de login en la app")).toBe("Esta ya está. Me gané el café: Prueba de login en la app.");
-    expect(conTarea("Bacán.", null)).toBe("Bacán.");
+  it("con la tarea, la primera vez, sin el código: «Acabo de terminar el re-QA de la Oficina global.»", () => {
+    // JST-415: el título entra en la frase («el re-QA de…»), ya no se pega después de «esta:».
+    expect(conTarea("Acabo de terminar esta.", "JST-91: Re-QA de la Oficina global")).toBe("Acabo de terminar el re-QA de la Oficina global.");
+    expect(conTarea("¿Por esta?", "Instalar la Oficina global en la real")).toBe("¿Por lo de instalar la Oficina global en la real?");
+    expect(conTarea("Esta ya está. Me gané el café.", "Prueba de login en la app")).toBe("La prueba de login en la app ya está. Me gané el café.");
+    expect(conTarea("Mejor para ellos.", null)).toBe("Mejor para ellos.");
+    // Sin título conocido, «esta tarea»; y una frase sin «esta» no lleva el título.
+    expect(conTarea("Acabo de terminar esta.", null, true)).toBe("Acabo de terminar esta tarea.");
+    expect(conTarea("Acabo de terminar esta.", null)).toBe("Acabo de terminar esta.");
     const p = pedidosDeCharla([
       { quien: "a", texto: "Me toca esta.", codigo: "BET-1", titulo: "Una tarea" },
       { quien: "b", texto: "¿Harta pega?", codigo: null, titulo: null },
       { quien: "a", texto: "Por esta.", codigo: "BET-1", titulo: "Una tarea" },
     ]);
     expect(p.map((x) => x.tarea)).toEqual(["Una tarea", null, null]);
-    expect(p.map((x) => textoOficina(x))).toEqual(["Me toca esta: Una tarea.", "¿Harta pega?", "Por esta."]);
+    expect(p.map((x) => textoOficina(x))).toEqual(["Me toca una tarea.", "¿Harta pega?", "Por esta."]);
   });
 
   it("la entrega, «¡Dale!», el sobre y la mascota (sin «♥», «🤝» ni «*»)", () => {
@@ -167,9 +175,10 @@ describe("qué dice la voz (JST-225 §4)", () => {
     expect(t({ clase: "mascota", agenteId: null, mascota: "conejo", texto: "*snif, snif*" })).toBe("snif, snif");
     expect(t({ clase: "mascota", agenteId: null, mascota: "conejo", texto: "♥ ♥" })).toBeNull();
     expect(paraLeer("♪ ♫")).toBe("");
-    // Lo que dicen las 4 mascotas: 9 con letras.
-    expect(Object.values(DICEN).flat().filter((x) => /\p{L}{2,}/u.test(paraLeer(x)))).toHaveLength(9);
-    expect(SUELTAS.filter((x) => /\p{L}{2,}/u.test(x))).toHaveLength(7);
+    // Lo que dicen las 4 mascotas (8 c/u): todas menos «♥» del perro y «♥» y «♥ ♥» del conejo tienen letras.
+    expect(Object.values(DICEN).flat().filter((x) => /\p{L}{2,}/u.test(paraLeer(x)))).toHaveLength(29);
+    // Las 26 sueltas sin tarea: todas menos «☕» y «♪ ♫».
+    expect(SUELTAS.filter((x) => /\p{L}{2,}/u.test(x))).toHaveLength(24);
   });
 
   it("sin la barra (JST-239): «¿En qué anda Ingeniero/a?» se dice «¿En qué anda Ingeniero?», y el worker sigue aceptando lo que dice el globo", () => {
@@ -185,9 +194,9 @@ describe("qué dice la voz (JST-225 §4)", () => {
     expect(globo.map((n) => charla(`¿En qué anda ${n}?`))).toEqual(["¿En qué anda Ingeniero?", "¿En qué anda Diseñador?", "¿En qué anda Creador?", "¿En qué anda Coordinador?", "¿En qué anda Disenador UX UI?"]);
     expect(charla("Coordinador/a sigue en pausa.")).toBe("Coordinador sigue en pausa.");
     expect(charla("A Ingeniero/a de Betalandia le falló el run.")).toBe("A Ingeniero de Betalandia le falló el run.");
-    // La tarea y quien recibe la entrega, igual; los números y «// algún día» no cambian.
-    expect(charla("Acabo de terminar esta.", "JST-90: Revisar el panel UX/UI de Jefes/as")).toBe("Acabo de terminar esta: Revisar el panel UX UI de Jefes.");
-    expect(charla("Me toca esta.", "Soporte 24/7 y/o guardia")).toBe("Me toca esta: Soporte 24/7 y o guardia.");
+    // La tarea (dentro de la frase) y quien recibe la entrega, igual; los números y «// algún día» no cambian.
+    expect(charla("Terminé esta.", "JST-90: Revisar el panel UX/UI de Jefes/as")).toBe("Terminé lo de revisar el panel UX UI de Jefes.");
+    expect(charla("Me toca esta.", "Soporte 24/7 y/o guardia")).toBe("Me toca el soporte 24/7 y o guardia.");
     expect(charla("// algún día")).toBe("// algún día");
     expect(dice({ clase: "entrega", para: "Coordinador/a de operaciones", tarea: null })).toBe("Coordinador de operaciones, te paso una tarea.");
     expect(dice({ clase: "sobre", para: "Ingeniero/a", tarea: "Diseño UX/UI" })).toBe("Para Ingeniero: Diseño UX UI.");

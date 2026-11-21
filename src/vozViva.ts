@@ -86,6 +86,8 @@ export interface PedidoVoz {
   presentacion: Presentacion;
   /** El nombre de la tarea, entero (se corta con `tareaParaVoz`). Con `pide`, no se dice (va igual: el pedido es el mismo de siempre). */
   tarea: string;
+  /** JST-415: cuánto tardó, dicho («12 minutos»), solo con «terminé» y «te lo dejo para revisar». */
+  duracion?: string;
   /** 0.8.0: «te necesito» dice lo que espera (la pregunta breve, o qué aprobar o revisar) en vez de la tarea. */
   pide?: PideVoz;
 }
@@ -121,7 +123,9 @@ const REVISAR_MS = 5 * 60_000;
  */
 export const LETRAS_NOMBRE = 200;
 
-const FRASES_DETALLE: ReadonlySet<string> = new Set(["toca", "fin", "emp"]);
+const FRASES_DETALLE: ReadonlySet<string> = new Set(["toca", "fin", "emp", "bloq", "rev"]);
+/** JST-415: lo que dice `duracionHablada`: letras, números y espacios, corto. */
+const DURACION_VALIDA = /^[\p{L}\d ]{1,40}$/u;
 const PRESENTACIONES: ReadonlySet<string> = new Set(["nombre-empresa", "nombre", "frase"]);
 const corto = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max && !/[\u0000-\u001f\u007f]/.test(v);
 
@@ -145,7 +149,9 @@ export function validarPedido(x: unknown): PedidoVoz | null {
   // Lo que espera solo va con «te necesito».
   const pide = validarPide(p.pide);
   if (pide === null || (pide && p.frase !== "toca")) return null;
-  return { agenteId: p.agenteId!, frase: p.frase!, corto: p.corto!, empresa: p.empresa!, presentacion: p.presentacion!, tarea: p.tarea!, ...(pide ? { pide } : {}) };
+  // La duración solo va con «terminé» y «te lo dejo para revisar».
+  if (p.duracion !== undefined && (typeof p.duracion !== "string" || !DURACION_VALIDA.test(p.duracion) || (p.frase !== "fin" && p.frase !== "rev"))) return null;
+  return { agenteId: p.agenteId!, frase: p.frase!, corto: p.corto!, empresa: p.empresa!, presentacion: p.presentacion!, tarea: p.tarea!, ...(pide ? { pide } : {}), ...(p.duracion ? { duracion: p.duracion } : {}) };
 }
 
 /**
@@ -157,7 +163,7 @@ export function textoPedido(p: PedidoVoz): string | null {
     const con = textoVoz(p.corto, p.empresa, p.frase, p.presentacion, { pide: p.pide });
     return con === textoVoz(p.corto, p.empresa, p.frase, p.presentacion) ? null : con;
   }
-  return tareaParaVoz(p.tarea) ? textoVoz(p.corto, p.empresa, p.frase, p.presentacion, { tarea: p.tarea }) : null;
+  return tareaParaVoz(p.tarea) ? textoVoz(p.corto, p.empresa, p.frase, p.presentacion, { tarea: p.tarea, duracion: p.duracion }) : null;
 }
 
 export type Fila = "edge" | "kokoro" | "clon" | "supertonic";

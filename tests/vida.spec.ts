@@ -1185,7 +1185,7 @@ describe("conversaciones en el descanso (0.4.0, JST-162 · B · Pregunta y respu
 
   it("con el filtro de una empresa, «cuántos trabajan» cuenta solo las salas del filtro, como el encabezado (JST-176)", async () => {
     // Todos trabajan salvo 2 de JST: en el piso hay 24 trabajando y en JST, 3.
-    for (const [filtro, primera] of [[[], /^(Hay )?24 trabajando/], [["JST"], /^¿Cuántos están trabajando\?$/], [["BET", "JST"], /^(Hay )?12 trabajando/]] as const) {
+    for (const [filtro, primera] of [[[], /\b24\b/], [["JST"], /\b3\b/], [["BET", "JST"], /\b12\b/]] as const) {
       const { vida, sync, hastaAsync } = banco(guardados());
       const g = (vida as unknown as { guionista: { armar: (c: ContextoCharla, f?: Tema | null) => Guion | null } }).guionista;
       const armar = g.armar.bind(g);
@@ -1194,8 +1194,9 @@ describe("conversaciones en el descanso (0.4.0, JST-162 · B · Pregunta y respu
       sync({ op: { ...CON, filtro }, cambios: dosLibres });
       await hastaAsync(() => guion !== null, 30_000);
       const textos = guion!.lineas.map((l) => l.texto);
-      expect(textos.find((t) => /trabajando|Un día normal/.test(t))).toMatch(primera);
-      if (filtro.length === 1) expect(textos[1]).toBe("3. Un día normal.");
+      // JST-415: hay varias variantes por tramo; todas dicen el número de las salas del filtro.
+      expect(textos.join(" ")).toMatch(primera);
+      if (filtro.length === 1) expect(textos.join(" ")).not.toMatch(/\b24\b/);
     }
   }, 30_000);
 });
@@ -1335,14 +1336,17 @@ describe("mascotas del pasillo (JST-96 §7)", () => {
     const t0 = reloj.t;
     vida.tocarMascota("perro");
     let m = vida.mascotas().find((x) => x.id === "perro")!;
-    expect(m.dice).toBe(DICEN.perro[0]);
+    expect(DICEN.perro).toContain(m.dice);
+    const primeraDicha = m.dice;
     expect(m.anim.startsWith("gesto-")).toBe(true);
     expect(m.pos).toEqual(pos);
     hasta(() => vida.mascotas().find((x) => x.id === "perro")!.dice === null, 5_000);
     expect(Math.abs(reloj.t - t0 - MASCOTA_DICE_MS)).toBeLessThanOrEqual(16);
-    // La próxima vez dice lo siguiente; nunca lo mismo 2 veces seguidas.
+    // La próxima vez dice otra de sus 8; nunca lo mismo 2 veces seguidas.
     vida.tocarMascota("perro");
-    expect(vida.mascotas().find((x) => x.id === "perro")!.dice).toBe(DICEN.perro[1]);
+    const segunda = vida.mascotas().find((x) => x.id === "perro")!.dice;
+    expect(DICEN.perro).toContain(segunda);
+    expect(segunda).not.toBe(primeraDicha);
     // Una a la vez: si tocas otra, la anterior se calla.
     vida.tocarMascota("gato");
     const todas = vida.mascotas();
@@ -1420,7 +1424,7 @@ describe("mascotas del pasillo (JST-96 §7)", () => {
     sync({ op: { ...CON, rm: true } });
     vida.tocarMascota("robot");
     const m = vida.mascotas().find((x) => x.id === "robot")!;
-    expect(m.dice).toBe("Bip bup");
+    expect(DICEN.robot).toContain(m.dice);
     expect(m.dormida).toBe(true);
     expect(vida.proximo()).not.toBeNull();
     avanzar(2_000);

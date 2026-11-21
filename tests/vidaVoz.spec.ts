@@ -3,7 +3,7 @@
 // toca el turno, y la descarta si no; y le cuenta a la voz las frases sueltas,
 // las mascotas y las entregas, solo con su tipo prendido.
 import { describe, expect, it } from "vitest";
-import { duracionFrase, Guionista, PAREJA_MS, type AgenteCharla, type ContextoCharla } from "../src/charlas.js";
+import { DICEN, duracionFrase, Guionista, PAREJA_MS, type AgenteCharla, type ContextoCharla } from "../src/charlas.js";
 import { armarPiso, type EntradaSala } from "../src/plano.js";
 import { GRACIA_PREPARADA_MS, JUNTOS_MS, PLAZO_PREPARADA_MS, VOZ_EXTRA_MS, Vida, type AgenteVida, type HechoVoz, type OpcionesVida, type VozVida } from "../src/vida.js";
 import type { Dibujo } from "../src/vista.js";
@@ -291,7 +291,7 @@ describe("rearmar: lo preparado un minuto antes, con los datos de ahora", () => 
     const espera = { tipo: "tarjeta" as const, codigo: "JST-5", desde: null };
     const xs = [ag("Ana", "JST"), ag("Beto", "JST"), ag("Caro", "JST", { need: true, st: "toca", espera })];
     const x = g.armar(ctx(xs), "te-espera")!;
-    expect(x.lineas[0]!.texto).toContain("está esperando");
+    expect(x.lineas.map((l) => l.texto).join(" ")).toMatch(/Caro/);
     const ahora = g.rearmar(ctx([xs[0]!, xs[1]!, { ...xs[2]!, need: false, st: "libre", espera: null }]), x);
     expect(ahora?.lineas.map((l) => l.texto)).not.toEqual(x.lineas.map((l) => l.texto));
   });
@@ -327,7 +327,8 @@ describe("lo demás que la vida le cuenta a la voz, solo con su tipo prendido", 
   it("la mascota que tocas (y, en el TV, la que despierta sola)", () => {
     const { vida, voz, avanzar } = banco({}, { mascotas: true });
     vida.tocarMascota("gato");
-    expect(voz.de("mascota")).toEqual([{ tipo: "mascota", id: "gato", texto: "¡Miau!", sola: false }]);
+    expect(voz.de("mascota")).toEqual([{ tipo: "mascota", id: "gato", texto: expect.any(String), sola: false }]);
+    expect(DICEN.gato).toContain((voz.de("mascota")[0] as { texto: string }).texto);
     voz.leer.mascotas = false;
     vida.tocarMascota("perro");
     expect(voz.de("mascota")).toHaveLength(1);

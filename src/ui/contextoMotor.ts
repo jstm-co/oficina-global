@@ -100,7 +100,9 @@ export class VozContextoElegida implements VozContexto {
     void (async () => {
       for (const t of trozos) {
         if (cortada) return;
-        const i = this.todos.indexOf(t, this.pos);
+        // Al repetir una frase anterior (JST-414) el trozo queda antes de `pos`: se busca desde el principio.
+        const desde = this.todos.indexOf(t, this.pos);
+        const i = desde >= 0 ? desde : this.todos.indexOf(t);
         const siguen = (i >= 0 ? this.todos.slice(i + 1, i + 3) : trozos.slice(trozos.indexOf(t) + 1, trozos.indexOf(t) + 3)).map((texto) => ({ texto }) as FraseResumen);
         if (i >= 0) this.pos = i + 1;
         const h = motor.decir({ texto: t } as FraseResumen, VELOCIDAD, () => undefined, siguen);
