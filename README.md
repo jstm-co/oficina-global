@@ -99,11 +99,12 @@ In the office, open the «Voces» (voices) panel, pick the engines and press **P
 |---|---|---|---|
 | 10 voices (5 female, 5 male) | Supertonic 3 (int8, with `sherpa-onnx-node`) | Ships with the plugin: downloads 145 MB once and uses ~0.5 GB of memory while recording. Mac, Linux and Windows | OpenRAIL-M (the model); Apache 2.0 (`sherpa-onnx`) |
 | Lorenzo and Catalina (Chilean) | Microsoft Edge TTS (`edge-tts`) | `uv`, `ffmpeg` and internet access. Unofficial free service: **Microsoft receives the text of every phrase** (agent and issue names) | LGPL-3.0 (the library) |
+| 16 more Edge voices in Spanish from other countries, one woman and one man each: Dalia and Jorge (Mexico), Elvira and Álvaro (Spain), Elena and Tomás (Argentina), Salomé and Gonzalo (Colombia), Camila and Alex (Peru, shown as «Alex (Perú)»), Paloma and Alonso (United States), Paola and Sebastián (Venezuela), Valentina and Mateo (Uruguay) | Microsoft Edge TTS (`es-MX-DaliaNeural`, `es-ES-AlvaroNeural`, …) | Same as Lorenzo and Catalina: **Microsoft receives the text**. They are only for choosing (they are not handed out to agents on their own); their ▶ sample is recorded on the spot | LGPL-3.0 (the library) |
 | Alex, Dora and Santa | Kokoro-82M (`kokoro-onnx`) | `uv` and `ffmpeg`; downloads 354 MB once | Apache 2.0 |
 | 2 Chilean clones | Chatterbox Multilingual (`chatterbox-tts`) | `uv` and `ffmpeg`; 4–5 GB of memory and ~10 min per agent | MIT |
 | 2 Chilean clones | Qwen3-TTS 0.6B (`qwen-tts`) | Same as Chatterbox | Apache 2.0 |
 
-- Only the engines you pick are used. Edge is not used unless you pick it, so no text goes to Microsoft.
+- Only the engines you pick are used. Edge (Lorenzo, Catalina and the voices from other countries) is not used unless you pick it, so no text goes to Microsoft.
 - Supertonic needs neither `uv` nor `ffmpeg`. The others run with `uv run --with <package>` and need `uv` and `ffmpeg` on the `PATH` Paperclip starts with; the panel says which one can't be used and why.
 - The models go to `~/.cache/oficina-voces/` and are checked against their SHA-256 when downloaded.
 - The audio files live **outside the plugin**, so an upgrade doesn't delete them: in `~/Library/Application Support/oficina-global/voces/` on a Mac, `~/.local/share/oficina-global/voces/` on Linux and `%LOCALAPPDATA%\oficina-global\voces\` on Windows, in one folder per plugin install. On start, the plugin links (or copies) them into `dist/ui/voces/` to serve them. The first time, it adopts the ones that were already there.
@@ -152,7 +153,7 @@ The code is in `src/` (the logic, without React or the DOM, kept apart from `src
 - Sound and voices start with your first click on the tab after opening it.
 - iPhone has no full screen for web pages: TV mode explains how to add it to the home screen. It was not tested in Safari or on a real iPhone.
 - The 3D view needs WebGL 2 and is for computers only (not on phones or in TV mode).
-- Edge TTS is an unofficial service: if Microsoft changes it, the Lorenzo and Catalina voices stop generating until `edge-tts` is updated.
+- Edge TTS is an unofficial service: if Microsoft changes it, the Edge voices (Lorenzo, Catalina and the ones from other countries) stop generating until `edge-tts` is updated.
 
 ## Contributing and releases
 

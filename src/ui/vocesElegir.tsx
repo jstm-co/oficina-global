@@ -7,12 +7,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { nombreCorto, textoVoz } from "../avisos.js";
 import { esAlMomento, grupoDe, nombreEnLista, NUMERO_VOZ, porqueNoAlcanza, tardaGrabar, VOCES_AL_MOMENTO, type GrabandoVoz, type VozLectura } from "../eleccionVoces.js";
-import { claveAudio, VOCES, vozPorId, type IndiceVoces, type VozId } from "../voces.js";
+import { claveAudio, VOCES, vocesEdgePorPais, vozPorId, type IndiceVoces, type Voz, type VozId } from "../voces.js";
 import type { AgenteVista } from "../vista.js";
 import { cargarIndice, useIndiceVoces } from "./audiosVoces.js";
 import { descartarError, elegirLectura, elegirVozAgente, reiniciarVoces, reintentar, useEleccion, useErrorVoz, useEstadoMotores, useGrabando, useHayCambios } from "./eleccion.js";
 import { motivoNoDisponible } from "./prepararVoces.js";
-import { detenerMuestra, tocarMuestra, useMuestra } from "./muestraVoz.js";
+import { detenerMuestra, fijarEmpresaMuestra, tocarMuestra, useFalloMuestra, useMuestra } from "./muestraVoz.js";
 import { cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
 
 // ---------------------------------------------------------------------------
@@ -30,25 +30,34 @@ interface Opcion {
   /** Por qué no se puede elegir (los clones al leer al momento); se ve, y el ▶ sigue funcionando. */
   porque: string | null;
   grupo: "momento" | "no" | null;
+  /** JST-412: el título que abre cada sección de la lista («Edge · Chile»); `null`: sigue en la de arriba. */
+  seccion: string | null;
 }
 
 const mayuscula = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
-/** Las opciones de cada lista, en orden (JST-324 §1.1). `edgeAviso`: «Leer contexto» manda el texto de la tarea a Microsoft con Lorenzo o Catalina. */
+/** Las opciones de cada lista, en orden (JST-324 §1.1). `edgeAviso`: «Leer contexto» manda el texto de la tarea a Microsoft con cualquier voz de Edge (Lorenzo, Catalina y las de otros países). */
 export function opcionesDe(lugar: Lugar, hoyResumen: string, edgeAviso = false): Opcion[] {
   const de = (id: VozId): Opcion => {
     const v = vozPorId(id)!;
     const porque = lugar === "agente" ? null : porqueNoAlcanza(id);
     const microsoft = edgeAviso && v.motor === "edge" ? " · manda el texto a Microsoft" : "";
     const graba = lugar === "agente" ? ` · graba sus frases en ${tardaGrabar(id)}` : "";
-    return { valor: id, nombre: nombreEnLista(id), numero: esAlMomento(id) ? (NUMERO_VOZ[id] ?? null) : null, detalle: `${mayuscula(v.detalle)}${microsoft}${graba}`, porque, grupo: lugar === "agente" ? null : porque ? "no" : "momento" };
+    return { valor: id, nombre: nombreEnLista(id), numero: esAlMomento(id) ? (NUMERO_VOZ[id] ?? null) : null, detalle: `${mayuscula(v.detalle)}${microsoft}${graba}`, porque, grupo: lugar === "agente" ? null : porque ? "no" : "momento", seccion: null };
   };
-  if (lugar === "agente") return VOCES.map((v) => de(v.id));
+  // JST-412: primero las de Edge, por país (Chile y después los demás por orden alfabético); después los grupos de siempre.
   const lista: Opcion[] = [];
-  if (lugar === "contexto") lista.push({ valor: "igual", nombre: "Igual que el Resumen", numero: null, detalle: `Hoy: ${hoyResumen}`, porque: null, grupo: "momento" });
-  for (const id of VOCES_AL_MOMENTO) lista.push(de(id));
-  lista.push({ valor: "navegador", nombre: "Voz del navegador", numero: null, detalle: "No espera, pero suena robótica", porque: null, grupo: "momento" });
-  for (const v of VOCES) if (!VOCES_AL_MOMENTO.includes(v.id)) lista.push(de(v.id));
+  if (lugar === "contexto") lista.push({ valor: "igual", nombre: "Igual que el Resumen", numero: null, detalle: `Hoy: ${hoyResumen}`, porque: null, grupo: "momento", seccion: null });
+  for (const g of vocesEdgePorPais()) g.voces.forEach((v, i) => lista.push({ ...de(v.id), seccion: i === 0 ? `Edge · ${g.nombre}` : null }));
+  const resto = (v: Voz) => v.motor !== "edge";
+  if (lugar === "agente") {
+    VOCES.filter(resto).forEach((v, i) => lista.push({ ...de(v.id), seccion: i === 0 ? "Otros motores" : null }));
+    return lista;
+  }
+  const rapidas = VOCES_AL_MOMENTO.filter((id) => vozPorId(id)!.motor !== "edge");
+  rapidas.forEach((id, i) => lista.push({ ...de(id), seccion: i === 0 ? "Leen al momento" : null }));
+  lista.push({ valor: "navegador", nombre: "Voz del navegador", numero: null, detalle: "No espera, pero suena robótica", porque: null, grupo: "momento", seccion: null });
+  VOCES.filter((v) => !VOCES_AL_MOMENTO.includes(v.id)).forEach((v, i) => lista.push({ ...de(v.id), seccion: i === 0 ? "No alcanzan a leer al momento" : null }));
   return lista;
 }
 
@@ -105,10 +114,17 @@ function ListaVoces({ opciones, valor, cargando, onElegir, etiqueta, noDisponibl
     );
   }
   const filas: ReactNode[] = [];
-  let grupo: Opcion["grupo"] | undefined;
+  const fallo = useFalloMuestra();
+  if (fallo) {
+    filas.push(
+      <div key="fallo-muestra" className="vz-err" role="status">
+        <Icono nombre="triangle-alert" tam={14} />
+        <span>{fallo.texto}</span>
+      </div>,
+    );
+  }
   for (const o of opciones) {
-    if (o.grupo && o.grupo !== grupo) filas.push(<div key={`g-${o.grupo}`} className="vz-gt">{o.grupo === "momento" ? "Leen al momento" : "No alcanzan a leer al momento"}</div>);
-    grupo = o.grupo;
+    if (o.seccion) filas.push(<div key={`g-${o.seccion}`} className="vz-gt">{o.seccion}</div>);
     const sin = noDisponible?.(o) ?? null;
     const porque = o.porque ?? sin;
     const on = o.valor === valor;
@@ -244,6 +260,9 @@ export function QuienHabla({ agentes, companyId, onAgentes }: { agentes: readonl
     void cargarIndice();
   }, []);
   useEffect(() => () => detenerMuestra(), []);
+  useEffect(() => {
+    fijarEmpresaMuestra(companyId);
+  }, [companyId]);
   const hoy = e.resumen === "navegador" ? "Voz del navegador" : nombreEnLista(e.resumen);
   const elegir = (quien: "resumen" | "contexto", v: Opcion["valor"]) => {
     setAbierta(null);
@@ -326,6 +345,7 @@ function Grabando({ g }: { g: GrabandoVoz }) {
 
 function FilaAgente({ a, indice, grabando, companyId, sinMac }: { a: AgenteVista; indice: IndiceVoces | null; grabando: GrabandoVoz | undefined; companyId: string; sinMac: boolean }) {
   const [abierta, setAbierta] = useState(false);
+  const fallo = useFalloMuestra();
   const actual = indice?.agentes[a.id] ?? null;
   const cargando = indice === null;
   const elegir = (v: Opcion["valor"]) => {
@@ -362,6 +382,12 @@ function FilaAgente({ a, indice, grabando, companyId, sinMac }: { a: AgenteVista
       </div>
       {grabando ? <Grabando g={grabando} /> : null}
       <ErrorFila donde={`agente:${a.id}`} companyId={companyId} />
+      {fallo && !abierta && fallo.voz === actual ? (
+        <div className="vz-err" role="status">
+          <Icono nombre="triangle-alert" tam={14} />
+          <span>{fallo.texto}</span>
+        </div>
+      ) : null}
       {abierta ? <ListaVoces opciones={opcionesDe("agente", "")} valor={grabando && !grabando.error ? grabando.voz : (actual ?? "")} cargando={cargando} onElegir={elegir} etiqueta={`Voz de ${a.nombre}`} noDisponible={noDisponible} /> : null}
     </>
   );
@@ -376,6 +402,9 @@ export function PaginaAgentes({ agentes, companyId, sinMac, onVolver }: { agente
     void cargarIndice();
   }, []);
   useEffect(() => () => detenerMuestra(), []);
+  useEffect(() => {
+    fijarEmpresaMuestra(companyId);
+  }, [companyId]);
   const alternar = useCallback((id: string) => {
     setAbiertas((antes) => {
       const n = antes.includes(id) ? antes.filter((x) => x !== id) : [...antes, id];

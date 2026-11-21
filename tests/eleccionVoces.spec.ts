@@ -16,8 +16,13 @@ describe("lo que se elige", () => {
   });
 
   it("solo 5 voces (y desde la 0.13.0 las 10 de Supertonic) y la del navegador leen al momento; un clon, no (14 a 28 s por la primera frase)", () => {
-    expect(VOCES_AL_MOMENTO.slice(0, 5)).toEqual(["lorenzo", "catalina", "alex", "dora", "santa"]);
-    expect(VOCES_AL_MOMENTO.slice(5)).toEqual(VOCES.filter((v) => v.motor === "supertonic").map((v) => v.id));
+    // JST-412: primero las 18 de Edge (Chile y después los demás países), luego Kokoro y Supertonic.
+    expect(VOCES_AL_MOMENTO.slice(0, 2)).toEqual(["lorenzo", "catalina"]);
+    expect(VOCES_AL_MOMENTO.slice(0, 18).sort()).toEqual(VOCES.filter((v) => v.motor === "edge").map((v) => v.id).sort());
+    expect(VOCES_AL_MOMENTO.slice(18)).toEqual(["alex", "dora", "santa", ...VOCES.filter((v) => v.motor === "supertonic").map((v) => v.id)]);
+    expect(VOCES_AL_MOMENTO).toHaveLength(31);
+    expect(esAlMomento("edge-es-mx-dalia")).toBe(true);
+    expect(leerEleccion({ resumen: "edge-es-ar-elena", contexto: "edge-es-es-alvaro" })).toMatchObject({ resumen: "edge-es-ar-elena", contexto: "edge-es-es-alvaro" });
     expect(esAlMomento("supertonic-m1")).toBe(true);
     expect(porqueNoAlcanza("supertonic-f2")).toBeNull();
     expect(esAlMomento("alex")).toBe(true);
@@ -102,11 +107,31 @@ describe("las listas del panel", () => {
     expect(o.find((x) => x.valor === "alex")!.numero).toBe(20);
   });
 
-  it("«Leer contexto» suma «Igual que el Resumen» primero, y avisa que Lorenzo y Catalina mandan el texto a Microsoft", () => {
+  it("«Leer contexto» suma «Igual que el Resumen» primero, y avisa que todas las de Edge (Lorenzo, Catalina y las de otros países) mandan el texto a Microsoft", () => {
     const o = opcionesDe("contexto", "Alex", true);
     expect(o[0]).toMatchObject({ valor: "igual", nombre: "Igual que el Resumen", detalle: "Hoy: Alex" });
     expect(o.find((x) => x.valor === "lorenzo")!.detalle).toMatch(/Microsoft/);
     expect(o.find((x) => x.valor === "dora")!.detalle).not.toMatch(/Microsoft/);
+    for (const v of VOCES.filter((x) => x.motor === "edge")) expect(o.find((x) => x.valor === v.id)!.detalle).toMatch(/Microsoft/);
+  });
+
+  it("JST-412: en las tres listas, las de Edge van agrupadas por país (Chile primero, el resto alfabético) y antes de los grupos de siempre", () => {
+    const titulos = (lugar: "resumen" | "contexto" | "agente") => opcionesDe(lugar, "Alex").filter((x) => x.seccion).map((x) => x.seccion);
+    const edge = ["Edge · Chile", "Edge · Argentina", "Edge · Colombia", "Edge · España", "Edge · Estados Unidos", "Edge · México", "Edge · Perú", "Edge · Uruguay", "Edge · Venezuela"];
+    expect(titulos("resumen")).toEqual([...edge, "Leen al momento", "No alcanzan a leer al momento"]);
+    expect(titulos("contexto")).toEqual(titulos("resumen"));
+    expect(titulos("agente")).toEqual([...edge, "Otros motores"]);
+    const r = opcionesDe("resumen", "Alex").map((x) => x.valor);
+    expect(r.slice(0, 4)).toEqual(["lorenzo", "catalina", "edge-es-ar-elena", "edge-es-ar-tomas"]);
+    expect(r.indexOf("edge-es-uy-mateo")).toBeLessThan(r.indexOf("alex"));
+  });
+
+  it("JST-412: las nuevas se pueden elegir para el Resumen, «Leer contexto» y cada agente, sin «porque»", () => {
+    for (const lugar of ["resumen", "contexto", "agente"] as const) {
+      const o = opcionesDe(lugar, "Alex");
+      for (const v of VOCES.filter((x) => x.motor === "edge")) expect(o.find((x) => x.valor === v.id)).toMatchObject({ porque: null, nombre: v.nombre });
+    }
+    expect(tardaGrabar("edge-es-mx-dalia")).toBe("~1 min");
   });
 
   it("cada agente puede tener cualquiera de las 9, sin grupos, y la lista dice cuánto tarda en grabarse", () => {

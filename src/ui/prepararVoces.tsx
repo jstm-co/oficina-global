@@ -26,8 +26,8 @@ const MOTORES: Record<GrupoMotor, { nombre: string; voces: string; costo: (bajar
   },
   edge: {
     nombre: "Edge",
-    voces: "Lorenzo y Catalina",
-    costo: () => "Las voces de Microsoft: cada frase (con el nombre del agente y, al momento, la tarea) va a sus servidores. Necesita uv, ffmpeg e internet.",
+    voces: "Lorenzo y Catalina (y 16 más de otros países, que se graban al elegirlas)",
+    costo: () => "Las voces de Edge (Lorenzo, Catalina y las de otros países) mandan el texto a Microsoft: cada frase (con el nombre del agente y, al momento, la tarea) va a sus servidores. Necesita uv, ffmpeg e internet.",
   },
   clones: {
     nombre: "Clones chilenos",

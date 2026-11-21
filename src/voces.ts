@@ -3,6 +3,9 @@
 // página (que solo los reproduce).
 //
 // - Lorenzo y Catalina: voces chilenas de Microsoft (Edge TTS).
+// - JST-412: 16 voces más de Edge, en español de otros países (una mujer y un
+//   hombre por país). Son solo por elección: no entran al reparto automático
+//   (`VOCES_REPARTO`), así una instalación que ya existe no cambia sola.
 // - Alex, Dora y Santa: Kokoro-82M.
 // - 4 clones de un hombre y una mujer chilenos (Google Crowdsourced Chilean
 //   Spanish, OpenSLR 71, CC BY-SA 4.0): 2 con Chatterbox y 2 con Qwen3-TTS.
@@ -22,7 +25,10 @@
 import { duracionWav } from "./audio.js";
 
 export type VozSupertonic = `supertonic-${"f" | "m"}${1 | 2 | 3 | 4 | 5}`;
-export type VozId = "lorenzo" | "catalina" | "alex" | "dora" | "santa" | "chatterbox-hombre" | "chatterbox-mujer" | "qwen3-hombre" | "qwen3-mujer" | VozSupertonic;
+/** JST-412: los países de las voces de Edge (código en minúscula, como en la clave `es-MX-…`). */
+export type PaisVoz = "cl" | "ar" | "co" | "es" | "us" | "mx" | "pe" | "uy" | "ve";
+export type VozEdgePais = `edge-es-${Exclude<PaisVoz, "cl">}-${string}`;
+export type VozId = "lorenzo" | "catalina" | "alex" | "dora" | "santa" | "chatterbox-hombre" | "chatterbox-mujer" | "qwen3-hombre" | "qwen3-mujer" | VozSupertonic | VozEdgePais;
 export type Motor = "edge" | "kokoro" | "chatterbox" | "qwen3" | "supertonic";
 
 export interface Voz {
@@ -33,7 +39,54 @@ export interface Voz {
   motor: Motor;
   /** La voz en su motor, o el audio de referencia que se clona (en Supertonic, su número: «0» a «9»). */
   clave: string;
+  /** JST-412: el país o acento de la voz (las de Edge; para agrupar en el panel). */
+  pais?: PaisVoz;
+  /** JST-412: se elige, pero el reparto automático entre agentes no la usa (ver `VOCES_REPARTO`). */
+  soloEleccion?: true;
 }
+
+/** JST-412: cómo se llama cada país en el panel. Chile primero; el resto, por orden alfabético (`paisesEdge`). */
+export const NOMBRE_PAIS: Readonly<Record<PaisVoz, string>> = {
+  cl: "Chile",
+  ar: "Argentina",
+  co: "Colombia",
+  es: "España",
+  us: "Estados Unidos",
+  mx: "México",
+  pe: "Perú",
+  uy: "Uruguay",
+  ve: "Venezuela",
+};
+
+// [país, adjetivo de la mujer, adjetivo del hombre, mujer (nombre, clave), hombre (nombre, clave)]. Nombres verificados con `edge-tts --list-voices` (7.3.1).
+const EDGE_PAISES: readonly (readonly [Exclude<PaisVoz, "cl">, string, string, readonly [string, string], readonly [string, string]])[] = [
+  ["mx", "mexicana", "mexicano", ["Dalia", "Dalia"], ["Jorge", "Jorge"]],
+  ["es", "española", "español", ["Elvira", "Elvira"], ["Álvaro", "Alvaro"]],
+  ["ar", "argentina", "argentino", ["Elena", "Elena"], ["Tomás", "Tomas"]],
+  ["co", "colombiana", "colombiano", ["Salomé", "Salome"], ["Gonzalo", "Gonzalo"]],
+  ["pe", "peruana", "peruano", ["Camila", "Camila"], ["Alex (Perú)", "Alex"]],
+  ["us", "estadounidense", "estadounidense", ["Paloma", "Paloma"], ["Alonso", "Alonso"]],
+  ["ve", "venezolana", "venezolano", ["Paola", "Paola"], ["Sebastián", "Sebastian"]],
+  ["uy", "uruguaya", "uruguayo", ["Valentina", "Valentina"], ["Mateo", "Mateo"]],
+];
+
+/** JST-412: id estable `edge-es-mx-dalia` (el apellido de la clave, sin tildes ni mayúsculas). */
+const EDGE_OTROS: readonly Voz[] = EDGE_PAISES.flatMap(([pais, adjM, adjH, [nomM, claveM], [nomH, claveH]]) =>
+  (
+    [
+      ["mujer", adjM, nomM, claveM],
+      ["hombre", adjH, nomH, claveH],
+    ] as const
+  ).map(([quien, adj, nombre, clave]) => ({
+    id: `edge-es-${pais}-${clave.toLowerCase()}` as VozEdgePais,
+    nombre,
+    detalle: `${quien}, ${adj} · Edge`,
+    motor: "edge" as const,
+    clave: `es-${pais.toUpperCase()}-${clave}Neural`,
+    pais,
+    soloEleccion: true as const,
+  })),
+);
 
 /**
  * 0.13.0: F1 a F5 son las voces 0 a 4 del modelo y M1 a M5, de la 5 a la 9
@@ -50,8 +103,8 @@ const SUPERTONIC: readonly Voz[] = (["f", "m"] as const).flatMap((g, i) =>
 );
 
 export const VOCES: readonly Voz[] = [
-  { id: "lorenzo", nombre: "Lorenzo", detalle: "hombre, chileno · Edge", motor: "edge", clave: "es-CL-LorenzoNeural" },
-  { id: "catalina", nombre: "Catalina", detalle: "mujer, chilena · Edge", motor: "edge", clave: "es-CL-CatalinaNeural" },
+  { id: "lorenzo", nombre: "Lorenzo", detalle: "hombre, chileno · Edge", motor: "edge", clave: "es-CL-LorenzoNeural", pais: "cl" },
+  { id: "catalina", nombre: "Catalina", detalle: "mujer, chilena · Edge", motor: "edge", clave: "es-CL-CatalinaNeural", pais: "cl" },
   { id: "alex", nombre: "Alex", detalle: "hombre · Kokoro", motor: "kokoro", clave: "em_alex" },
   { id: "dora", nombre: "Dora", detalle: "mujer · Kokoro", motor: "kokoro", clave: "ef_dora" },
   { id: "santa", nombre: "Santa", detalle: "hombre · Kokoro", motor: "kokoro", clave: "em_santa" },
@@ -60,7 +113,18 @@ export const VOCES: readonly Voz[] = [
   { id: "qwen3-hombre", nombre: "Clon chileno (Qwen3)", detalle: "clon del mismo hombre chileno · Qwen3", motor: "qwen3", clave: "ref_hombre_cl" },
   { id: "qwen3-mujer", nombre: "Clon chilena (Qwen3)", detalle: "clon de la misma mujer chilena · Qwen3", motor: "qwen3", clave: "ref_mujer_cl" },
   ...SUPERTONIC,
+  ...EDGE_OTROS,
 ];
+
+/** JST-412: las voces que reparte el generador entre los agentes nuevos («para que se usen todas»): las 19 de siempre. */
+export const VOCES_REPARTO: readonly Voz[] = VOCES.filter((v) => !v.soloEleccion);
+
+/** JST-412: los países de las voces de Edge, en el orden del selector: Chile primero y el resto por orden alfabético. */
+export function paisesEdge(): PaisVoz[] {
+  const otros = [...new Set(VOCES.filter((v) => v.motor === "edge" && v.pais && v.pais !== "cl").map((v) => v.pais!))];
+  otros.sort((a, b) => NOMBRE_PAIS[a].localeCompare(NOMBRE_PAIS[b], "es"));
+  return ["cl", ...otros];
+}
 
 /** La voz de los resúmenes («3 agentes terminaron»): rápida de generar y clara. */
 export const VOZ_RESUMEN: VozId = "catalina";
@@ -210,4 +274,9 @@ export function duracionMp3(b: Uint8Array): number | null {
 /** 0.13.0: cuánto dura un audio de las voces (ms), sea WAV (Supertonic) o MP3; `null` si no es ninguno. */
 export function duracionAudio(b: Uint8Array): number | null {
   return duracionWav(b) ?? duracionMp3(b);
+}
+
+/** JST-412: las voces de Edge agrupadas por país, en el orden del selector (Chile primero; dentro de cada país, como están en `VOCES`: la mujer y el hombre). */
+export function vocesEdgePorPais(): { pais: PaisVoz; nombre: string; voces: Voz[] }[] {
+  return paisesEdge().map((pais) => ({ pais, nombre: NOMBRE_PAIS[pais], voces: VOCES.filter((v) => v.motor === "edge" && v.pais === pais) }));
 }

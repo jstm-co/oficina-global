@@ -430,7 +430,7 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
         <span className="of-avp-l">
           <Icono nombre="volume-2" tam={14} />
           <span>
-            <b>19 voces: 10 de Supertonic, Lorenzo, Catalina, Alex, Dora, Santa y 4 clones chilenos</b>
+            <b>35 voces: 10 de Supertonic, 18 de Edge (Lorenzo, Catalina y 16 de otros países), Alex, Dora, Santa y 4 clones chilenos</b>
             <em>{hayVoces ? "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez habla la del navegador" : "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez solo se verá el subtítulo"}</em>
           </span>
         </span>
@@ -471,7 +471,7 @@ function MasVoces({ sinMac, motivo }: { sinMac: boolean; motivo: string | null }
         <span>
           Habla uno por vez y los avisos pasan primero. Se oye una conversación por minuto como mucho; las demás, y lo que llega mientras alguien habla, se ven sin voz. «✓ listo» y la mano con su tarea van con «Terminé» y «Te necesito». Al abrir o recargar Paperclip, empiezan con tu primer clic. Voces clonadas a partir de Google Crowdsourced Chilean Spanish (OpenSLR 71), CC BY-SA 4.0.
           <br />
-          <b>De qué se trata:</b> «Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Lorenzo y Catalina lo piden a Microsoft (va el nombre de la tarea o la pregunta).
+          <b>De qué se trata:</b> «Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Las voces de Edge (Lorenzo, Catalina y las de otros países) lo piden a Microsoft (va el nombre de la tarea o la pregunta).
           {sinMac ? (
             <>
               <br />
