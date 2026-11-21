@@ -153,7 +153,7 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 :where(.of, .of-layer) :focus-visible { outline: 2px solid var(--of-ring); outline-offset: 2px; }
 /* En pantallas táctiles el host da 44 px de alto mínimo a todo botón (pointer: coarse) y estiraría los
    interruptores, los botones chicos y las pastillas. La Oficina usa las medidas del diseño; donde hace falta,
-   el área táctil de 44 px va aparte (JST-95 §6) o el control ya mide 44 en el celular. */
+   el área de toque de 44 px va aparte (JST-95 §6) o el control ya mide 44 en el celular. */
 @media (pointer: coarse) { .of :where(button, [role="button"]), .of-layer :where(button, [role="button"]) { min-height: 0; } }
 
 /* ---------- Página ---------- */

@@ -9,7 +9,7 @@ export const CSS_AVISOS = /* css */ `
 .of-hbtn.is-on svg { color: var(--of-s-toca); }
 .of-hbtn.is-open, .of-hbtn.is-open:hover { background: var(--of-muted); }
 .of-ibtn.of-hbtn { width: 28px; height: 28px; border-radius: 7px; }
-/* Área táctil de 44 px en el celular */
+/* Área de toque de 44 px en el celular */
 .of-ibtn.of-hbtn::before { content: ""; position: absolute; inset: -8px; }
 .of-ibtn.of-hbtn .of-hdot { top: -2px; right: -2px; }
 
