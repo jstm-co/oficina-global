@@ -7,33 +7,34 @@
 // en el navegador), los números con lo elegido y «Leer el resumen». Al abrirlo
 // se piden lo terminado y la cola (lo demás ya lo tiene la Oficina).
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type TouchEvent } from "react";
-import { NOMBRE_SECCION, alternarEmpresa, alternarParte, type Largo, type Parte } from "../resumen/frases.js";
+import { alternarEmpresa, alternarParte, type Largo, type Parte } from "../resumen/frases.js";
 import { DESDES, type Desde } from "../resumen/tiempo.js";
+import { msg, t } from "../i18n.js";
 import { Capa, useEsc } from "./capas.js";
 import { IA_CHROME, NOMBRE_IA } from "./ia.js";
 import { abrirMenu, Popover, useMenuAbierto } from "./paneles.js";
 import { cx, EtiquetaEmpresa, Icono } from "./piso.js";
-import { empresasDe, resumen, useResumen } from "./resumen.js";
+import { empresasDe, nombreSeccion, resumen, useResumen } from "./resumen.js";
 import { iaParaResumen } from "./resumenIa.js";
 
-const TEXTO_DESDE: Readonly<Record<Desde, string>> = { nuevo: "Lo nuevo", hoy: "Hoy", "24h": "24 h", "7d": "7 días" };
+const TEXTO_DESDE: Readonly<Record<Desde, string>> = { nuevo: msg("Lo nuevo"), hoy: msg("Hoy"), "24h": msg("24 h"), "7d": msg("7 días") };
 const PARTES_MENU: ReadonlyArray<{ k: Parte; texto: string; icono: string }> = [
-  { k: "toca", texto: "Te esperan", icono: "hand" },
-  { k: "hecho", texto: "Terminadas", icono: "circle-check" },
-  { k: "trabajan", texto: "Trabajando", icono: "keyboard" },
-  { k: "cola", texto: "En cola", icono: "hourglass" },
+  { k: "toca", texto: msg("Te esperan"), icono: "hand" },
+  { k: "hecho", texto: msg("Terminadas"), icono: "circle-check" },
+  { k: "trabajan", texto: msg("Trabajando"), icono: "keyboard" },
+  { k: "cola", texto: msg("En cola"), icono: "hourglass" },
 ];
 const LARGOS: ReadonlyArray<{ k: Largo; texto: string; dura: string }> = [
-  { k: "corto", texto: "Corto", dura: "~1 min" },
-  { k: "completo", texto: "Completo", dura: "~3 min" },
+  { k: "corto", texto: msg("Corto"), dura: "~1 min" },
+  { k: "completo", texto: msg("Completo"), dura: "~3 min" },
 ];
 
-const Esqueleto = () => <span className="of-rs-sk is-num" aria-label="Leyendo" />;
+const Esqueleto = () => <span className="of-rs-sk is-num" aria-label={t("Leyendo")} />;
 /** Lo que no se pudo leer (no responde ninguna empresa): sin número, no un 0 (JST-262). */
 const SinDato = () => (
-  <span title="No pude leerlo">
+  <span title={t("No pude leerlo")}>
     <span aria-hidden="true">—</span>
-    <span className="of-sr">sin dato</span>
+    <span className="of-sr">{t("sin dato")}</span>
   </span>
 );
 
@@ -89,32 +90,32 @@ export function PanelResumen({ celular }: { celular: boolean }) {
     <div className="of-avp of-rsp">
       <div className="of-avp-h">
         <Icono nombre="audio-lines" tam={14} />
-        <b>Resumen</b>
+        <b>{t("Resumen")}</b>
         <span className="of-sp" />
-        <span className="of-rs-dur" title="Lo que dura leído">
+        <span className="of-rs-dur" title={t("Lo que dura leído")}>
           {sinDato ? "—" : (n?.dura ?? "…")}
         </span>
       </div>
-      <p>Te lo leo en voz alta, con lo que te toca primero.</p>
+      <p>{t("Te lo leo en voz alta, con lo que te toca primero.")}</p>
       <span className="of-rs-k" id={kDesde}>
-        Desde cuándo
+        {t("Desde cuándo")}
       </span>
-      <Segmentado opciones={DESDES.map((k) => ({ k, texto: TEXTO_DESDE[k] }))} valor={op.desde} etiqueta="Desde cuándo" onCambiar={(desde) => r.cambiarOpciones({ desde })} />
+      <Segmentado opciones={DESDES.map((k) => ({ k, texto: t(TEXTO_DESDE[k]) }))} valor={op.desde} etiqueta={t("Desde cuándo")} onCambiar={(desde) => r.cambiarOpciones({ desde })} />
       <div className="of-rs-hint">
         {n?.explicacion ?? ""}
         {n?.ninguna ? null : (
           <>
             {" · "}
-            <b>{n?.hecho === null || !n ? <Esqueleto /> : n.hecho === 1 ? "1 terminada" : `${n.hecho} terminadas`}</b>
+            <b>{n?.hecho === null || !n ? <Esqueleto /> : n.hecho === 1 ? t("1 terminada") : t("{n} terminadas", { n: n.hecho })}</b>
           </>
         )}
       </div>
       <span className="of-rs-k" id={kCo}>
-        De qué empresas
+        {t("De qué empresas")}
       </span>
       <div className="of-rs-chips" role="group" aria-labelledby={kCo}>
         <button type="button" className="of-rs-chip is-todas" aria-pressed={op.co.length === 0} onClick={() => r.cambiarOpciones({ co: [] })}>
-          Todas
+          {t("Todas")}
         </button>
         {empresas.map((e) => {
           const falla = n?.fallan.includes(e.prefijo) ?? false;
@@ -124,8 +125,8 @@ export function PanelResumen({ celular }: { celular: boolean }) {
               type="button"
               className={cx("of-rs-chip", falla && "is-falla")}
               aria-pressed={op.co.includes(e.prefijo)}
-              title={falla ? "No responde" : e.nombre}
-              aria-label={celular ? `${e.nombre}${falla ? ", no responde" : ""}` : undefined}
+              title={falla ? t("No responde") : e.nombre}
+              aria-label={celular ? (falla ? t("{nombre}, no responde", { nombre: e.nombre }) : e.nombre) : undefined}
               onClick={() => r.cambiarOpciones({ co: alternarEmpresa(op.co, e.prefijo, prefijos) })}
             >
               <EtiquetaEmpresa prefijo={e.prefijo} />
@@ -135,7 +136,7 @@ export function PanelResumen({ celular }: { celular: boolean }) {
         })}
       </div>
       <span className="of-rs-k" id={kPartes}>
-        Qué te cuento
+        {t("Qué te cuento")}
       </span>
       <div className="of-rs-partes" role="group" aria-labelledby={kPartes}>
         {PARTES_MENU.map((p) => {
@@ -148,62 +149,68 @@ export function PanelResumen({ celular }: { celular: boolean }) {
               role="checkbox"
               aria-checked={on}
               className={cx("of-rs-parte", `is-${p.k}`)}
-              title={on && op.partes.length === 1 ? "Siempre queda al menos una" : NOMBRE_SECCION[p.k]}
+              title={on && op.partes.length === 1 ? t("Siempre queda al menos una") : nombreSeccion(p.k)}
               onClick={() => r.cambiarOpciones({ partes: alternarParte(op.partes, p.k) })}
             >
               <span className="of-rs-ck" aria-hidden="true">
                 {on ? <Icono nombre="check" tam={12} /> : null}
               </span>
               <Icono nombre={p.icono} tam={14} className="of-rs-pi" />
-              <span className="of-rs-pt">{p.texto}</span>
+              <span className="of-rs-pt">{t(p.texto)}</span>
               <span className="of-rs-pn">{v === null ? sinDato ? <SinDato /> : <Esqueleto /> : v > 999 ? "999+" : v}</span>
             </button>
           );
         })}
       </div>
       <span className="of-rs-k" id={kLargo}>
-        Largo
+        {t("Largo")}
       </span>
       <Segmentado
         opciones={LARGOS.map((l) => ({
           k: l.k,
           texto: (
             <>
-              {l.texto}
+              {t(l.texto)}
               <em>{l.dura}</em>
             </>
           ),
         }))}
         valor={op.largo}
-        etiqueta="Largo"
+        etiqueta={t("Largo")}
         onCambiar={(largo) => r.cambiarOpciones({ largo })}
       />
       {n?.ninguna ? (
         <div className="of-rs-error" role="alert">
           <span>
-            <b>No pude leer Paperclip.</b> Revisa la conexión y vuelve a probar.
+            <b>{t("No pude leer Paperclip.")}</b> {t("Revisa la conexión y vuelve a probar.")}
           </span>
           <button type="button" className="of-btn is-sm" onClick={() => r.reintentar()}>
             <Icono nombre="refresh" tam={14} />
-            Reintentar
+            {t("Reintentar")}
           </button>
         </div>
       ) : (
         <button type="button" className="of-btn is-primary of-rs-go" onClick={leer}>
           <Icono nombre={leyendo ? "rotate-ccw" : "play"} tam={14} className={leyendo ? undefined : "of-rs-fill"} />
-          {leyendo ? "Volver a leer con esto" : "Leer el resumen"}
+          {leyendo ? t("Volver a leer con esto") : t("Leer el resumen")}
         </button>
       )}
       <div className="of-avp-note">
         {ia === "lista" ? (
           <>
             <Icono nombre="sparkles" tam={12} />
-            <span>Lo escribe la {NOMBRE_IA} con los datos de Paperclip. Si cambia un número, esa parte va con frases armadas.</span>
+            <span>{t("Lo escribe la {ia} con los datos de Paperclip. Si cambia un número, esa parte va con frases armadas.", { ia: NOMBRE_IA })}</span>
           </>
         ) : (
           <>
             <Icono nombre="info" tam={12} />
-            <span>{ia === "celular" ? "Frases armadas con los datos: la IA de Chrome es solo del computador." : `Frases armadas con los datos: la ${NOMBRE_IA} no está lista (${IA_CHROME ? "se baja" : "mira"} en «Conversaciones»).`}</span>
+            <span>
+              {ia === "celular"
+                ? t("Frases armadas con los datos: la IA de Chrome es solo del computador.")
+                : IA_CHROME
+                  ? t("Frases armadas con los datos: la {ia} no está lista (se baja en «Conversaciones»).", { ia: NOMBRE_IA })
+                  : t("Frases armadas con los datos: la {ia} no está lista (mira en «Conversaciones»).", { ia: NOMBRE_IA })}
+            </span>
           </>
         )}
       </div>
@@ -240,11 +247,11 @@ export function BotonResumen() {
         className={cx("of-btn is-sm of-hbtn of-rsbtn", lee && "is-lee", abierto && "is-open")}
         aria-haspopup="dialog"
         aria-expanded={abierto}
-        title={lee ? "Resumen · leyendo" : "Resumen: te lo leo en voz alta"}
+        title={lee ? t("Resumen · leyendo") : t("Resumen: te lo leo en voz alta")}
         onClick={() => abrirMenu(abierto ? null : "resumen")}
       >
         <Icono nombre="audio-lines" tam={14} />
-        Resumen
+        {t("Resumen")}
         <Icono nombre={abierto ? "chevron-up" : "chevron-down"} tam={12} className="of-rs-cv" />
       </button>
       {abierto ? (
@@ -285,8 +292,8 @@ export function BotonResumenArriba() {
         className={cx("of-rstop of-rsbtn", lee && "is-lee")}
         aria-haspopup="dialog"
         aria-expanded={abierto}
-        aria-label="Resumen"
-        title="Resumen"
+        aria-label={t("Resumen")}
+        title={t("Resumen")}
         onClick={() => abrirMenu(abierto ? null : "resumen")}
       >
         <Icono nombre="audio-lines" tam={18} />
@@ -294,7 +301,7 @@ export function BotonResumenArriba() {
       {abierto ? (
         <Capa>
           <div className="of-sheet-bg" onClick={cerrar} />
-          <div className="of-sheet of-hsheet of-rssheet" role="dialog" aria-label="Resumen" {...deslizar}>
+          <div className="of-sheet of-hsheet of-rssheet" role="dialog" aria-label={t("Resumen")} {...deslizar}>
             <div className="of-grab" />
             <div className="of-hsheet-b">
               <PanelResumen celular />

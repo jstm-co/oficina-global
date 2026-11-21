@@ -18,7 +18,9 @@ describe("manifiesto", () => {
 
   it("el pie muestra la versión y el commit del build", () => {
     const html = renderToStaticMarkup(createElement(PieVersion));
-    expect(html.replace(/<!--.*?-->|<[^>]*>/g, "")).toBe(`Oficina ${VERSION_PLUGIN} · ${COMMIT_PLUGIN}`);
+    // JST-413: junto a la versión va el selector de idioma.
+    expect(html.replace(/<label[\s\S]*<\/label>/, "").replace(/<!--.*?-->|<[^>]*>/g, "")).toBe(`Oficina ${VERSION_PLUGIN} · ${COMMIT_PLUGIN}`);
+    expect(html).toContain("<select");
     expect(html).toContain(`data-oficina-version="${VERSION_PLUGIN}"`);
     expect(html).toContain(`data-oficina-commit="${COMMIT_PLUGIN}"`);
     expect(manifest.version).toBe(VERSION_PLUGIN);

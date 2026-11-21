@@ -12,7 +12,9 @@ import { bannerTv, cuerpoAviso, MUESTRA_PREGUNTA, MUESTRA_VOZ, nombreCorto, PIDE
 import { comparar } from "../lista.js";
 import { chipDe } from "../responder.js";
 import { PAGE_ROUTE } from "../shared.js";
+import { msg, t } from "../i18n.js";
 import { vozDeAgente, vozPorId } from "../voces.js";
+import { tituloVisible } from "../estado.js";
 import { hace, type AgenteVista } from "../vista.js";
 import { cambiarAjustes, conDetalle, puntoVoces, useAjustes, type TipoLeer } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
@@ -23,6 +25,7 @@ import { abrirPanelVoces, useEstadoMotores } from "./eleccion.js";
 import { PrepararVoces } from "./prepararVoces.js";
 import { useEstadoVozViva } from "./vozViva.js";
 import { PaginaAgentes, QuienHabla } from "./vocesElegir.js";
+import { tx } from "./i18n.js";
 
 // ---------------------------------------------------------------------------
 // Piezas comunes
@@ -70,7 +73,7 @@ function FilaSistema({ estado, onPermitir }: { estado: EstadoSistema; onPermitir
     case "permitir":
       st = (
         <button type="button" className="of-btn is-xs" onClick={onPermitir}>
-          Permitir…
+          {t("Permitir…")}
         </button>
       );
       break;
@@ -78,7 +81,7 @@ function FilaSistema({ estado, onPermitir }: { estado: EstadoSistema; onPermitir
       st = (
         <span className="of-avp-st is-wait">
           <Icono nombre="loader" tam={12} className="of-spin" />
-          Responde al navegador
+          {t("Responde al navegador")}
         </span>
       );
       break;
@@ -86,39 +89,39 @@ function FilaSistema({ estado, onPermitir }: { estado: EstadoSistema; onPermitir
       st = (
         <span className="of-avp-st is-ok">
           <Icono nombre="check" tam={12} />
-          Permitido
+          {t("Permitido")}
         </span>
       );
       break;
     case "bloqueado":
-      st = <span className="of-avp-st is-warn">Bloqueado</span>;
+      st = <span className="of-avp-st is-warn">{t("Bloqueado")}</span>;
       nota = (
         <div className="of-avp-note is-box">
           <Icono nombre="bell-off" tam={12} />
           <span>
-            Lo bloqueaste en este navegador. Para permitirlo: <b>Chrome</b>, el ícono <Icono nombre="settings-2" tam={12} /> junto a la dirección → Notificaciones → Permitir. <b>Safari</b>: Configuración → Sitios web → Notificaciones. Después, recarga.
+            {tx("Lo bloqueaste en este navegador. Para permitirlo: {chrome}, el ícono {icono} junto a la dirección → Notificaciones → Permitir. {safari}: Configuración → Sitios web → Notificaciones. Después, recarga.", { chrome: <b>Chrome</b>, icono: <Icono nombre="settings-2" tam={12} />, safari: <b>Safari</b> })}
           </span>
         </div>
       );
       break;
     case "sin-api":
-      st = <span className="of-avp-st is-off">No disponible</span>;
+      st = <span className="of-avp-st is-off">{t("No disponible")}</span>;
       nota = (
         <div className="of-avp-note is-box">
           <Icono nombre="smartphone" tam={12} />
           <span>
-            En el iPhone, Safari no deja que una página muestre avisos del sistema. El aviso sale dentro de Paperclip, con la página abierta. Con el teléfono bloqueado, te avisa <b>Telegram</b>.
+            {tx("En el iPhone, Safari no deja que una página muestre avisos del sistema. El aviso sale dentro de Paperclip, con la página abierta. Con el teléfono bloqueado, te avisa {telegram}.", { telegram: <b>Telegram</b> })}
           </span>
         </div>
       );
       break;
     default:
-      st = <span className="of-avp-st is-off">No disponible</span>;
+      st = <span className="of-avp-st is-off">{t("No disponible")}</span>;
       nota = (
         <div className="of-avp-note is-box">
           <Icono nombre="lock-keyhole" tam={12} />
           <span>
-            Paperclip se abre con <b>http://</b>, sin candado, y el navegador solo permite avisos del sistema con <b>https://</b>. Si algún día se publica con https (por ejemplo, con una red privada), aquí aparece el botón para permitirlos.
+            {tx("Paperclip se abre con {http}, sin candado, y el navegador solo permite avisos del sistema con {https}. Si algún día se publica con https (por ejemplo, con una red privada), aquí aparece el botón para permitirlos.", { http: <b>http://</b>, https: <b>https://</b> })}
           </span>
         </div>
       );
@@ -129,8 +132,8 @@ function FilaSistema({ estado, onPermitir }: { estado: EstadoSistema; onPermitir
         <span className="of-avp-l">
           <Icono nombre="monitor" tam={14} />
           <span>
-            <b>Aviso del sistema</b>
-            <em>Aunque el navegador esté minimizado.</em>
+            <b>{t("Aviso del sistema")}</b>
+            <em>{t("Aunque el navegador esté minimizado.")}</em>
           </span>
         </span>
         {st}
@@ -146,15 +149,15 @@ function FilaSistema({ estado, onPermitir }: { estado: EstadoSistema; onPermitir
 
 /** El ejemplo del aviso de Paperclip (abajo a la izquierda, celeste), con el que espera hace más. */
 function EjemploAviso({ ejemplo }: { ejemplo: AgenteVista | null }) {
-  const titulo = ejemplo ? `✋ ${nombreCorto(ejemplo.nombre)} (${ejemplo.empresa}) te necesita` : "✋ ‹Agente› (‹empresa›) te necesita";
-  const cuerpo = ejemplo ? cuerpoAviso(ejemplo) : "‹Tipo› en ‹tarea›: lo que espera tu respuesta";
+  const titulo = ejemplo ? t("✋ {nombre} ({empresa}) te necesita", { nombre: nombreCorto(ejemplo.nombre), empresa: ejemplo.empresa }) : t("✋ ‹Agente› (‹empresa›) te necesita");
+  const cuerpo = ejemplo ? cuerpoAviso(ejemplo) : t("‹Tipo› en ‹tarea›: lo que espera tu respuesta");
   return (
     <div className="of-hst" aria-hidden="true">
       <span className="of-hst-dot" />
       <div className="of-hst-tx">
         <div className="of-hst-ti">{titulo}</div>
         <div className="of-hst-b">{cuerpo}</div>
-        <span className="of-hst-a">Responder</span>
+        <span className="of-hst-a">{t("Responder")}</span>
       </div>
     </div>
   );
@@ -188,11 +191,11 @@ function PanelAvisos({ agentes }: { agentes: readonly AgenteVista[] }) {
     const base = `/${encodeURIComponent(prefijo)}/${PAGE_ROUTE}`;
     toast({
       id: "oficina:prueba",
-      title: ejemplo ? `✋ ${nombreCorto(ejemplo.nombre)} (${ejemplo.empresa}) te necesita` : "✋ Así se ve el aviso",
-      body: ejemplo ? cuerpoAviso(ejemplo) : "Cuando un agente empiece a necesitarte, sale aquí.",
+      title: ejemplo ? t("✋ {nombre} ({empresa}) te necesita", { nombre: nombreCorto(ejemplo.nombre), empresa: ejemplo.empresa }) : t("✋ Así se ve el aviso"),
+      body: ejemplo ? cuerpoAviso(ejemplo) : t("Cuando un agente empiece a necesitarte, sale aquí."),
       tone: "info",
       ttlMs: TTL_AVISO,
-      action: ejemplo ? { label: "Responder", href: `${base}?responder=${encodeURIComponent(ejemplo.id)}` } : { label: "Ver en la Oficina", href: `${base}?hl=toca` },
+      action: ejemplo ? { label: t("Responder"), href: `${base}?responder=${encodeURIComponent(ejemplo.id)}` } : { label: t("Ver en la Oficina"), href: `${base}?hl=toca` },
     });
   };
 
@@ -200,12 +203,12 @@ function PanelAvisos({ agentes }: { agentes: readonly AgenteVista[] }) {
     <div className="of-avp">
       <div className="of-avp-h">
         <Icono nombre={aj.avisos ? "bell-ring" : "bell"} tam={14} />
-        <b>Avisos cuando alguien te necesita</b>
+        <b>{t("Avisos cuando alguien te necesita")}</b>
         <span className="of-sp" />
-        <Interruptor on={aj.avisos} etiqueta="Avisos" onCambiar={(on) => cambiarAjustes({ avisos: on })} />
+        <Interruptor on={aj.avisos} etiqueta={t("Avisos")} onCambiar={(on) => cambiarAjustes({ avisos: on })} />
       </div>
       <p>
-        Te aviso cuando un agente <b>empieza</b> a necesitarte. Al abrir la página no avisa de lo que ya esperaba. Así se ve:
+        {tx("Te aviso cuando un agente {empieza} a necesitarte. Al abrir la página no avisa de lo que ya esperaba. Así se ve:", { empieza: <b>{t("empieza")}</b> })}
       </p>
       <EjemploAviso ejemplo={ejemplo} />
       <div className={cx("of-avp-ch", !aj.avisos && "is-off")}>
@@ -213,49 +216,49 @@ function PanelAvisos({ agentes }: { agentes: readonly AgenteVista[] }) {
           <span className="of-avp-l">
             <Icono nombre="layout-grid" tam={14} />
             <span>
-              <b>Dentro de Paperclip</b>
-              <em>El aviso de Paperclip abajo a la izquierda (15 s) y ✋ N junto a «Oficina global» en el menú, en cualquier página.</em>
+              <b>{t("Dentro de Paperclip")}</b>
+              <em>{t("El aviso de Paperclip abajo a la izquierda (15 s) y ✋ N junto a «Oficina global» en el menú, en cualquier página.")}</em>
             </span>
           </span>
           <span className="of-avp-st is-ok">
             <Icono nombre="check" tam={12} />
-            Siempre
+            {t("Siempre")}
           </span>
         </div>
         <div className="of-avp-row">
           <span className="of-avp-l">
             <Icono nombre={aj.sonido ? "volume-2" : "volume-x"} tam={14} />
             <span>
-              <b>Sonido</b>
-              <em>Campanita de 0,9 s, propia de la Oficina</em>
+              <b>{t("Sonido")}</b>
+              <em>{t("Campanita de 0,9 s, propia de la Oficina")}</em>
             </span>
           </span>
           <button type="button" className="of-btn is-xs" onClick={() => tocarCampana(true)}>
             <Icono nombre="play" tam={12} />
-            Escuchar
+            {t("Escuchar")}
           </button>
-          <Interruptor on={aj.sonido} etiqueta="Sonido" onCambiar={(on) => cambiarAjustes({ sonido: on })} />
+          <Interruptor on={aj.sonido} etiqueta={t("Sonido")} onCambiar={(on) => cambiarAjustes({ sonido: on })} />
         </div>
         <FilaSistema estado={sistema} onPermitir={permitir} />
       </div>
       {aj.avisos ? (
         <div className="of-avp-note">
           <Icono nombre="info" tam={12} />
-          <span>Con varias pestañas abiertas, avisa una sola. Al abrir o recargar Paperclip, el sonido empieza con tu primer clic.</span>
+          <span>{t("Con varias pestañas abiertas, avisa una sola. Al abrir o recargar Paperclip, el sonido empieza con tu primer clic.")}</span>
           <span className="of-sp" />
           <button type="button" className="of-btn is-xs" onClick={probar}>
-            Probar
+            {t("Probar")}
           </button>
         </div>
       ) : (
         <>
           <button type="button" className="of-btn is-toca is-wide" onClick={activar}>
             <Icono nombre="bell" tam={14} />
-            Activar avisos
+            {t("Activar avisos")}
           </button>
           <div className="of-avp-note">
             <Icono nombre="info" tam={12} />
-            <span>Se guarda en este navegador.</span>
+            <span>{t("Se guarda en este navegador.")}</span>
           </div>
         </>
       )}
@@ -269,46 +272,46 @@ function PanelAvisos({ agentes }: { agentes: readonly AgenteVista[] }) {
 
 /** Las 4 frases y, en su misma fila (0.5.0, JST-163), el interruptor chico de «y de qué se trata»: la pregunta (0.8.0), la tarea o el motivo. */
 const FRASES_PANEL: ReadonlyArray<{ k: Frase; texto: string; pista: string | null; det: string }> = [
-  { k: "toca", texto: "Te necesito", pista: null, det: "la pregunta" },
-  { k: "error", texto: "Tengo un error", pista: null, det: "el motivo" },
-  { k: "fin", texto: "Terminé", pista: "Cuando su tarea pasa a revisión o a terminada", det: "la tarea" },
-  { k: "emp", texto: "Empecé", pista: "Cuando toma una tarea nueva · pasa seguido", det: "la tarea" },
+  { k: "toca", texto: msg("«Te necesito»"), pista: null, det: msg("la pregunta") },
+  { k: "error", texto: msg("«Tengo un error»"), pista: null, det: msg("el motivo") },
+  { k: "fin", texto: msg("«Terminé»"), pista: msg("Cuando su tarea pasa a revisión o a terminada"), det: msg("la tarea") },
+  { k: "emp", texto: msg("«Empecé»"), pista: msg("Cuando toma una tarea nueva · pasa seguido"), det: msg("la tarea") },
 ];
 const ORDEN_EJEMPLO: readonly Frase[] = ["toca", "error", "fin", "emp"];
 
 const PRESENTACIONES: ReadonlyArray<{ k: Presentacion; texto: string }> = [
-  { k: "nombre-empresa", texto: "Nombre y empresa" },
-  { k: "nombre", texto: "Solo el nombre" },
-  { k: "frase", texto: "Solo la frase" },
+  { k: "nombre-empresa", texto: msg("Nombre y empresa") },
+  { k: "nombre", texto: msg("Solo el nombre") },
+  { k: "frase", texto: msg("Solo la frase") },
 ];
 
 /** Lo de la oficina que se puede leer (JST-225 §1.2): el nombre, el ejemplo de la derecha y el tooltip de la fila. */
 const TIPOS_PANEL: ReadonlyArray<{ k: TipoLeer; texto: string; ejemplo: string; tip: string }> = [
-  { k: "charlas", texto: "Conversaciones del descanso", ejemplo: "«¿Fue difícil?»", tip: "Pregunta y respuesta, cada uno con su voz. Se oye una por minuto como mucho; las demás se ven sin voz." },
-  { k: "entregas", texto: "Entregas de tareas", ejemplo: "«QA, te paso…»", tip: "En la mesa («te paso…» y «¡dale!») o con el sobre." },
-  { k: "mascotas", texto: "Mascotas", ejemplo: "«¡Miau!»", tip: "Cuando las tocas. En el TV despiertan solas: una cada 5 min como mucho." },
-  { k: "sueltas", texto: "Frases sueltas", ejemplo: "«Un cafecito»", tip: "Quien está solo en el descanso, cuando nadie conversa: una por minuto como mucho." },
-  { k: "hora", texto: "Hora estimada", ejemplo: "«A las 15:40»", tip: "Una vez por tarea, cuando aparece en su globo." },
+  { k: "charlas", texto: msg("Conversaciones del descanso"), ejemplo: msg("«¿Fue difícil?»"), tip: msg("Pregunta y respuesta, cada uno con su voz. Se oye una por minuto como mucho; las demás se ven sin voz.") },
+  { k: "entregas", texto: msg("Entregas de tareas"), ejemplo: msg("«QA, te paso…»"), tip: msg("En la mesa («te paso…» y «¡dale!») o con el sobre.") },
+  { k: "mascotas", texto: msg("Mascotas"), ejemplo: msg("«¡Miau!»"), tip: msg("Cuando las tocas. En el TV despiertan solas: una cada 5 min como mucho.") },
+  { k: "sueltas", texto: msg("Frases sueltas"), ejemplo: msg("«Un cafecito»"), tip: msg("Quien está solo en el descanso, cuando nadie conversa: una por minuto como mucho.") },
+  { k: "hora", texto: msg("Hora estimada"), ejemplo: msg("«A las 15:40»"), tip: msg("Una vez por tarea, cuando aparece en su globo.") },
 ];
 
 /** El grupo «La oficina»: una casilla por tipo. Lo que está oculto con los botones del encabezado se ve al 50 % y se puede cambiar igual. */
 function FilasOficina() {
   const aj = useAjustes();
   return (
-    <div className="of-vz-list" role="group" aria-label="La oficina">
-      {TIPOS_PANEL.map((t) => {
-        const on = aj.leer[t.k];
-        const oculta = ((t.k === "charlas" || t.k === "sueltas") && !aj.charlas) || (t.k === "mascotas" && !aj.mascotas);
-        const tip = oculta ? `Están ocultas: muéstralas con «${t.k === "mascotas" ? "Mascotas" : "Conversaciones"}» arriba` : t.tip;
+    <div className="of-vz-list" role="group" aria-label={t("La oficina")}>
+      {TIPOS_PANEL.map((tp) => {
+        const on = aj.leer[tp.k];
+        const oculta = ((tp.k === "charlas" || tp.k === "sueltas") && !aj.charlas) || (tp.k === "mascotas" && !aj.mascotas);
+        const tip = oculta ? t("Están ocultas: muéstralas con «{boton}» arriba", { boton: t(tp.k === "mascotas" ? "Mascotas" : "Conversaciones") }) : t(tp.tip);
         return (
-          <div key={t.k} className={cx("of-vz-fila of-vz-tf", on && "is-on", oculta && "is-oculta")} title={tip}>
-            <button type="button" role="checkbox" aria-checked={on} className={cx("of-vz-ev", on && "is-on")} onClick={() => cambiarAjustes({ leer: { ...aj.leer, [t.k]: !on } })}>
+          <div key={tp.k} className={cx("of-vz-fila of-vz-tf", on && "is-on", oculta && "is-oculta")} title={tip}>
+            <button type="button" role="checkbox" aria-checked={on} className={cx("of-vz-ev", on && "is-on")} onClick={() => cambiarAjustes({ leer: { ...aj.leer, [tp.k]: !on } })}>
               <span className="of-vz-mk">{on ? <Icono nombre="check" tam={12} /> : null}</span>
               <span>
-                <b>{t.texto}</b>
+                <b>{t(tp.texto)}</b>
               </span>
             </button>
-            <span className="of-vz-ej">{t.ejemplo}</span>
+            <span className="of-vz-ej">{t(tp.ejemplo)}</span>
           </div>
         );
       })}
@@ -361,12 +364,12 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
     <div className={cx("of-avp of-vzp", !aj.voces && "is-apagadas")}>
       <div className="of-avp-h">
         <Icono nombre={aj.voces ? "volume-2" : "volume-x"} tam={14} />
-        <b>Voces</b>
+        <b>{t("Voces")}</b>
         <span className="of-sp" />
-        <Interruptor on={aj.voces} etiqueta="Voces" onCambiar={(on) => cambiarAjustes({ voces: on })} />
+        <Interruptor on={aj.voces} etiqueta={t("Voces")} onCambiar={(on) => cambiarAjustes({ voces: on })} />
       </div>
       <p>
-        Cada agente lo dice en voz alta, con su propia voz. Por ejemplo{voz ? ` (${voz.nombre})` : ""}: <b>«{frase}»</b>
+        {tx("Cada agente lo dice en voz alta, con su propia voz. Por ejemplo{voz}: {frase}", { voz: voz ? ` (${voz.nombre})` : "", frase: <b>«{frase}»</b> })}
       </p>
       {aj.voces && companyId ? <PrepararVoces agentes={agentes} companyId={companyId} /> : null}
       {/* Sin audios, el panel no tiene qué voz le toca a cada uno y las listas quedan cargando. */}
@@ -374,31 +377,33 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
         <div className="of-avp-note is-box">
           <Icono nombre="info" tam={12} />
           <span>
-            Todavía no hay audios en este Paperclip: se graban una vez, en el computador donde corre, con <b>npm run voces</b> en la carpeta del plugin (ver «Voces» en el README). Mientras, {hayVoces ? "habla la voz del navegador" : "solo se ve el subtítulo"}.
+            {hayVoces
+              ? tx("Todavía no hay audios en este Paperclip: se graban una vez, en el computador donde corre, con {cmd} en la carpeta del plugin (ver «Voces» en el README). Mientras, habla la voz del navegador.", { cmd: <b>npm run voces</b> })
+              : tx("Todavía no hay audios en este Paperclip: se graban una vez, en el computador donde corre, con {cmd} en la carpeta del plugin (ver «Voces» en el README). Mientras, solo se ve el subtítulo.", { cmd: <b>npm run voces</b> })}
           </span>
         </div>
       ) : null}
       <QuienHabla agentes={agentes} companyId={companyId} onAgentes={() => setPagina("agentes")} />
       <div className="of-vz-cab" aria-hidden="true">
-        <span>Avisos</span>
-        <span>Y de qué se trata</span>
+        <span>{t("Avisos")}</span>
+        <span>{t("Y de qué se trata")}</span>
       </div>
-      <div className="of-vz-list" role="group" aria-label="Qué dicen y de qué se trata">
+      <div className="of-vz-list" role="group" aria-label={t("Qué dicen y de qué se trata")}>
         {FRASES_PANEL.map((f) => {
           const on = aj.frases[f.k];
           const d = aj.detalle[f.k];
           // «La tarea» y «la pregunta» necesitan que el worker prepare la frase; «el motivo» se graba al instalar.
           const noMac = sinMac && f.k !== "error";
           const habil = on && !noMac;
-          const tip = noMac ? `No disponible en esta Mac${vivo?.motivo ? `: ${vivo.motivo}` : ""}` : on ? `Que diga también ${f.det}` : `Prende «${f.texto}» para elegir esto`;
+          const tip = noMac ? (vivo?.motivo ? t("No disponible en esta Mac: {motivo}", { motivo: vivo.motivo }) : t("No disponible en esta Mac")) : on ? t("Que diga también {det}", { det: t(f.det) }) : t("Prende {frase} para elegir esto", { frase: t(f.texto) });
           return (
             <div key={f.k} className={cx("of-vz-fila", on && "is-on")}>
               <label className={cx("of-vz-ev", on && "is-on")}>
                 <input type="checkbox" checked={on} onChange={() => cambiarAjustes({ frases: { ...aj.frases, [f.k]: !on } })} />
                 <span className="of-vz-mk">{on ? <Icono nombre="check" tam={12} /> : null}</span>
                 <span>
-                  <b>«{f.texto}»</b>
-                  {f.pista ? <em>{f.pista}</em> : null}
+                  <b>{t(f.texto)}</b>
+                  {f.pista ? <em>{t(f.pista)}</em> : null}
                 </span>
               </label>
               <button
@@ -406,7 +411,7 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
                 role="switch"
                 className={cx("of-vz-det", d && !noMac && "is-on")}
                 aria-checked={d && !noMac}
-                aria-label={`«${f.texto}» y de qué se trata: ${f.det}`}
+                aria-label={t("{frase} y de qué se trata: {det}", { frase: t(f.texto), det: t(f.det) })}
                 title={tip}
                 disabled={!habil}
                 onClick={() => cambiarAjustes({ detalle: { ...aj.detalle, [f.k]: !d } })}
@@ -414,7 +419,7 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
                 <span className="of-vz-swm" aria-hidden="true">
                   <i />
                 </span>
-                <span>{noMac ? "no disponible" : f.det}</span>
+                <span>{noMac ? t("no disponible") : t(f.det)}</span>
               </button>
             </div>
           );
@@ -422,27 +427,27 @@ export function PanelVoces({ agentes }: { agentes: readonly AgenteVista[] }) {
       </div>
       {/* 0.6.0 (JST-225 §1.2): lo de la oficina que también se lee, con un ejemplo a la derecha. */}
       <div className="of-vz-cab is-of" aria-hidden="true">
-        <span>La oficina</span>
-        <span>Por ejemplo</span>
+        <span>{t("La oficina")}</span>
+        <span>{t("Por ejemplo")}</span>
       </div>
       <FilasOficina />
       <div className="of-avp-row">
         <span className="of-avp-l">
           <Icono nombre="volume-2" tam={14} />
           <span>
-            <b>35 voces: 10 de Supertonic, 18 de Edge (Lorenzo, Catalina y 16 de otros países), Alex, Dora, Santa y 4 clones chilenos</b>
-            <em>{hayVoces ? "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez habla la del navegador" : "Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez solo se verá el subtítulo"}</em>
+            <b>{t("35 voces: 10 de Supertonic, 18 de Edge (Lorenzo, Catalina y 16 de otros países), Alex, Dora, Santa y 4 clones chilenos")}</b>
+            <em>{hayVoces ? t("Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez habla la del navegador") : t("Una para cada agente, que puedes cambiar arriba · si falta su audio, esa vez solo se verá el subtítulo")}</em>
           </span>
         </span>
         <button type="button" className="of-btn is-xs" onClick={probar}>
           <Icono nombre="play" tam={12} />
-          Probar
+          {t("Probar")}
         </button>
       </div>
       {/* «Cómo se presentan y más», plegado (recuerda si lo dejaste abierto): adentro, la presentación y la nota. */}
       <button type="button" className="of-vz-mas" aria-expanded={aj.vozMas} onClick={() => cambiarAjustes({ vozMas: !aj.vozMas })}>
         <Icono nombre={aj.vozMas ? "chevron-down" : "chevron-right"} tam={14} />
-        Cómo se presentan y más
+        {t("Cómo se presentan y más")}
       </button>
       {aj.vozMas ? <MasVoces sinMac={sinMac} motivo={vivo?.motivo ?? null} /> : null}
     </div>
@@ -456,12 +461,12 @@ function MasVoces({ sinMac, motivo }: { sinMac: boolean; motivo: string | null }
     <>
       <div className="of-vz-fmt">
         <span className="of-vz-k" id="of-vz-k">
-          Cómo se presentan
+          {t("Cómo se presentan")}
         </span>
         <div className="of-seg" role="group" aria-labelledby="of-vz-k">
           {PRESENTACIONES.map((p) => (
             <button key={p.k} type="button" aria-pressed={aj.presentacion === p.k} onClick={() => cambiarAjustes({ presentacion: p.k })}>
-              {p.texto}
+              {t(p.texto)}
             </button>
           ))}
         </div>
@@ -469,13 +474,13 @@ function MasVoces({ sinMac, motivo }: { sinMac: boolean; motivo: string | null }
       <div className="of-avp-note">
         <Icono nombre="info" tam={12} />
         <span>
-          Habla uno por vez y los avisos pasan primero. Se oye una conversación por minuto como mucho; las demás, y lo que llega mientras alguien habla, se ven sin voz. «✓ listo» y la mano con su tarea van con «Terminé» y «Te necesito». Al abrir o recargar Paperclip, empiezan con tu primer clic. Voces clonadas a partir de Google Crowdsourced Chilean Spanish (OpenSLR 71), CC BY-SA 4.0.
+          {t("Habla uno por vez y los avisos pasan primero. Se oye una conversación por minuto como mucho; las demás, y lo que llega mientras alguien habla, se ven sin voz. «✓ listo» y la mano con su tarea van con «Terminé» y «Te necesito». Al abrir o recargar Paperclip, empiezan con tu primer clic. Voces clonadas a partir de Google Crowdsourced Chilean Spanish (OpenSLR 71), CC BY-SA 4.0.")}
           <br />
-          <b>De qué se trata:</b> «Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Las voces de Edge (Lorenzo, Catalina y las de otros países) lo piden a Microsoft (va el nombre de la tarea o la pregunta).
+          <b>{t("De qué se trata:")}</b> {t("«Terminé» y «Empecé» dicen la tarea, que se prepara con su voz cuando empieza. «Te necesito» dice la pregunta (o qué hay que aprobar o revisar), que se prepara cuando levanta la mano y se espera hasta 30 s; si no alcanza, dice la tarea. Si no alcanza ninguna, dice solo la frase. Una tarea que pasa a revisión con una pregunta para ti dice «Te necesito», no «Terminé». Los resúmenes no lo dicen. Las voces de Edge (Lorenzo, Catalina y las de otros países) lo piden a Microsoft (va el nombre de la tarea o la pregunta).")}
           {sinMac ? (
             <>
               <br />
-              «La tarea» y «la pregunta» no están disponibles en esta Mac{motivo ? ` (${motivo})` : ""}: se oye la frase sola.
+              {t("«La tarea» y «la pregunta» no están disponibles en esta Mac{motivo}: se oye la frase sola.", { motivo: motivo ? ` (${motivo})` : "" })}
             </>
           ) : null}
         </span>
@@ -549,7 +554,7 @@ export function Popover({ ancla, onCerrar, botones, children, voces = false, cha
     return () => document.removeEventListener("pointerdown", fuera);
   }, [botones, onCerrar]);
   return (
-    <div ref={ref} className={cx("of-hpop", voces && "is-voces", charlas && "is-charlas", resumen && "is-resumen", ambiente && "is-ambiente")} role="dialog" aria-label={charlas ? "Conversaciones" : resumen ? "Resumen" : ambiente ? "Ambiente" : undefined} style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0 }}>
+    <div ref={ref} className={cx("of-hpop", voces && "is-voces", charlas && "is-charlas", resumen && "is-resumen", ambiente && "is-ambiente")} role="dialog" aria-label={charlas ? t("Conversaciones") : resumen ? t("Resumen") : ambiente ? t("Ambiente") : undefined} style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0 }}>
       {children}
     </div>
   );
@@ -584,8 +589,8 @@ export function BotonesAvisos({ celular, agentes, rm: _rm }: {
   });
 
   const sistema = aj.avisos && estadoSistema(false) === "permitido";
-  const tAvisos = aj.avisos ? `Avisos activados dentro de Paperclip${sistema ? ", también del sistema" : ""}` : "Activar avisos cuando alguien te necesite";
-  const tVoces = aj.voces ? "Voces activadas" : "Voces apagadas";
+  const tAvisos = aj.avisos ? (sistema ? t("Avisos activados dentro de Paperclip, también del sistema") : t("Avisos activados dentro de Paperclip")) : t("Activar avisos cuando alguien te necesite");
+  const tVoces = aj.voces ? t("Voces activadas") : t("Voces apagadas");
   const iAvisos = aj.avisos ? "bell-ring" : "bell";
   const iVoces = aj.voces ? "volume-2" : "volume-x";
   const punto = aj.avisos ? null : <span className="of-hdot" />;
@@ -605,7 +610,7 @@ export function BotonesAvisos({ celular, agentes, rm: _rm }: {
   ) : (
     <button ref={bAvisos} type="button" className={cx("of-btn is-sm of-hbtn", aj.avisos && "is-on", abierto === "avisos" && "is-open")} title={tAvisos} aria-expanded={abierto === "avisos"} onClick={() => alternar("avisos")}>
       <Icono nombre={iAvisos} tam={14} />
-      Avisos
+      {t("Avisos")}
       {punto}
     </button>
   );
@@ -619,7 +624,7 @@ export function BotonesAvisos({ celular, agentes, rm: _rm }: {
           {celular ? (
             <>
               <div className="of-sheet-bg" onClick={cerrar} />
-              <div className="of-sheet of-hsheet" role="dialog" aria-label={abierto === "avisos" ? "Avisos" : "Voces"}>
+              <div className="of-sheet of-hsheet" role="dialog" aria-label={abierto === "avisos" ? t("Avisos") : t("Voces")}>
                 <div className="of-grab" />
                 <div className="of-hsheet-b">{contenido}</div>
               </div>
@@ -651,7 +656,7 @@ export function SubtituloVoz({ agentes, rm }: { agentes: readonly AgenteVista[];
   return (
     <div className={cx("of-subt", rm && "is-rm")} role="status">
       <Icono nombre="volume-2" tam={14} />
-      {lee ? <span className="vz-subt-voz">Resumen · {lee.nombre}</span> : null}
+      {lee ? <span className="vz-subt-voz">{t("Resumen · {voz}", { voz: lee.nombre })}</span> : null}
       {aspecto ? (
         <span className="of-subt-c" aria-hidden="true">
           <Personaje aspecto={aspecto} anim="parado" x={0} y={0} quieto />
@@ -690,11 +695,11 @@ export function TeEsperan({ agentes, cargando, celular, hrefMas, onResponder, en
     <div className="of-wl">
       <div className="of-wl-h">
         <Icono nombre="hand" tam={12} />
-        Te esperan
+        {t("Te esperan")}
         <span className="of-sp" />
         {esperan.length > 3 ? (
           <a className="of-wlink" {...(enlaceMas ?? { href: hrefMas })}>
-            y {esperan.length - 3} más
+            {t("y {n} más", { n: esperan.length - 3 })}
             <Icono nombre="arrow-right" tam={12} />
           </a>
         ) : null}
@@ -703,7 +708,7 @@ export function TeEsperan({ agentes, cargando, celular, hrefMas, onResponder, en
         const e = a.teNecesita[0]!;
         const corto = nombreCorto(a.nombre);
         return (
-          <div key={a.id} className="of-wl-row" role="button" tabIndex={0} aria-label={`${a.nombre}, ${a.empresa}: te necesita. Responder`} onClick={() => onResponder(a.id)} onKeyDown={tecla(a.id)}>
+          <div key={a.id} className="of-wl-row" role="button" tabIndex={0} aria-label={t("{nombre}, {empresa}: te necesita. Responder", { nombre: a.nombre, empresa: a.empresa })} onClick={() => onResponder(a.id)} onKeyDown={tecla(a.id)}>
             <CajaPersonaje agente={a} px={1} />
             <span className="of-wl-m">
               <span className="of-wl-n">
@@ -712,14 +717,14 @@ export function TeEsperan({ agentes, cargando, celular, hrefMas, onResponder, en
               </span>
               <span className="of-wl-q">
                 {e.identifier ? <span className="of-tid">{e.identifier}</span> : null}
-                {e.titulo ?? chipDe(e).label}
+                {e.titulo != null ? tituloVisible(e.titulo) : t(chipDe(e).label)}
               </span>
             </span>
             {celular ? (
               <Icono nombre="chevron-right" tam={14} />
             ) : (
               <span className="of-btn is-xs is-primary is-toca" aria-hidden="true">
-                Responder
+                {t("Responder")}
               </span>
             )}
           </div>
@@ -735,13 +740,13 @@ export function TeEsperan({ agentes, cargando, celular, hrefMas, onResponder, en
 
 /** Banner violeta del TV (en el lugar reservado de 38 px): «Speckit, de Migo, te necesita.» + «hace X». */
 export function BannerTocaTv({ llegada, desde, ahora }: { llegada: Llegada; desde: number; ahora: number }): ReactNode {
-  const t = bannerTv(llegada);
-  const cuando = ahora - desde < 60_000 ? "ahora" : hace(new Date(desde).toISOString(), ahora);
+  const b = bannerTv(llegada);
+  const cuando = ahora - desde < 60_000 ? t("ahora") : hace(new Date(desde).toISOString(), ahora);
   return (
     <div className="of-banner is-toca" role="status">
       <Icono nombre="hand" tam={14} />
       <span>
-        <b>{t.fuerte}</b> {t.resto}
+        <b>{b.fuerte}</b> {b.resto}
       </span>
       <span className="of-sp" />
       <span className="of-tvb-ago">{cuando}</span>
@@ -759,13 +764,13 @@ export function BotonesTv(): ReactNode {
   };
   return (
     <>
-      <button type="button" className={cx("of-tvexit of-tvi", aj.avisos && "is-on")} title="Avisos y sonido" aria-pressed={aj.avisos} onClick={() => alternar({ avisos: !aj.avisos })}>
+      <button type="button" className={cx("of-tvexit of-tvi", aj.avisos && "is-on")} title={t("Avisos y sonido")} aria-pressed={aj.avisos} onClick={() => alternar({ avisos: !aj.avisos })}>
         <Icono nombre={aj.avisos ? "bell-ring" : "bell-off"} tam={14} />
-        {aj.avisos ? "Avisos" : "Avisos apagados"}
+        {aj.avisos ? t("Avisos") : t("Avisos apagados")}
       </button>
-      <button type="button" className={cx("of-tvexit of-tvi", aj.voces && "is-on")} title="Voces" aria-pressed={aj.voces} onClick={() => alternar({ voces: !aj.voces })}>
+      <button type="button" className={cx("of-tvexit of-tvi", aj.voces && "is-on")} title={t("Voces")} aria-pressed={aj.voces} onClick={() => alternar({ voces: !aj.voces })}>
         <Icono nombre={aj.voces ? "volume-2" : "volume-x"} tam={14} />
-        {aj.voces ? "Voces" : "Voces apagadas"}
+        {aj.voces ? t("Voces") : t("Voces apagadas")}
       </button>
     </>
   );

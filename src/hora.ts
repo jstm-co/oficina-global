@@ -15,6 +15,7 @@
 // - JST-192: cada agente vuelve a decir su hora en su propio instante del
 //   minuto, entre dos pasos de los rótulos: ningún globo la cambia a la vez que
 //   otro ni que un rótulo (§8).
+import { getLocale, localeTag, plural, SOURCE_LOCALE, t } from "./i18n.js";
 import { PASO_SALA_MS } from "./rotulo.js";
 import type { EventoVivo, RunResumen } from "./shared.js";
 
@@ -60,6 +61,9 @@ export function estimar(duraciones: readonly number[], edad: number, ahora: numb
 
 const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 const DIAS_LARGOS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+// En español, las tablas de siempre (cada navegador abrevia a su manera); en otro idioma, `Intl` (JST-413).
+const nombreDia = (d: Date, weekday: "short" | "long") =>
+  getLocale() === SOURCE_LOCALE ? (weekday === "short" ? DIAS : DIAS_LARGOS)[d.getDay()]! : new Intl.DateTimeFormat(localeTag(), { weekday }).format(d);
 
 const reloj = (d: Date) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
 const diaDe = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -68,7 +72,7 @@ const diasEntre = (a: Date, b: Date) => Math.round((diaDe(b) - diaDe(a)) / 86_40
 /** «15:05» (24 h, sin cero inicial: «9:10»), o con el día si no es hoy: «vie 9:10». En la hora local del navegador. */
 export function horaCorta(fin: number, ahora: number): string {
   const f = new Date(fin);
-  return diasEntre(new Date(ahora), f) === 0 ? reloj(f) : `${DIAS[f.getDay()]} ${reloj(f)}`;
+  return diasEntre(new Date(ahora), f) === 0 ? reloj(f) : `${nombreDia(f, "short")} ${reloj(f)}`;
 }
 
 /** «15:05», «mañana viernes a las 9:10» o «el lunes a las 9:10» (tooltip y ficha). */
@@ -76,39 +80,40 @@ function horaLarga(fin: number, ahora: number): string {
   const f = new Date(fin);
   const dias = diasEntre(new Date(ahora), f);
   if (dias === 0) return reloj(f);
-  return `${dias === 1 ? `mañana ${DIAS_LARGOS[f.getDay()]}` : `el ${DIAS_LARGOS[f.getDay()]}`} a las ${reloj(f)}`;
+  const dia = nombreDia(f, "long");
+  return dias === 1 ? t("mañana {dia} a las {hora}", { dia, hora: reloj(f) }) : t("el {dia} a las {hora}", { dia, hora: reloj(f) });
 }
 
 /** «50 min» (bajo 1 h), «2 h», «1 día», «3 días». */
 export function cuantoLleva(ms: number): string {
   const m = Math.max(1, Math.floor(ms / 60_000));
-  if (m < 60) return `${m} min`;
-  if (m < 1440) return `${Math.floor(m / 60)} h`;
+  if (m < 60) return t("{n} min", { n: m });
+  if (m < 1440) return t("{n} h", { n: Math.floor(m / 60) });
   const d = Math.floor(m / 1440);
-  return `${d} ${d === 1 ? "día" : "días"}`;
+  return plural(d, "día", "días");
 }
 
 /** Lo que va en el piso de abajo del globo y en la pastilla del rótulo (después del ⏱): «≈15:05», «≈vie 9:10», «lleva 2 h». Sin dato: nada. */
 export function textoGlobo(e: Estimacion | null, ahora: number): string | null {
   if (!e || e.tipo === "sin") return null;
-  if (e.tipo === "lleva") return `lleva ${cuantoLleva(e.edad)}`;
+  if (e.tipo === "lleva") return t("lleva {tiempo}", { tiempo: cuantoLleva(e.edad) });
   return `≈${horaCorta(e.fin, ahora)}`;
 }
 
 /** La frase del tooltip y del lector de pantalla (nunca se corta). */
 export function textoTooltip(e: Estimacion | null, ahora: number): string | null {
   if (!e) return null;
-  if (e.tipo === "sin") return "sin hora estimada (todavía tiene menos de 5 runs terminados)";
-  if (e.tipo === "lleva") return `lleva ${cuantoLleva(e.edad)}: más de lo habitual, no hay una hora confiable`;
-  return `termina ≈${horaLarga(e.fin, ahora)}, según sus últimos runs`;
+  if (e.tipo === "sin") return t("sin hora estimada (todavía tiene menos de 5 runs terminados)");
+  if (e.tipo === "lleva") return t("lleva {tiempo}: más de lo habitual, no hay una hora confiable", { tiempo: cuantoLleva(e.edad) });
+  return t("termina ≈{cuando}, según sus últimos runs", { cuando: horaLarga(e.fin, ahora) });
 }
 
 /** La línea de la ficha. */
 export function textoFicha(e: Estimacion | null, ahora: number): string | null {
   if (!e) return null;
-  if (e.tipo === "sin") return "Sin hora estimada · todavía tiene menos de 5 runs terminados";
-  if (e.tipo === "lleva") return `Lleva ${cuantoLleva(e.edad)} · más que ${e.menos} de sus últimos ${e.n} runs: no hay una hora confiable`;
-  return `Termina ≈${horaLarga(e.fin, ahora)} · según sus últimos ${e.n} runs (acierta a ±30 min 7 de cada 10 veces)`;
+  if (e.tipo === "sin") return t("Sin hora estimada · todavía tiene menos de 5 runs terminados");
+  if (e.tipo === "lleva") return t("Lleva {tiempo} · más que {menos} de sus últimos {n} runs: no hay una hora confiable", { tiempo: cuantoLleva(e.edad), menos: e.menos, n: e.n });
+  return t("Termina ≈{cuando} · según sus últimos {n} runs (acierta a ±30 min 7 de cada 10 veces)", { cuando: horaLarga(e.fin, ahora), n: e.n });
 }
 
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 A [Paperclip](https://github.com/paperclipai/paperclip) plugin that draws the agents of **every company** in your instance in a pixel-art office: who is working, who needs you, who failed, who is paused and who is idle. You can answer their questions without leaving the office, get spoken notifications and leave it running on a TV.
 
-**The interface and the voices are in Spanish** (Chilean voices included). This README quotes the on-screen labels in Spanish, with a translation the first time they appear.
+**The interface is in English and Spanish.** It follows your browser's language, and a selector at the bottom of the page lets you switch. The voices, the spoken summary and the agents' chats are in Spanish (with voices from nine countries). This README quotes the on-screen labels as they read in Spanish, with their meaning the first time they appear.
 
 - Plugin key: `jstm.oficina-pixel` · npm package: `paperclip-plugin-oficina-global` · version `0.9.7`
 - Tested with Paperclip `2026.824.1`.
@@ -145,6 +145,8 @@ npm run build       # dist/: worker, manifest, interface, tv.html and the voice 
 ```
 
 The code is in `src/` (the logic, without React or the DOM, kept apart from `src/ui/`), the tests in `tests/` and the voice generator in `generador/`. Code comments are in Spanish and mention issues from our internal board («JST-123»), which are not public.
+
+**Languages.** The Spanish text in the code is the source: `t("Sin asignar")` returns that text in Spanish and its translation in other languages (`src/i18n.ts`). English lives in `src/i18n/en/`, split by area. A new on-screen text goes through `t()` (or `tx()` with React nodes inside, `plural()` for counts) and gets its entry in the catalog; `tests/i18n.spec.ts` fails if one is missing or left over. To add a language, copy `src/i18n/en/`, translate the values and register it in `LOCALES` and `CATALOGS`. What is heard (voices, spoken summary, «Leer contexto») and what agents say to each other stays in Spanish and does not go through `t()`.
 
 ## Known limits
 

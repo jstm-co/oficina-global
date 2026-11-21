@@ -11,6 +11,7 @@
 //     sigue ahí 1 min (`seguirSinCamino`, JST-266: el hueco de su monitor).
 // «Te necesita» no reemplaza el estado base: un agente puede estar trabajando
 // en una tarea y tener otra esperando tu respuesta. Se guarda aparte.
+import { t } from "./i18n.js";
 import type { AgenteApi, Empresa, ItemAtencion, LineaActividad, RunVivo, TareaRef } from "./shared.js";
 
 export type EstadoBase = "trabajando" | "libre" | "error" | "pausa";
@@ -307,6 +308,17 @@ export function tituloDeItem(item: ItemAtencion): string | null {
   return d?.promptExcerpt ?? d?.firstQuestionText ?? d?.firstTaskTitle ?? t;
 }
 
+const PREFIJO_PLAN = "Aprobar el plan: ";
+
+/**
+ * El título de una espera, para PINTARLO en pantalla (JST-413). `Espera.titulo`
+ * guarda «Aprobar el plan: X» en español porque la voz (`src/avisos.ts`) le
+ * quita ese prefijo; solo lo que se ve pasa por aquí.
+ */
+export function tituloVisible(titulo: string): string {
+  return titulo.startsWith(PREFIJO_PLAN) ? t("Aprobar el plan: {plan}", { plan: titulo.slice(PREFIJO_PLAN.length) }) : titulo;
+}
+
 /** La primera tarea sugerida, si la tarjeta de tareas sugeridas no tiene título propio (JST-254). */
 function tareaSugeridaDe(item: ItemAtencion): string | null {
   const t = item.subject?.title ?? null;
@@ -468,9 +480,9 @@ export function hrefTarea(prefijo: string, identifier: string): string {
 }
 
 export function textoSinTarea(invocationSource: string | null | undefined): string {
-  if (invocationSource === "timer") return "Latido";
-  if (invocationSource === "on_demand") return "A pedido";
-  return "Sin tarea";
+  if (invocationSource === "timer") return t("Latido");
+  if (invocationSource === "on_demand") return t("A pedido");
+  return t("Sin tarea");
 }
 
 /** El código de su tarea o, si no tiene, lo que hace el run; nunca el literal «run». */

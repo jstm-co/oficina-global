@@ -4,8 +4,10 @@
 // personaje en el piso. La lógica (grupos, orden, textos) está en `src/lista.ts`;
 // no hace llamadas: usa lo que ya leyó el piso.
 import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { t } from "../i18n.js";
 import { esErrorViejo, type Silenciados } from "../erroresViejos.js";
 import { agrupar, alternarPlegado, chipsDe, CLAVE_PLEGADOS, cuandoFila, escribirPlegados, estaAbierto, GRUPOS, grupoDe, leerPlegados, lineaDe, notaGrupo, type Grupo, type GrupoLista, type Plegados, type TareaFila } from "../lista.js";
+import { tituloVisible } from "../estado.js";
 import { ESTADOS, etiqueta, type AgenteVista } from "../vista.js";
 import type { Resaltado } from "./encabezado.js";
 import { limpiarErrores, useErroresSilenciados } from "./erroresSilenciados.js";
@@ -64,7 +66,7 @@ function guardarPlegados(p: Plegados): void {
 }
 
 const nombres = (lista: readonly { nombre: string }[]) =>
-  lista.length <= 1 ? (lista[0]?.nombre ?? "") : `${lista.slice(0, -1).map((e) => e.nombre).join(", ")} y ${lista.at(-1)!.nombre}`;
+  lista.length <= 1 ? (lista[0]?.nombre ?? "") : t("{lista} y {ultimo}", { lista: lista.slice(0, -1).map((e) => e.nombre).join(", "), ultimo: lista.at(-1)!.nombre });
 
 /** El contador resaltado deja a todos, pero los que no calzan bajan a .35 (§3). */
 function calza(a: AgenteVista, hl: Resaltado, viejo: boolean): boolean {
@@ -87,7 +89,7 @@ function teclaFila(abrir: (el: HTMLElement) => void) {
 
 function Fila({ a, p, silenciados }: { a: AgenteVista; p: PropsLista; silenciados: Silenciados }) {
   const viejo = esErrorViejo(a, p.ahora, silenciados);
-  const tono = (t: string | null) => (t ? `is-${t}` : null);
+  const tono = (clase: string | null) => (clase ? `is-${clase}` : null);
   const ultima = a.st === "libre" || a.st === "pausa" || a.st === "error" ? p.ultima(a.id) : null;
   const l = lineaDe(a, p.ahora, ultima, a.st === "error" ? (p.codigoError?.(a.id) ?? null) : null, viejo);
   const clase = cx("of-alr", p.celular && "is-m", p.seleccionado === a.id && "is-sel", !calza(a, p.hl, viejo) && "is-dim", viejo && "is-viejo");
@@ -104,7 +106,7 @@ function Fila({ a, p, silenciados }: { a: AgenteVista; p: PropsLista; silenciado
 
   if (p.celular) {
     const g = grupoDe(a, p.ahora, silenciados);
-    const texto = a.need ? (a.teNecesita[0]?.titulo ?? l.contexto) : (l.tarea?.titulo ?? l.contexto);
+    const texto = a.need ? (a.teNecesita[0]?.titulo != null ? tituloVisible(a.teNecesita[0].titulo) : l.contexto) : (l.tarea?.titulo ?? l.contexto);
     return (
       <div className={clase} {...comun}>
         <CajaPersonaje agente={a} animar rm={p.rm} />
@@ -148,7 +150,7 @@ function Fila({ a, p, silenciados }: { a: AgenteVista; p: PropsLista; silenciado
         }}
       >
         <Icono nombre="hand" tam={14} />
-        {n > 1 ? `Responder · ${n}` : "Responder"}
+        {n > 1 ? t("Responder · {n}", { n }) : t("Responder")}
       </button>
     );
   } else if (a.st === "error") {
@@ -214,7 +216,7 @@ function Seccion({ g, p, silenciados, sinToca, abierto, onAlternar }: { g: Grupo
       {sinToca ? (
         <div className="of-al-note" role="status">
           <Icono nombre="triangle-alert" tam={14} />
-          No pude leer «Te toca»: por ahora no sé quién te necesita.
+          {t("No pude leer «Te toca»: por ahora no sé quién te necesita.")}
         </div>
       ) : null}
       {abierto ? g.agentes.map((a) => <Fila key={a.id} a={a} p={p} silenciados={silenciados} />) : null}
@@ -239,12 +241,12 @@ export function ListaAgentes(p: PropsLista) {
   if (cargando) {
     const total = oficina.empresas.length;
     return (
-      <section className={cx("of-al", celular && "is-m")} aria-busy="true" aria-label="Agentes">
+      <section className={cx("of-al", celular && "is-m")} aria-busy="true" aria-label={t("Agentes")}>
         <div className="of-al-h">
-          <h2>Agentes</h2>
+          <h2>{t("Agentes")}</h2>
           <span className="of-al-sub">
             <Icono nombre="loader" tam={12} className="of-spin" />
-            {total ? `Leyendo las ${total} empresas…` : "Leyendo las empresas…"}
+            {total ? t("Leyendo las {n} empresas…", { n: total }) : t("Leyendo las empresas…")}
           </span>
         </div>
         {Array.from({ length: celular ? 5 : 6 }, (_, i) => (
@@ -260,7 +262,7 @@ export function ListaAgentes(p: PropsLista) {
   }
 
   const grupos = agrupar(p.agentes, oficina.sinAtencion, p.ahora, silenciados);
-  const conteo = caidas.length > 0 ? `${n} de ${n + sumar(caidas)}` : `${n}`;
+  const conteo = caidas.length > 0 ? t("{n} de {total}", { n, total: n + sumar(caidas) }) : `${n}`;
   const totalTodas = p.total + sumar(oficina.caidas);
   const alternar = (k: Grupo) => {
     guardarPlegados(alternarPlegado(plegadosActuales(), k, celular));
@@ -268,17 +270,17 @@ export function ListaAgentes(p: PropsLista) {
   };
 
   return (
-    <section className={cx("of-al", celular && "is-m")} aria-label="Agentes">
+    <section className={cx("of-al", celular && "is-m")} aria-label={t("Agentes")}>
       <div className="of-al-h">
-        <h2>Agentes</h2>
-        <span className="of-al-sub">{`${conteo} · primero los que te necesitan`}</span>
+        <h2>{t("Agentes")}</h2>
+        <span className="of-al-sub">{t("{conteo} · primero los que te necesitan", { conteo })}</span>
         <span className="of-sp" />
         {p.filtro.length > 0 ? (
           <span className="of-al-f">
             <Icono nombre="filter" tam={12} />
-            {`Solo ${nombres(p.filtro)} · ${n} de ${totalTodas}`}
+            {t("Solo {nombres} · {n} de {total}", { nombres: nombres(p.filtro), n, total: totalTodas })}
             <button type="button" className="of-al-link" onClick={p.onQuitarFiltro}>
-              Ver todas
+              {t("Ver todas")}
             </button>
           </span>
         ) : null}
@@ -286,10 +288,10 @@ export function ListaAgentes(p: PropsLista) {
       {celular ? null : (
         <div className="of-al-cols" aria-hidden="true">
           <span />
-          <span>Agente</span>
-          <span>Empresa</span>
-          <span>Estado</span>
-          <span>Tarea</span>
+          <span>{t("Agente")}</span>
+          <span>{t("Empresa")}</span>
+          <span>{t("Estado")}</span>
+          <span>{t("Tarea")}</span>
           <span />
         </div>
       )}
@@ -303,14 +305,16 @@ export function ListaAgentes(p: PropsLista) {
             <div key={e.id} className="of-al-off" role="status">
               <Icono nombre="cloud-off" tam={14} />
               <span>
-                <b>{e.nombre} no responde.</b>{" "}
+                <b>{t("{nombre} no responde.", { nombre: e.nombre })}</b>{" "}
                 {e.conocidos
-                  ? `${e.agentes === 1 ? "Su agente vuelve" : `Sus ${e.agentes} agentes vuelven`} a la lista cuando responda.`
-                  : "Sus agentes vuelven a la lista cuando responda."}
+                  ? e.agentes === 1
+                    ? t("Su agente vuelve a la lista cuando responda.")
+                    : t("Sus {n} agentes vuelven a la lista cuando responda.", { n: e.agentes })
+                  : t("Sus agentes vuelven a la lista cuando responda.")}
               </span>
               <button type="button" className="of-btn is-sm" onClick={oficina.reintentar}>
                 <Icono nombre="refresh" tam={14} />
-                Reintentar
+                {t("Reintentar")}
               </button>
             </div>
           ))}

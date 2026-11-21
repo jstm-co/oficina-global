@@ -17,6 +17,7 @@
 // frase). Y se elige con qué motores se graban las voces desde la oficina
 // («Preparar voces»): Supertonic (lo que viene listo), Kokoro, Edge y los clones.
 import { FRASES } from "./avisos.js";
+import { t } from "./i18n.js";
 import { VOCES, VOCES_REPARTO, vocesEdgePorPais, vozPorId, type Motor, type Voz, type VozId } from "./voces.js";
 
 /** Las que alcanzan a leer al momento. */
@@ -141,14 +142,14 @@ export const NUMERO_VOZ: Readonly<Partial<Record<VozId, number>>> = {
 /** Cómo se llama una voz en el selector: los clones son «Clon #42». */
 export function nombreEnLista(id: VozId): string {
   const v = vozPorId(id);
-  return !v ? id : esAlMomento(id) ? v.nombre : `Clon #${NUMERO_VOZ[id]}`;
+  return !v ? id : esAlMomento(id) ? v.nombre : t("Clon #{n}", { n: NUMERO_VOZ[id] ?? "" });
 }
 
 /** Por qué un clon no sirve para leer al momento (el panel lo dice bajo su nombre). */
 export function porqueNoAlcanza(id: VozId): string | null {
   const v = vozPorId(id);
   if (!v || esAlMomento(id)) return null;
-  return v.motor === "qwen3" ? "Tarda 13 a 25 s por frase; para leer al momento, menos de 4 s" : "Tarda 14 a 30 s por frase; para leer al momento, menos de 4 s";
+  return v.motor === "qwen3" ? t("Tarda 13 a 25 s por frase; para leer al momento, menos de 4 s") : t("Tarda 14 a 30 s por frase; para leer al momento, menos de 4 s");
 }
 
 /** Cuánto tarda en grabarse un agente con esa voz (20 frases), para decírselo al usuario antes de elegir. */

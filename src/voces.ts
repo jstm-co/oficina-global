@@ -23,6 +23,7 @@
 // está, dice la frase de siempre.
 
 import { duracionWav } from "./audio.js";
+import { localeTag, msg, t } from "./i18n.js";
 
 export type VozSupertonic = `supertonic-${"f" | "m"}${1 | 2 | 3 | 4 | 5}`;
 /** JST-412: los países de las voces de Edge (código en minúscula, como en la clave `es-MX-…`). */
@@ -47,40 +48,40 @@ export interface Voz {
 
 /** JST-412: cómo se llama cada país en el panel. Chile primero; el resto, por orden alfabético (`paisesEdge`). */
 export const NOMBRE_PAIS: Readonly<Record<PaisVoz, string>> = {
-  cl: "Chile",
-  ar: "Argentina",
-  co: "Colombia",
-  es: "España",
-  us: "Estados Unidos",
-  mx: "México",
-  pe: "Perú",
-  uy: "Uruguay",
-  ve: "Venezuela",
+  cl: msg("Chile"),
+  ar: msg("Argentina"),
+  co: msg("Colombia"),
+  es: msg("España"),
+  us: msg("Estados Unidos"),
+  mx: msg("México"),
+  pe: msg("Perú"),
+  uy: msg("Uruguay"),
+  ve: msg("Venezuela"),
 };
 
-// [país, adjetivo de la mujer, adjetivo del hombre, mujer (nombre, clave), hombre (nombre, clave)]. Nombres verificados con `edge-tts --list-voices` (7.3.1).
+// [país, detalle de la mujer, detalle del hombre, mujer (nombre, clave), hombre (nombre, clave)]. Los detalles se traducen al mostrarse (JST-413). Nombres verificados con `edge-tts --list-voices` (7.3.1).
 const EDGE_PAISES: readonly (readonly [Exclude<PaisVoz, "cl">, string, string, readonly [string, string], readonly [string, string]])[] = [
-  ["mx", "mexicana", "mexicano", ["Dalia", "Dalia"], ["Jorge", "Jorge"]],
-  ["es", "española", "español", ["Elvira", "Elvira"], ["Álvaro", "Alvaro"]],
-  ["ar", "argentina", "argentino", ["Elena", "Elena"], ["Tomás", "Tomas"]],
-  ["co", "colombiana", "colombiano", ["Salomé", "Salome"], ["Gonzalo", "Gonzalo"]],
-  ["pe", "peruana", "peruano", ["Camila", "Camila"], ["Alex (Perú)", "Alex"]],
-  ["us", "estadounidense", "estadounidense", ["Paloma", "Paloma"], ["Alonso", "Alonso"]],
-  ["ve", "venezolana", "venezolano", ["Paola", "Paola"], ["Sebastián", "Sebastian"]],
-  ["uy", "uruguaya", "uruguayo", ["Valentina", "Valentina"], ["Mateo", "Mateo"]],
+  ["mx", msg("mujer, mexicana · Edge"), msg("hombre, mexicano · Edge"), ["Dalia", "Dalia"], ["Jorge", "Jorge"]],
+  ["es", msg("mujer, española · Edge"), msg("hombre, español · Edge"), ["Elvira", "Elvira"], ["Álvaro", "Alvaro"]],
+  ["ar", msg("mujer, argentina · Edge"), msg("hombre, argentino · Edge"), ["Elena", "Elena"], ["Tomás", "Tomas"]],
+  ["co", msg("mujer, colombiana · Edge"), msg("hombre, colombiano · Edge"), ["Salomé", "Salome"], ["Gonzalo", "Gonzalo"]],
+  ["pe", msg("mujer, peruana · Edge"), msg("hombre, peruano · Edge"), ["Camila", "Camila"], ["Alex (Perú)", "Alex"]],
+  ["us", msg("mujer, estadounidense · Edge"), msg("hombre, estadounidense · Edge"), ["Paloma", "Paloma"], ["Alonso", "Alonso"]],
+  ["ve", msg("mujer, venezolana · Edge"), msg("hombre, venezolano · Edge"), ["Paola", "Paola"], ["Sebastián", "Sebastian"]],
+  ["uy", msg("mujer, uruguaya · Edge"), msg("hombre, uruguayo · Edge"), ["Valentina", "Valentina"], ["Mateo", "Mateo"]],
 ];
 
 /** JST-412: id estable `edge-es-mx-dalia` (el apellido de la clave, sin tildes ni mayúsculas). */
-const EDGE_OTROS: readonly Voz[] = EDGE_PAISES.flatMap(([pais, adjM, adjH, [nomM, claveM], [nomH, claveH]]) =>
+const EDGE_OTROS: readonly Voz[] = EDGE_PAISES.flatMap(([pais, detM, detH, [nomM, claveM], [nomH, claveH]]) =>
   (
     [
-      ["mujer", adjM, nomM, claveM],
-      ["hombre", adjH, nomH, claveH],
+      [detM, nomM, claveM],
+      [detH, nomH, claveH],
     ] as const
-  ).map(([quien, adj, nombre, clave]) => ({
+  ).map(([detalle, nombre, clave]) => ({
     id: `edge-es-${pais}-${clave.toLowerCase()}` as VozEdgePais,
     nombre,
-    detalle: `${quien}, ${adj} · Edge`,
+    detalle,
     motor: "edge" as const,
     clave: `es-${pais.toUpperCase()}-${clave}Neural`,
     pais,
@@ -96,22 +97,22 @@ const SUPERTONIC: readonly Voz[] = (["f", "m"] as const).flatMap((g, i) =>
   ([1, 2, 3, 4, 5] as const).map((n) => ({
     id: `supertonic-${g}${n}` as const,
     nombre: `Supertonic ${g.toUpperCase()}${n}`,
-    detalle: `${g === "f" ? "mujer" : "hombre"} · Supertonic`,
+    detalle: g === "f" ? msg("mujer · Supertonic") : msg("hombre · Supertonic"),
     motor: "supertonic" as const,
     clave: String(i * 5 + n - 1),
   })),
 );
 
 export const VOCES: readonly Voz[] = [
-  { id: "lorenzo", nombre: "Lorenzo", detalle: "hombre, chileno · Edge", motor: "edge", clave: "es-CL-LorenzoNeural", pais: "cl" },
-  { id: "catalina", nombre: "Catalina", detalle: "mujer, chilena · Edge", motor: "edge", clave: "es-CL-CatalinaNeural", pais: "cl" },
-  { id: "alex", nombre: "Alex", detalle: "hombre · Kokoro", motor: "kokoro", clave: "em_alex" },
-  { id: "dora", nombre: "Dora", detalle: "mujer · Kokoro", motor: "kokoro", clave: "ef_dora" },
-  { id: "santa", nombre: "Santa", detalle: "hombre · Kokoro", motor: "kokoro", clave: "em_santa" },
-  { id: "chatterbox-hombre", nombre: "Clon chileno (Chatterbox)", detalle: "clon de un hombre chileno · Chatterbox", motor: "chatterbox", clave: "ref_hombre_cl" },
-  { id: "chatterbox-mujer", nombre: "Clon chilena (Chatterbox)", detalle: "clon de una mujer chilena · Chatterbox", motor: "chatterbox", clave: "ref_mujer_cl" },
-  { id: "qwen3-hombre", nombre: "Clon chileno (Qwen3)", detalle: "clon del mismo hombre chileno · Qwen3", motor: "qwen3", clave: "ref_hombre_cl" },
-  { id: "qwen3-mujer", nombre: "Clon chilena (Qwen3)", detalle: "clon de la misma mujer chilena · Qwen3", motor: "qwen3", clave: "ref_mujer_cl" },
+  { id: "lorenzo", nombre: "Lorenzo", detalle: msg("hombre, chileno · Edge"), motor: "edge", clave: "es-CL-LorenzoNeural", pais: "cl" },
+  { id: "catalina", nombre: "Catalina", detalle: msg("mujer, chilena · Edge"), motor: "edge", clave: "es-CL-CatalinaNeural", pais: "cl" },
+  { id: "alex", nombre: "Alex", detalle: msg("hombre · Kokoro"), motor: "kokoro", clave: "em_alex" },
+  { id: "dora", nombre: "Dora", detalle: msg("mujer · Kokoro"), motor: "kokoro", clave: "ef_dora" },
+  { id: "santa", nombre: "Santa", detalle: msg("hombre · Kokoro"), motor: "kokoro", clave: "em_santa" },
+  { id: "chatterbox-hombre", nombre: "Clon chileno (Chatterbox)", detalle: msg("clon de un hombre chileno · Chatterbox"), motor: "chatterbox", clave: "ref_hombre_cl" },
+  { id: "chatterbox-mujer", nombre: "Clon chilena (Chatterbox)", detalle: msg("clon de una mujer chilena · Chatterbox"), motor: "chatterbox", clave: "ref_mujer_cl" },
+  { id: "qwen3-hombre", nombre: "Clon chileno (Qwen3)", detalle: msg("clon del mismo hombre chileno · Qwen3"), motor: "qwen3", clave: "ref_hombre_cl" },
+  { id: "qwen3-mujer", nombre: "Clon chilena (Qwen3)", detalle: msg("clon de la misma mujer chilena · Qwen3"), motor: "qwen3", clave: "ref_mujer_cl" },
   ...SUPERTONIC,
   ...EDGE_OTROS,
 ];
@@ -122,7 +123,8 @@ export const VOCES_REPARTO: readonly Voz[] = VOCES.filter((v) => !v.soloEleccion
 /** JST-412: los países de las voces de Edge, en el orden del selector: Chile primero y el resto por orden alfabético. */
 export function paisesEdge(): PaisVoz[] {
   const otros = [...new Set(VOCES.filter((v) => v.motor === "edge" && v.pais && v.pais !== "cl").map((v) => v.pais!))];
-  otros.sort((a, b) => NOMBRE_PAIS[a].localeCompare(NOMBRE_PAIS[b], "es"));
+  // Por el nombre que se ve: en español, como siempre; en otro idioma, el orden de ese idioma.
+  otros.sort((a, b) => t(NOMBRE_PAIS[a]).localeCompare(t(NOMBRE_PAIS[b]), localeTag()));
   return ["cl", ...otros];
 }
 

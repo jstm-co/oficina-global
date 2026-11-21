@@ -12,6 +12,7 @@
 // - Una voz a la vez con el Resumen (§7): ver `resumen.ts`.
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from "react";
 import { useHostContext, useHostLocation } from "@paperclipai/plugin-sdk/ui";
+import { t } from "../i18n.js";
 import { textoDeTarea } from "./botonContexto.js";
 import { Capa } from "./capas.js";
 import { LectorContexto, msEscrita, tareaDeRuta, type EstadoContexto, type VozContexto } from "./contextoLector.js";
@@ -155,15 +156,15 @@ export function useContexto(): LectorContexto {
 // ---------------------------------------------------------------------------
 
 export const ICONO: Readonly<Record<EstadoContexto, string>> = { listo: "volume-2", cargando: "loader", leyendo: "x", fin: "check", error: "triangle-alert" };
-export const TEXTO: Readonly<Record<EstadoContexto, string>> = { listo: "Leer contexto", cargando: "Leer contexto", leyendo: "Detener", fin: "Leído", error: "No se pudo" };
+export const TEXTO: Readonly<Record<EstadoContexto, string>> = { listo: t("Leer contexto"), cargando: t("Leer contexto"), leyendo: t("Detener"), fin: t("Leído"), error: t("No se pudo") };
 const ARIA: Readonly<Record<EstadoContexto, string>> = {
-  listo: "Leer contexto de la tarea",
-  cargando: "Cargando el contexto de la tarea",
-  leyendo: "Detener lectura",
-  fin: "Leer contexto de la tarea",
-  error: "No se pudo cargar la tarea. Leer contexto otra vez",
+  listo: t("Leer contexto de la tarea"),
+  cargando: t("Cargando el contexto de la tarea"),
+  leyendo: t("Detener lectura"),
+  fin: t("Leer contexto de la tarea"),
+  error: t("No se pudo cargar la tarea. Leer contexto otra vez"),
 };
-const TITULO: Readonly<Record<EstadoContexto, string>> = { listo: "Leer contexto", cargando: "Cargando…", leyendo: "Detener", fin: "Leer contexto", error: "No se pudo cargar la tarea" };
+const TITULO: Readonly<Record<EstadoContexto, string>> = { listo: t("Leer contexto"), cargando: t("Cargando…"), leyendo: t("Detener"), fin: t("Leer contexto"), error: t("No se pudo cargar la tarea") };
 
 // ---------------------------------------------------------------------------
 // Al borde de la pantalla, en el celular (JST-290, design-spec de JST-294 §2)
@@ -268,13 +269,13 @@ export function EscritoContexto({ c, celular, estilo, dentro = false }: { c: Lec
     if (arriba < el.scrollTop + 40 || arriba + cur.offsetHeight > el.scrollTop + el.clientHeight - 8) el.scrollTop = Math.max(0, arriba - 48);
   }, [c.k]);
   return (
-    <div ref={caja} className={cx("of-ctx-esc", dentro && "is-in", celular && "is-m")} style={estilo} role="region" aria-label="Contexto de la tarea, escrito">
+    <div ref={caja} className={cx("of-ctx-esc", dentro && "is-in", celular && "is-m")} style={estilo} role="region" aria-label={t("Contexto de la tarea, escrito")}>
       <div className="of-ctx-eh">
         <Icono nombre="volume-x" tam={14} />
         <span>
-          <b>Este navegador no tiene voz en español.</b> Te lo dejo escrito.
+          <b>{t("Este navegador no tiene voz en español.")}</b> {t("Te lo dejo escrito.")}
         </span>
-        <button type="button" className="of-ibtn is-ghost" aria-label="Detener lectura" title="Detener" onClick={() => c.detener()}>
+        <button type="button" className="of-ibtn is-ghost" aria-label={t("Detener lectura")} title={t("Detener")} onClick={() => c.detener()}>
           <Icono nombre="x" tam={celular ? 18 : 14} />
         </button>
       </div>
@@ -331,7 +332,7 @@ export function BotonContextoBarra() {
         {!celular && e === "leyendo" && n > 0 ? <span className="of-ctx-n">{`${c.k + 1}/${n}`}</span> : null}
       </button>
       <span className="of-sr" role="status">
-        {e === "fin" ? "Leído" : e === "error" ? "No se pudo cargar la tarea" : ""}
+        {e === "fin" ? t("Leído") : e === "error" ? t("No se pudo cargar la tarea") : ""}
       </span>
       {escrito && bajo ? (
         <Capa>
@@ -342,7 +343,7 @@ export function BotonContextoBarra() {
         <Capa>
           <div className="of-ctx-toast" style={bajo}>
             <Icono nombre="triangle-alert" tam={14} />
-            No se pudo cargar la tarea. Prueba otra vez.
+            {t("No se pudo cargar la tarea. Prueba otra vez.")}
           </div>
         </Capa>
       ) : null}

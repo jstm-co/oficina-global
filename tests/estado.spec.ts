@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { agenteDeItem, armarEmpresa, contar, estadoBase, esperasPorAgente, tareasFaltantes, type DatosEmpresa } from "../src/estado.js";
+import { agenteDeItem, armarEmpresa, contar, estadoBase, esperasPorAgente, tareasFaltantes, tituloVisible, type DatosEmpresa } from "../src/estado.js";
+import { setLocale } from "../src/i18n.js";
 import { partesPorEvento } from "../src/sincronizador.js";
 import { contarVista, vistaDe } from "../src/vista.js";
 import { fotoDe, llegadas } from "../src/avisos.js";
@@ -265,5 +266,24 @@ describe("lo que espera, en palabras (JST-97)", () => {
   it("«Plan approval - …» va en español", () => {
     const plan = tarjeta("a", { subject: { kind: "interaction", id: "x3", title: "Plan approval - Board global", metadata: { kind: "request_confirmation" } } });
     expect(esperasPorAgente([plan], [agente("a")]).porAgente.get("a")?.[0]?.titulo).toBe("Aprobar el plan: Board global");
+  });
+});
+
+describe("tituloVisible (JST-413)", () => {
+  it("en español queda igual", () => {
+    expect(tituloVisible("Aprobar el plan: Board global")).toBe("Aprobar el plan: Board global");
+    expect(tituloVisible("¿Apruebas el cambio?")).toBe("¿Apruebas el cambio?");
+  });
+  it("en inglés traduce el prefijo del plan", () => {
+    setLocale("en");
+    try {
+      expect(tituloVisible("Aprobar el plan: Board global")).toBe("Approve the plan: Board global");
+    } finally {
+      setLocale("es");
+    }
+  });
+  it("solo toca el prefijo del plan, no una frase que lo contenga", () => {
+    expect(tituloVisible("Luego: Aprobar el plan: X")).toBe("Luego: Aprobar el plan: X");
+    expect(tituloVisible("")).toBe("");
   });
 });

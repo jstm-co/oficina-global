@@ -261,6 +261,31 @@ describe("piso del computador: la escala más grande con la que cabe entero (JST
     for (const a of dePie) for (const b of dePie) if (a !== b) expect(Math.abs(a.x - b.x) >= 34 || Math.abs(a.y - b.y) >= 32, `${a.x},${a.y} y ${b.x},${b.y}`).toBe(true);
   });
 
+  it("una ventana más ancha nunca da un piso más chico (los lugares del descanso van en grilla y 1 px podía quitar un asiento)", () => {
+    const CUATRO: EntradaSala[] = [
+      { prefijo: "BET", agentes: 7 },
+      { prefijo: "ELM", agentes: 4 },
+      { prefijo: "JST", agentes: 12 },
+      { prefijo: "MIG", agentes: 9 },
+    ];
+    const escala = (salas: readonly EntradaSala[], contenedor: number, alto: number, dpr = 1) => armarPisoComputador(salas, contenedor, alto, [], dpr).escala;
+    // Los saltos que se veían al arrastrar el borde de la ventana.
+    expect(escala(CUATRO, 1254, 900)).toBe(escala(CUATRO, 1253, 900));
+    expect(escala(CUATRO, 1857, 1300)).toBe(escala(CUATRO, 1856, 1300));
+    expect(escala(CUATRO, 1857, 1300, 2)).toBe(escala(CUATRO, 1856, 1300, 2));
+    expect(escala([{ prefijo: "BET", agentes: 3 }], 1112, 939)).toBe(escala([{ prefijo: "BET", agentes: 3 }], 1111, 939));
+    // Y en todo el rango, cada 3 px: la escala no baja y siempre hay un asiento por agente.
+    for (const [salas, alto, dpr] of [[CUATRO, 900, 1], [CUATRO, 1300, 2], [CINCO, 1300, 2]] as const) {
+      let antes = 0;
+      for (let contenedor = 1000; contenedor <= 3400; contenedor += 3) {
+        const p = armarPisoComputador(salas, contenedor, alto, [], dpr);
+        expect(p.escala, `${contenedor} × ${alto}`).toBeGreaterThanOrEqual(antes);
+        expect(p.salas.every((s) => s.asientos.length >= s.puestos.length), `${contenedor} × ${alto}`).toBe(true);
+        antes = p.escala;
+      }
+    }
+  });
+
   it("los tamaños de letra del piso van por tramos: 1,5x y 2x como 2x; de 2,5x para arriba, como 3x", () => {
     expect([1, 1.5, 2, 2.5, 3, 3.5, 4, 6].map(claseEscala)).toEqual([1, 2, 2, 3, 3, 3, 3, 3]);
   });

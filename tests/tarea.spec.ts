@@ -6,6 +6,7 @@ import {
   autorComentario,
   comentariosVisibles,
   cuerpoComentario,
+  mezclarComentarios,
   nombreEstado,
   nombrePrioridad,
   responsableTarea,
@@ -101,5 +102,25 @@ describe("estados", () => {
     expect(nombrePrioridad("high")).toBe("Alta");
     expect(nombrePrioridad("critical")).toBe("Crítica");
     expect(nombrePrioridad(null)).toBe("—");
+  });
+});
+
+describe("mezclarComentarios", () => {
+  const viejo = comentario("c-1", "2025-01-01T10:00:00Z");
+  const medio = comentario("c-2", "2025-01-01T11:00:00Z");
+  const nuevo = comentario("c-3", "2025-01-01T12:00:00Z");
+  const masNuevo = comentario("c-4", "2025-01-01T13:00:00Z");
+
+  it("conserva el comentario local que la lectura no trae, primero", () => {
+    expect(mezclarComentarios([medio, viejo], [nuevo]).map((c) => c.id)).toEqual(["c-3", "c-2", "c-1"]);
+  });
+  it("no repite el que la lectura ya trae", () => {
+    expect(mezclarComentarios([nuevo, medio], [nuevo]).map((c) => c.id)).toEqual(["c-3", "c-2"]);
+  });
+  it("ordena los locales del más nuevo al más antiguo", () => {
+    expect(mezclarComentarios([viejo], [nuevo, masNuevo]).map((c) => c.id)).toEqual(["c-4", "c-3", "c-1"]);
+  });
+  it("sin locales deja la lectura igual", () => {
+    expect(mezclarComentarios([medio, viejo], [])).toEqual([medio, viejo]);
   });
 });

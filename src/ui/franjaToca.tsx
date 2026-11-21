@@ -2,7 +2,10 @@
 // con esperas o sin ellas, para que el alto de la cabecera no cambie cuando alguien empieza o deja de necesitarte
 // (la página mide dónde termina para decidir a qué escala cabe el piso). Cada agente que te necesita es un ítem de una
 // línea con su botón «Responder»; si no caben, la franja se desplaza en horizontal.
+import { useEffect, useRef } from "react";
 import { nombreCorto } from "../avisos.js";
+import { tituloVisible } from "../estado.js";
+import { t } from "../i18n.js";
 import { comparar } from "../lista.js";
 import { chipDe } from "../responder.js";
 import type { AgenteVista } from "../vista.js";
@@ -24,6 +27,21 @@ export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder 
   onResponder: (agenteId: string, desde: HTMLElement | null) => void;
 }) {
   const esperan = esperanOrdenados(agentes);
+  // La franja no muestra barra: con la rueda del mouse (sin trackpad) se desplaza a lo ancho cuando no caben todos.
+  const lista = useRef<HTMLDivElement | null>(null);
+  const hay = esperan.length > 0;
+  useEffect(() => {
+    const el = lista.current;
+    if (!el) return;
+    const rueda = (ev: WheelEvent) => {
+      if (ev.ctrlKey || Math.abs(ev.deltaX) >= Math.abs(ev.deltaY) || el.scrollWidth <= el.clientWidth) return;
+      const antes = el.scrollLeft;
+      el.scrollLeft += ev.deltaY;
+      if (el.scrollLeft !== antes) ev.preventDefault();
+    };
+    el.addEventListener("wheel", rueda, { passive: false });
+    return () => el.removeEventListener("wheel", rueda);
+  }, [hay]);
   let contenido;
   if (esperan.length > 0) {
     const abrir = (id: string, el: HTMLElement) => onResponder(id, el.closest<HTMLElement>(".of-te-it") ?? el);
@@ -31,27 +49,27 @@ export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder 
       <>
         <span className="of-te-h">
           <Icono nombre="hand" tam={14} />
-          Te necesitan
+          {t("Te necesitan")}
           <b>{esperan.length}</b>
         </span>
-        <div className="of-te-l">
+        <div className="of-te-l" ref={lista}>
           {esperan.map((a) => {
             const e = a.teNecesita[0];
             const mas = a.teNecesita.length - 1;
             return (
               <div key={a.id} className="of-te-it">
-                <button type="button" className="of-te-m" aria-label={`${a.nombre}, ${a.empresa}: te necesita. Responder`} onClick={(ev) => abrir(a.id, ev.currentTarget)}>
+                <button type="button" className="of-te-m" aria-label={t("{nombre}, {empresa}: te necesita. Responder", { nombre: a.nombre, empresa: a.empresa })} onClick={(ev) => abrir(a.id, ev.currentTarget)}>
                   <CajaPersonaje agente={a} px={1} />
                   <b className="of-te-n">{nombreCorto(a.nombre)}</b>
                   <EtiquetaEmpresa prefijo={a.prefijo} />
                   <span className="of-te-t">
                     {e?.identifier ? <span className="of-tid">{e.identifier}</span> : null}
-                    {e ? (e.titulo ?? chipDe(e).label) : null}
+                    {e ? (e.titulo ? tituloVisible(e.titulo) : t(chipDe(e).label)) : null}
                   </span>
                   {mas > 0 ? <span className="of-te-mas">+{mas}</span> : null}
                 </button>
-                <button type="button" className="of-btn is-xs is-primary is-toca" aria-label={`Responder a ${nombreCorto(a.nombre)}`} onClick={(ev) => abrir(a.id, ev.currentTarget)}>
-                  Responder
+                <button type="button" className="of-btn is-xs is-primary is-toca" aria-label={t("Responder a {nombre}", { nombre: nombreCorto(a.nombre) })} onClick={(ev) => abrir(a.id, ev.currentTarget)}>
+                  {t("Responder")}
                 </button>
               </div>
             );
@@ -65,19 +83,19 @@ export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder 
     contenido = (
       <span className="of-te-ok">
         <Icono nombre="triangle-alert" tam={14} />
-        Por ahora no sé quién te necesita
+        {t("Por ahora no sé quién te necesita")}
       </span>
     );
   } else {
     contenido = (
       <span className="of-te-ok">
         <Icono nombre="circle-check" tam={14} />
-        Nadie te necesita ahora
+        {t("Nadie te necesita ahora")}
       </span>
     );
   }
   return (
-    <div className="of-te" role="region" aria-label="Te necesitan">
+    <div className="of-te" role="region" aria-label={t("Te necesitan")}>
       {contenido}
     </div>
   );

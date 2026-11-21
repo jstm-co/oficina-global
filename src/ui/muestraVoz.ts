@@ -5,6 +5,7 @@
 // oficina no empieza frases (como con «Leer contexto») y la que sonaba se calla.
 import { useSyncExternalStore } from "react";
 import { TEXTO_MUESTRA } from "../avisos.js";
+import { t } from "../i18n.js";
 import { vozParaResumen } from "../resumen/voz.js";
 import { accionPlugin } from "../fuentes.js";
 import { archivoVivo, claveAudio, vozPorId, type VozId } from "../voces.js";
@@ -123,7 +124,7 @@ export async function tocarMuestra(voz: VozMuestra): Promise<void> {
   // Si el toque ya no es el último, no suena nada (y tampoco se avisa).
   if (sonando !== voz) return;
   if (blob && tocarOficina(blob, () => undefined, () => terminar(voz))) return;
-  if (!fallo) fijarFallo(voz, grabada ? "No pude reproducir la muestra." : "No hay muestra de esa voz y no se pudo grabar ahora.");
+  if (!fallo) fijarFallo(voz, grabada ? t("No pude reproducir la muestra.") : t("No hay muestra de esa voz y no se pudo grabar ahora."));
   terminar(voz);
 }
 
@@ -139,14 +140,14 @@ function fijarFallo(voz: VozMuestra, texto: string): void {
  */
 async function grabarMuestra(voz: VozMuestra): Promise<Blob | null> {
   if (voz === "navegador") return null;
-  const nombre = vozPorId(voz)?.nombre ?? "esa voz";
+  const nombre = vozPorId(voz)?.nombre ?? t("esa voz");
   if (!vozParaResumen(voz)) {
-    fijarFallo(voz, `${nombre} es un clon: su muestra no se graba al momento.`);
+    fijarFallo(voz, t("{nombre} es un clon: su muestra no se graba al momento.", { nombre }));
     return null;
   }
   const id = await instalacion().catch(() => null);
   if (!id || !empresa) {
-    fijarFallo(voz, `No pude pedirle a la Mac la muestra de ${nombre}.`);
+    fijarFallo(voz, t("No pude pedirle a la Mac la muestra de {nombre}.", { nombre }));
     return null;
   }
   const fin = Date.now() + ESPERA_MUESTRA_MS;
@@ -155,11 +156,11 @@ async function grabarMuestra(voz: VozMuestra): Promise<Blob | null> {
     const estado = r?.estados?.[0];
     if (estado === "lista") return sonando === voz ? pedirArchivo(archivoVivo(voz, TEXTO_MUESTRA)) : null;
     if (estado === "no") {
-      fijarFallo(voz, `La Mac no puede grabar la muestra de ${nombre} ahora (Edge necesita uv, ffmpeg e internet).`);
+      fijarFallo(voz, t("La Mac no puede grabar la muestra de {nombre} ahora (Edge necesita uv, ffmpeg e internet).", { nombre }));
       return null;
     }
     if (!r) await new Promise((ok) => setTimeout(ok, 400));
   }
-  if (sonando === voz) fijarFallo(voz, `La muestra de ${nombre} tarda en grabarse. Prueba de nuevo en un momento.`);
+  if (sonando === voz) fijarFallo(voz, t("La muestra de {nombre} tarda en grabarse. Prueba de nuevo en un momento.", { nombre }));
   return null;
 }

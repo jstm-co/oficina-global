@@ -8,6 +8,7 @@
 //     («Est», «oy revisando c»…) y se juntan; los avisos de uso de tokens
 //     (`usage_update`) no dicen nada del error y se saltan.
 // Se muestran las últimas 20 líneas que no estén vacías.
+import { localeTag, t } from "./i18n.js";
 
 export interface LineaLog {
   /** `ts` del trozo, ISO. */
@@ -103,20 +104,20 @@ export function lineasDelLog(contenido: string, cortado: boolean, n = LINEAS_LOG
 export function horaLinea(ts: string): string {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  return d.toLocaleTimeString(localeTag(), { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
 /** «hoy 14:38:21», «ayer 23:10:04» o «18 oct 09:12:40» (Cuándo, §4). */
 export function diaYHora(iso: string | null | undefined, ahora: number): string {
   if (!iso) return "";
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return "";
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return "";
   const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const dias = Math.round((dia(new Date(ahora)) - dia(t)) / 86_400_000);
+  const dias = Math.round((dia(new Date(ahora)) - dia(fecha)) / 86_400_000);
   const hora = horaLinea(iso);
-  if (dias <= 0) return `hoy ${hora}`;
-  if (dias === 1) return `ayer ${hora}`;
-  return `${t.toLocaleDateString("es", { day: "numeric", month: "short" }).replace(".", "")} ${hora}`;
+  if (dias <= 0) return t("hoy {hora}", { hora });
+  if (dias === 1) return t("ayer {hora}", { hora });
+  return `${fecha.toLocaleDateString(localeTag(), { day: "numeric", month: "short" }).replace(".", "")} ${hora}`;
 }
 
 /** «52 s», «4 min», «1 h 12 min»; `""` si falta una de las horas. */

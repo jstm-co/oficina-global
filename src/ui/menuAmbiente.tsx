@@ -3,6 +3,7 @@
 // «Conversaciones» abren sus paneles de siempre (`PanelVoces`, `PanelConversaciones`) anclados a este botón, con el mismo
 // menú abierto único de `paneles.tsx`; «Mascotas» es un interruptor que no cierra el menú. En celular no se usa.
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import { t } from "../i18n.js";
 import type { AgenteVista } from "../vista.js";
 import { cambiarAjustes, puntoIa, puntoVoces, useAjustes } from "./ajustes.js";
 import { Capa, useEsc } from "./capas.js";
@@ -13,10 +14,10 @@ import { cx, Icono } from "./piso.js";
 
 /** Lo que dicen las filas de «Voces» y «Mascotas» (la de «Conversaciones» sale de `resumenConversaciones`). */
 export function estadoVoces(voces: boolean): string {
-  return voces ? "Activadas" : "Apagadas";
+  return voces ? t("Activadas") : t("Apagadas");
 }
 export function estadoMascotas(mascotas: boolean): string {
-  return mascotas ? "Visibles" : "Ocultas";
+  return mascotas ? t("Visibles") : t("Ocultas");
 }
 
 export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) {
@@ -45,7 +46,7 @@ export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) 
   const dotVoces = puntoVoces(aj);
   const dotConv = puntoIa(aj, e);
   const punto = dotVoces || dotConv ? <span className="of-hdot" /> : null;
-  const puntoFila = <span className="of-amb-dot" title="Novedad" />;
+  const puntoFila = <span className="of-amb-dot" title={t("Novedad")} />;
   const estadoConv = resumenConversaciones(aj.charlas, aj.iaFuente, e);
 
   const flechas = (ev: KeyboardEvent<HTMLDivElement>) => {
@@ -63,17 +64,17 @@ export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) 
     ) : menu === "charlas" ? (
       <PanelConversaciones e={e} celular={false} />
     ) : menu === "ambiente" ? (
-      <div ref={filas} className="of-amb" role="group" aria-label="Ambiente" onKeyDown={flechas}>
+      <div ref={filas} className="of-amb" role="group" aria-label={t("Ambiente")} onKeyDown={flechas}>
         <button type="button" className={cx("of-amb-row", !aj.voces && "is-off")} aria-haspopup="dialog" onClick={() => abrirMenu("voces")}>
           <Icono nombre={aj.voces ? "volume-2" : "volume-x"} tam={14} />
-          <span className="of-amb-n">Voces</span>
+          <span className="of-amb-n">{t("Voces")}</span>
           {dotVoces ? puntoFila : null}
           <span className="of-amb-st">{estadoVoces(aj.voces)}</span>
           <Icono nombre="chevron-right" tam={12} className="of-amb-cv" />
         </button>
         <button type="button" className={cx("of-amb-row", !aj.mascotas && "is-off")} role="switch" aria-checked={aj.mascotas} onClick={() => cambiarAjustes({ mascotas: !aj.mascotas })}>
           <Icono nombre="paw-print" tam={14} />
-          <span className="of-amb-n">Mascotas</span>
+          <span className="of-amb-n">{t("Mascotas")}</span>
           <span className="of-amb-st">{estadoMascotas(aj.mascotas)}</span>
           <span className={cx("of-amb-sw", aj.mascotas && "is-on")} aria-hidden="true">
             <i />
@@ -81,7 +82,7 @@ export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) 
         </button>
         <button type="button" className={cx("of-amb-row", !aj.charlas && "is-off")} aria-haspopup="dialog" onClick={() => abrirMenu("charlas")}>
           <Icono nombre={aj.charlas ? "message-circle" : "message-circle-off"} tam={14} />
-          <span className="of-amb-n">Conversaciones</span>
+          <span className="of-amb-n">{t("Conversaciones")}</span>
           {dotConv ? puntoFila : null}
           <span className="of-amb-st">{estadoConv}</span>
           <Icono nombre="chevron-right" tam={12} className="of-amb-cv" />
@@ -97,11 +98,11 @@ export function BotonAmbiente({ agentes }: { agentes: readonly AgenteVista[] }) 
         className={cx("of-btn is-sm of-hbtn of-ambbtn", abierto && "is-open")}
         aria-haspopup="dialog"
         aria-expanded={abierto}
-        title="Ambiente: voces, mascotas y conversaciones"
+        title={t("Ambiente: voces, mascotas y conversaciones")}
         onClick={() => abrirMenu(abierto ? null : "ambiente")}
       >
         <Icono nombre="sliders-horizontal" tam={14} />
-        Ambiente
+        {t("Ambiente")}
         <Icono nombre={abierto ? "chevron-up" : "chevron-down"} tam={12} className="of-iaa-cv" />
         {punto}
       </button>
