@@ -114,6 +114,7 @@ import {
 import { nombreCorto as nombreCortoVoz } from "./avisos.js";
 import type { TipoEspera } from "./estado.js";
 import { filaDeSalas } from "./escritorio.js";
+import { t } from "./i18n.js";
 import { altoEntrega, cajaHilo, cajasEntrega, cruzan, subirEntrega, tamanoHilo, tapaA, type CajaHilo, type CajasEntrega } from "./hilo.js";
 import { CACHE_TEMAS_MS, type Temas } from "./temas.js";
 import type { Dibujo } from "./vista.js";
@@ -1401,7 +1402,8 @@ export class Vida {
   /**
    * La entrega en la mesa (JST-163 §10): se juntan si quien entrega está
    * trabajando o libre (no en la fila), quien recibe está libre en el descanso,
-   * no hay otra entrega en la sala y el piso está a 2x o 3x, sin movimiento
+   * no hay otra entrega en la sala y el piso está a 1,5x o más (JST-410: 1,5x
+   * es la escala de un notebook y usa el mismo plano que 2x), sin movimiento
    * reducido. Quien entrega va a la derecha de la mesa (a la izquierda están tu
    * escritorio y tu fila) con el sobre en la mano. Si alguno conversaba, la
    * conversación se corta. Sus globos suben lo justo para no taparle la cabeza
@@ -1409,7 +1411,7 @@ export class Vida {
    * tendrían que salir de la sala).
    */
   private juntar(pd: Persona, pa: Persona, codigo: string, sala: SalaVida, ahora: number): boolean {
-    if (this.op.rm || (this.plano?.escala ?? 1) < 2 || this.sinCaminar()) return false;
+    if (this.op.rm || (this.plano?.escala ?? 1) < 1.5 || this.sinCaminar()) return false;
     if (this.juntas.some((j) => j.prefijo === sala.plano.prefijo)) return false;
     if ((pd.st !== "trabaja" && pd.st !== "libre") || pd.need || this.fila.has(pd.id) || pd.lugar === "fila") return false;
     if (pa.st !== "libre" || pa.need || this.fila.has(pa.id) || !this.enElDescanso(pa)) return false;
@@ -2851,12 +2853,12 @@ export class Vida {
   }
 
   /** El sobre más nuevo de la sala que salió hace menos de 6 s. Sin nombre conocido, dice para quién va (§2). */
-  private itemSobre(prefijo: string, t: number): ItemRotulo | null {
-    const e = this.entregas.filter((x) => x.prefijo === prefijo && t - x.t0 < SOBRE_MS).at(-1);
+  private itemSobre(prefijo: string, ahora: number): ItemRotulo | null {
+    const e = this.entregas.filter((x) => x.prefijo === prefijo && ahora - x.t0 < SOBRE_MS).at(-1);
     if (!e) return null;
     const quien = nombreCorto(this.personas.get(e.a)?.nombre ?? "");
     const titulo = this.titulos?.titulo(e.codigo) ?? null;
-    return { clave: `s:${e.id}`, tipo: "sobre", prefijo, agente: e.a, quien, codigo: e.codigo, mas: 0, texto: titulo ?? (quien ? `para ${quien}` : "") };
+    return { clave: `s:${e.id}`, tipo: "sobre", prefijo, agente: e.a, quien, codigo: e.codigo, mas: 0, texto: titulo ?? (quien ? t("para {quien}", { quien }) : "") };
   }
 
   /** La entrega en la mesa de la sala, mientras dura: «🤝 BET-434 para Ingeniero frontend: Maqueta…» (JST-163 §10). */
@@ -2865,7 +2867,7 @@ export class Vida {
     if (!j) return null;
     const para = nombreCortoVoz(this.personas.get(j.a)?.nombre ?? "");
     const titulo = this.titulos?.titulo(j.codigo) ?? null;
-    return { clave: `e:${j.id}`, tipo: "entrega", prefijo, agente: j.de, quien: nombreCorto(this.personas.get(j.de)?.nombre ?? ""), codigo: j.codigo, mas: 0, texto: `para ${para}${titulo ? `: ${titulo}` : ""}` };
+    return { clave: `e:${j.id}`, tipo: "entrega", prefijo, agente: j.de, quien: nombreCorto(this.personas.get(j.de)?.nombre ?? ""), codigo: j.codigo, mas: 0, texto: titulo ? t("para {para}: {titulo}", { para, titulo }) : t("para {para}", { para }) };
   }
 
   /**
@@ -2874,16 +2876,16 @@ export class Vida {
    * todavía se vea trabajando, y al menos 2 s si toma otra tarea: antes
    * esperaba a verlo libre y el rótulo pasaba primero a otro (JST-191).
    */
-  private itemListo(prefijo: string, t: number): ItemRotulo | null {
+  private itemListo(prefijo: string, ahora: number): ItemRotulo | null {
     let mejor: { p: Persona; t0: number; codigo: string | null } | null = null;
     for (const [id, l] of this.listos) {
       const p = this.personas.get(id);
-      if (!p || p.prefijo !== prefijo || !this.enListo(p, t)) continue;
+      if (!p || p.prefijo !== prefijo || !this.enListo(p, ahora)) continue;
       if (!mejor || l.t0 > mejor.t0) mejor = { p, t0: l.t0, codigo: l.codigo };
     }
     if (!mejor) return null;
     const titulo = mejor.codigo ? (this.titulos?.titulo(mejor.codigo) ?? null) : null;
-    return { clave: `ok:${mejor.p.id}:${mejor.t0}`, tipo: "listo", prefijo, agente: mejor.p.id, quien: nombreCorto(mejor.p.nombre), codigo: mejor.codigo, mas: 0, texto: titulo ? `Listo: ${titulo}` : "Listo" };
+    return { clave: `ok:${mejor.p.id}:${mejor.t0}`, tipo: "listo", prefijo, agente: mejor.p.id, quien: nombreCorto(mejor.p.nombre), codigo: mejor.codigo, mas: 0, texto: titulo ? t("Listo: {titulo}", { titulo }) : t("Listo") };
   }
 
   private calcularRotulo(clave: string, t: number): RotuloCalculado | null {

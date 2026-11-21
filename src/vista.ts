@@ -1,9 +1,10 @@
 // Lo que la oficina dibuja de cada agente (design-spec de JST-65 §5), sin React:
 // la pose, la frase para el lector de pantalla, los contadores y los tiempos.
 import { aspectoDe } from "./aspecto.js";
-import { textoSinTarea, type AgenteOficina, type Espera, type TipoEspera } from "./estado.js";
+import { textoSinTarea, tituloVisible, type AgenteOficina, type Espera, type TipoEspera } from "./estado.js";
 import { esErrorViejo, silenciadosPorOmision, type Silenciados } from "./erroresViejos.js";
 import { textoGlobo, type Estimacion } from "./hora.js";
+import { getLocale, localeTag, opcionesHora, t } from "./i18n.js";
 
 /** Lo que se dibuja: el estado base, salvo que esté libre y te necesite (vuelve a su puesto y levanta la mano). */
 export type Dibujo = "trabaja" | "toca" | "error" | "pausa" | "libre";
@@ -11,19 +12,19 @@ export type Dibujo = "trabaja" | "toca" | "error" | "pausa" | "libre";
 export const ORDEN_LEYENDA: readonly Dibujo[] = ["toca", "error", "trabaja", "pausa", "libre"];
 
 export const ESTADOS: Record<Dibujo, { label: string; corto: string; muchos: string; icono: string; leyenda: string }> = {
-  trabaja: { label: "Trabajando", corto: "trabajando", muchos: "trabajando", icono: "keyboard", leyenda: "teclea; globo con la tarea" },
-  toca: { label: "Te necesita", corto: "te necesita", muchos: "te necesitan", icono: "hand", leyenda: "levanta la mano, o la muestra en su globo" },
-  error: { label: "Con error", corto: "con error", muchos: "con error", icono: "triangle-alert", leyenda: "se pone rojo" },
-  pausa: { label: "En pausa", corto: "en pausa", muchos: "en pausa", icono: "moon", leyenda: "duerme" },
-  libre: { label: "Libre", corto: "libre", muchos: "libres", icono: "coffee", leyenda: "en la sala de descanso" },
+  trabaja: { label: t("Trabajando"), corto: t("trabajando"), muchos: t("trabajando"), icono: "keyboard", leyenda: t("teclea; globo con la tarea") },
+  toca: { label: t("Te necesita"), corto: t("te necesita"), muchos: t("te necesitan"), icono: "hand", leyenda: t("levanta la mano, o la muestra en su globo") },
+  error: { label: t("Con error"), corto: t("con error"), muchos: t("con error"), icono: "triangle-alert", leyenda: t("se pone rojo") },
+  pausa: { label: t("En pausa"), corto: t("en pausa"), muchos: t("en pausa"), icono: "moon", leyenda: t("duerme") },
+  libre: { label: t("Libre"), corto: t("libre"), muchos: t("libres"), icono: "coffee", leyenda: t("en la sala de descanso") },
 };
 
 /** Tipos de «te necesita» (§9): etiqueta, ícono y botón de la ficha. */
 export const ESPERAS: Record<TipoEspera, { label: string; icono: string; boton: string }> = {
-  tarjeta: { label: "Tarjeta", icono: "message-square", boton: "Responder" },
-  aprobacion: { label: "Aprobación", icono: "check-check", boton: "Aprobar o rechazar" },
-  revision: { label: "Revisión", icono: "eye", boton: "Revisar" },
-  decision: { label: "Decisión", icono: "list-checks", boton: "Decidir" },
+  tarjeta: { label: t("Tarjeta"), icono: "message-square", boton: t("Responder") },
+  aprobacion: { label: t("Aprobación"), icono: "check-check", boton: t("Aprobar o rechazar") },
+  revision: { label: t("Revisión"), icono: "eye", boton: t("Revisar") },
+  decision: { label: t("Decisión"), icono: "list-checks", boton: t("Decidir") },
 };
 
 export interface AgenteVista extends AgenteOficina {
@@ -58,9 +59,9 @@ export function vistaDe(agente: AgenteOficina, empresa: string): AgenteVista {
 }
 
 /** El código y el nombre completo, sin cortar (JST-138 §4): «BET-432 · Backend — enlace de descarga…». */
-const conNombre = (codigo: string | null, titulo: string | null | undefined) => `${codigo ?? "una tarea"}${titulo ? ` · ${titulo}` : ""}`;
+const conNombre = (codigo: string | null, titulo: string | null | undefined) => `${codigo ?? t("una tarea")}${titulo ? ` · ${titulo}` : ""}`;
 /** Lo que te pide cada espera: el título de la tarjeta o de la aprobación; si no hay, el de la tarea. */
-const codigos = (esperas: readonly Espera[]) => esperas.map((e) => conNombre(e.identifier, e.titulo ?? e.tituloTarea)).join(", ");
+const codigos = (esperas: readonly Espera[]) => esperas.map((e) => conNombre(e.identifier, e.titulo != null ? tituloVisible(e.titulo) : e.tituloTarea)).join(", ");
 
 /** Lo que la 0.5.0 suma a la frase de un agente (JST-163): su hora estimada y su «✓ listo». */
 export interface ExtraEtiqueta {
@@ -79,17 +80,17 @@ export interface ExtraEtiqueta {
  * QA — pruebas…; ahora va al descanso»).
  */
 export function etiqueta(a: AgenteVista, extra: ExtraEtiqueta = {}): string {
-  if (extra.listo && a.st === "libre") return `${a.nombre}, ${a.empresa}: terminó ${conNombre(extra.listo.codigo, extra.listo.titulo)}; ahora va al descanso`;
+  if (extra.listo && a.st === "libre") return t("{nombre}, {empresa}: terminó {tarea}; ahora va al descanso", { nombre: a.nombre, empresa: a.empresa, tarea: conNombre(extra.listo.codigo, extra.listo.titulo) });
   const estado = ESTADOS[a.st].corto;
   let detalle = "";
   if (a.st === "trabaja" && a.run) {
     const reserva = a.run.identifier ? [] : [textoSinTarea(a.run.invocationSource).toLocaleLowerCase("es")];
-    if (a.run.enCola) reserva.unshift("en cola");
-    detalle = `${reserva.length ? ` (${reserva.join(", ")})` : ""}${a.run.identifier ? ` en ${conNombre(a.run.identifier, a.run.titulo)}` : ""}`;
+    if (a.run.enCola) reserva.unshift(t("en cola"));
+    detalle = `${reserva.length ? ` (${reserva.join(", ")})` : ""}${a.run.identifier ? t(" en {tarea}", { tarea: conNombre(a.run.identifier, a.run.titulo) }) : ""}`;
   }
-  if (a.st === "toca") detalle = ` en ${codigos(a.teNecesita)}`;
+  if (a.st === "toca") detalle = t(" en {tarea}", { tarea: codigos(a.teNecesita) });
   const hora = a.st === "trabaja" && !a.run?.enCola && extra.hora ? `; ${extra.hora}` : "";
-  const ademas = a.need && a.st !== "toca" ? `; además te necesita en ${codigos(a.teNecesita)}` : "";
+  const ademas = a.need && a.st !== "toca" ? t("; además te necesita en {tarea}", { tarea: codigos(a.teNecesita) }) : "";
   return `${a.nombre}, ${a.empresa}: ${estado}${detalle}${hora}${ademas}`;
 }
 
@@ -141,37 +142,43 @@ export function contarVista(agentes: readonly AgenteVista[], ahora: number = Dat
 /** «recién», «hace 4 min», «hace 2 h», «hace 3 días»; con `largo`, «desde ayer». */
 export function hace(iso: string | null | undefined, ahora: number, largo = false): string {
   if (!iso) return "";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "";
-  const m = Math.max(0, Math.round((ahora - t) / 60000));
-  if (m < 1) return "recién";
-  if (m < 60) return `hace ${m} min`;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  const m = Math.max(0, Math.round((ahora - ms) / 60000));
+  if (m < 1) return t("recién");
+  if (m < 60) return t("hace {m} min", { m });
   const h = Math.round(m / 60);
-  if (h < 24) return `hace ${h} h`;
+  if (h < 24) return t("hace {h} h", { h });
   const d = Math.round(h / 24);
-  if (largo && d === 1) return "desde ayer";
-  return `hace ${d} ${d === 1 ? "día" : "días"}`;
+  if (largo && d === 1) return t("desde ayer");
+  return d === 1 ? t("hace {d} día", { d }) : t("hace {d} días", { d });
 }
+
+/**
+ * Etiqueta de las horas «18:52». En español queda «es» (24 h) como antes de JST-413: «es-CL» las dice «06:52 p. m.».
+ * Los demás idiomas usan la suya.
+ */
+export const tagHora = (): string => (getLocale() === "es" ? "es" : localeTag());
 
 /** «desde las 18:52», «desde ayer» o «desde el 15 oct» (en pausa, §9). */
 export function desdeCuando(iso: string | null | undefined, ahora: number): string {
   if (!iso) return "";
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return "";
+  const f = new Date(iso);
+  if (Number.isNaN(f.getTime())) return "";
   const hoy = new Date(ahora);
   const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const dias = Math.round((dia(hoy) - dia(t)) / 86_400_000);
-  if (dias <= 0) return `desde las ${t.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}`;
-  if (dias === 1) return "desde ayer";
-  return `desde el ${t.toLocaleDateString("es", { day: "numeric", month: "short" }).replace(".", "")}`;
+  const dias = Math.round((dia(hoy) - dia(f)) / 86_400_000);
+  if (dias <= 0) return t("desde las {hora}", { hora: f.toLocaleTimeString(tagHora(), { hour: "2-digit", minute: "2-digit", ...opcionesHora() }) });
+  if (dias === 1) return t("desde ayer");
+  return t("desde el {fecha}", { fecha: f.toLocaleDateString(tagHora(), { day: "numeric", month: "short" }).replace(".", "") });
 }
 
 /** `pauseReason` del servidor en palabras. */
 export function motivoPausa(motivo: string): string {
   const conocidos: Record<string, string> = {
-    manual: "La pausaron a mano",
-    budget: "Se le acabó el presupuesto",
-    budget_exceeded: "Se le acabó el presupuesto",
+    manual: t("La pausaron a mano"),
+    budget: t("Se le acabó el presupuesto"),
+    budget_exceeded: t("Se le acabó el presupuesto"),
   };
   return conocidos[motivo] ?? motivo;
 }
@@ -196,15 +203,15 @@ export interface Pantalla {
  */
 export function pantallaDe(a: Pick<AgenteVista, "st" | "need" | "teNecesita" | "run" | "motivo">): Pantalla | null {
   const e = a.need ? a.teNecesita[0] : undefined;
-  if (e) return { tono: "toca", codigo: e.identifier, estado: "te espera", texto: e.titulo ?? e.tituloTarea };
-  if (a.st === "trabaja") return { tono: "trabaja", codigo: a.run?.identifier ?? null, estado: a.run?.enCola ? "en cola" : "trabajando", texto: a.run?.titulo ?? (a.run ? textoSinTarea(a.run.invocationSource) : null) };
-  if (a.st === "error") return { tono: "error", codigo: a.run?.identifier ?? null, estado: "con error", texto: a.motivo };
-  if (a.st === "pausa") return { tono: "pausa", codigo: null, estado: "en pausa", texto: a.motivo ? motivoPausa(a.motivo) : null };
+  if (e) return { tono: "toca", codigo: e.identifier, estado: t("te espera"), texto: e.titulo != null ? tituloVisible(e.titulo) : e.tituloTarea };
+  if (a.st === "trabaja") return { tono: "trabaja", codigo: a.run?.identifier ?? null, estado: a.run?.enCola ? t("en cola") : t("trabajando"), texto: a.run?.titulo ?? (a.run ? textoSinTarea(a.run.invocationSource) : null) };
+  if (a.st === "error") return { tono: "error", codigo: a.run?.identifier ?? null, estado: t("con error"), texto: a.motivo };
+  if (a.st === "pausa") return { tono: "pausa", codigo: null, estado: t("en pausa"), texto: a.motivo ? motivoPausa(a.motivo) : null };
   return null;
 }
 
 /** Tu monitor: cuántos te esperan en esa sala (o que estás al día). */
 export function pantallaTuya(esperan: number): Pantalla {
-  if (esperan === 0) return { tono: "libre", codigo: null, estado: "al día", texto: "Nadie te espera aquí." };
-  return { tono: "toca", codigo: null, estado: esperan === 1 ? "1 te espera" : `${esperan} te esperan`, texto: "Haz clic para ver la fila y responder." };
+  if (esperan === 0) return { tono: "libre", codigo: null, estado: t("al día"), texto: t("Nadie te espera aquí.") };
+  return { tono: "toca", codigo: null, estado: esperan === 1 ? t("1 te espera") : t("{n} te esperan", { n: esperan }), texto: t("Haz clic para ver la fila y responder.") };
 }

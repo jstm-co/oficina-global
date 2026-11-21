@@ -4,6 +4,8 @@
 
 Plugin para [Paperclip](https://github.com/paperclipai/paperclip) que dibuja a los agentes de **todas las empresas** de tu instancia en una oficina pixel: quién trabaja, quién te necesita, quién tiene un error, quién está en pausa y quién está libre. Puedes responder sus preguntas sin salir de la oficina, recibir avisos con voz y dejarla en un TV.
 
+**La interfaz está en español e inglés.** Sigue el idioma de tu navegador y al pie de la página hay un selector para cambiarlo. Las voces, el Resumen hablado y las conversaciones de los agentes están en español (con voces de nueve países).
+
 - Clave del plugin: `jstm.oficina-pixel` · paquete npm: `paperclip-plugin-oficina-global` · versión `0.9.7`
 - Probado con Paperclip `2026.824.1`.
 
@@ -143,6 +145,8 @@ npm run build       # dist/: worker, manifiesto, interfaz, tv.html y el generado
 ```
 
 El código está en `src/` (la lógica, sin React ni DOM, separada de `src/ui/`), las pruebas en `tests/` y el generador de voces en `generador/`. Los comentarios están en español y nombran tareas de nuestro tablero interno («JST-123»), que no son públicas.
+
+**Idiomas.** El texto en español del código es el origen: `t("Sin asignar")` devuelve ese texto en español y su traducción en los demás idiomas (`src/i18n.ts`). El inglés está en `src/i18n/en/`, por zonas. Un texto nuevo de la pantalla pasa por `t()` (o `tx()` con nodos de React dentro, `plural()` para cantidades) y lleva su entrada en el catálogo; `tests/i18n.spec.ts` falla si falta o sobra alguna. Para sumar un idioma, copia `src/i18n/en/`, traduce los valores y regístralo en `LOCALES` y `CATALOGS`. Lo que se oye (las voces, el Resumen hablado, «Leer contexto») y lo que conversan los agentes queda en español y no pasa por `t()`.
 
 ## Límites conocidos
 

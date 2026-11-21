@@ -10,6 +10,7 @@
 // barra no (JST-94).
 import { useLayoutEffect } from "react";
 import { useHostLocation, useHostNavigation, usePluginToast, type PluginSidebarProps } from "@paperclipai/plugin-sdk/ui";
+import { t } from "../i18n.js";
 import { PAGE_ROUTE } from "../shared.js";
 import { useAjustes } from "./ajustes.js";
 import { BotonContextoBarra } from "./contextoBarra.js";
@@ -67,7 +68,7 @@ export function OficinaGlobalSidebarLink(_props: PluginSidebarProps) {
       </span>
       <span className="flex-1 truncate">Oficina global</span>
       {avisos && marca > 0 ? (
-        <span className="of-marca" title={`${marca} te ${marca === 1 ? "necesita" : "necesitan"}`}>
+        <span className="of-marca" title={marca === 1 ? t("{n} te necesita", { n: marca }) : t("{n} te necesitan", { n: marca })}>
           <Icono nombre="hand" tam={12} />
           {marca}
         </span>
@@ -105,7 +106,7 @@ export function OficinaTvBoton() {
       {celular && enLaOficina ? (
         <>
           <BotonResumenArriba />
-          <button type="button" className="of-tbtn" aria-label="Modo TV" title="Modo TV" onClick={() => window.dispatchEvent(new Event(EVENTO_TV))}>
+          <button type="button" className="of-tbtn" aria-label={t("Modo TV")} title={t("Modo TV")} onClick={() => window.dispatchEvent(new Event(EVENTO_TV))}>
             <Icono nombre="tv" tam={18} />
           </button>
         </>

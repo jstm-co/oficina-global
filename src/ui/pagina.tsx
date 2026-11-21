@@ -21,6 +21,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { flushSync } from "react-dom";
 import { copyTextToClipboard, useHostLocation, useHostNavigation, usePluginToast, type PluginPageProps } from "@paperclipai/plugin-sdk/ui";
 import { nombreCorto } from "../avisos.js";
+import { t } from "../i18n.js";
 import { idInstalacion } from "../fuentes.js";
 import { abreVentana } from "../lista.js";
 import { anchoCelular, anchoComputador, armarPiso, armarPisoComputador, armarSalaAcercada } from "../plano.js";
@@ -30,6 +31,7 @@ import { contarVista, type AgenteVista } from "../vista.js";
 import { hrefTarea } from "../estado.js";
 import { abreAqui, tareaDeHref } from "../tarea.js";
 import { TareaModal } from "./tarea.js";
+import { esErrorViejo } from "../erroresViejos.js";
 import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
 import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
@@ -231,6 +233,14 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   // JST-411: el enlace a una tarea (de la ficha) la abre aquí, en un modal. Con Ctrl, ⌘, Mayús o el botón del medio
   // manda el navegador, y un enlace con ancla (`#interaction`: algo que se responde en la tarea) va a su página.
   const [tareaAbierta, setTareaAbierta] = useState<{ prefijo: string; ref: string } | null>(null);
+  // El enlace «Abrir tarea» que abrió el modal: al cerrarlo, el foco vuelve a él (la ficha sigue debajo).
+  const enlaceTarea = useRef<HTMLElement | null>(null);
+  const cerrarTarea = useCallback(() => {
+    setTareaAbierta(null);
+    const enlace = enlaceTarea.current;
+    enlaceTarea.current = null;
+    requestAnimationFrame(() => enlace?.isConnected && enlace.focus());
+  }, []);
   const enlazarTarea = useCallback<Enlazar>(
     (href) => {
       const base = enlazar(href);
@@ -243,6 +253,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
         onClick: (e) => {
           if (!abreAqui(e)) return;
           e.preventDefault();
+          enlaceTarea.current = e.currentTarget as HTMLElement;
           setTareaAbierta(tarea);
         },
       };
@@ -326,7 +337,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
       mostrar(
         <>
           <Icono nombre="info" tam={14} />
-          <span>{a ? `${nombreCorto(a.nombre)} ya no te espera.` : "Ese agente ya no te espera."}</span>
+          <span>{a ? t("{nombre} ya no te espera.", { nombre: nombreCorto(a.nombre) }) : t("Ese agente ya no te espera.")}</span>
         </>,
       );
     }
@@ -382,6 +393,9 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
   const silenciados = useErroresSilenciados();
   const c = contarVista(visibles, ahora, silenciados);
+  // Los mismos que no cuentan: el piso no los resalta con «con error». La clave evita un conjunto nuevo en cada tic.
+  const claveApagados = oficina.agentes.filter((a) => esErrorViejo(a, ahora, silenciados)).map((a) => a.id).join(" ");
+  const apagados = useMemo(() => new Set(claveApagados ? claveApagados.split(" ") : []), [claveApagados]);
   const cargandoCont = oficina.cargando && oficina.agentes.length === 0;
   const pCont = { c, hl, onHl: (st: NonNullable<Resaltado>) => setHl((h) => (h === st ? null : st)), cargando: cargandoCont, sinAtencion: oficina.sinAtencion };
   const libres = todosLibres(oficina);
@@ -506,24 +520,24 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
         <div className="of-zh">
           <button type="button" className="of-btn is-sm is-ghost" onClick={() => { setSel(null); setSala(null); }}>
             <Icono nombre="chevron-left" tam={14} />
-            Todo el piso
+            {t("Todo el piso")}
           </button>
           <span className="of-sp" />
-          <button type="button" className="of-ibtn" aria-label="Sala anterior" onClick={() => ir(-1)}>
+          <button type="button" className="of-ibtn" aria-label={t("Sala anterior")} onClick={() => ir(-1)}>
             <Icono nombre="chevron-left" tam={14} />
           </button>
           <span className="of-zname">
             <EtiquetaEmpresa prefijo={salaAcercada.prefijo} />
             {salaAcercada.nombre}
           </span>
-          <button type="button" className="of-ibtn" aria-label="Sala siguiente" onClick={() => ir(1)}>
+          <button type="button" className="of-ibtn" aria-label={t("Sala siguiente")} onClick={() => ir(1)}>
             <Icono nombre="chevron-right" tam={14} />
           </button>
         </div>
         <ContadoresCelular {...pCont} />
         <div className="of-scroll">
-          <Piso plano={plano} empresas={oficina.empresas} agentes={oficina.agentes} filtro={[]} o={{ chico: false, rm, oscuro, seleccionado: sel, onSeleccionar: seleccionar }} onReintentar={oficina.reintentar} sync={oficina.sync} pausado={tv} voz />
-          <p className="of-hint">Toca a alguien para ver su ficha.</p>
+          <Piso plano={plano} empresas={oficina.empresas} agentes={oficina.agentes} filtro={[]} o={{ chico: false, rm, oscuro, seleccionado: sel, apagados, onSeleccionar: seleccionar }} onReintentar={oficina.reintentar} sync={oficina.sync} pausado={tv} voz />
+          <p className="of-hint">{t("Toca a alguien para ver su ficha.")}</p>
           <Leyenda celular />
           {listaDe(salaAcercada.prefijo)}
           <PieVersion />
@@ -555,7 +569,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             empresas={oficina.empresas}
             agentes={oficina.agentes}
             filtro={filtro}
-            o={{ chico: true, rm, oscuro, seleccionado: null, onSeleccionar: null }}
+            o={{ chico: true, rm, oscuro, seleccionado: null, apagados, onSeleccionar: null }}
             onAcercar={(p) => setSala(p)}
             onReintentar={oficina.reintentar}
             sync={oficina.sync}
@@ -564,7 +578,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           />
           <p className="of-hint">
             <Icono nombre="zoom-in" tam={14} />
-            Toca una sala para acercarte.
+            {t("Toca una sala para acercarte.")}
           </p>
           <Leyenda celular />
           {listaDe(null)}
@@ -587,13 +601,13 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             {en3d ? null : <BotonResumen />}
             <BotonesAvisos celular={false} agentes={oficina.agentes} rm={rm} />
             <BotonAmbiente agentes={oficina.agentes} />
-            <button type="button" className="of-btn is-sm" title="Camina por la oficina en primera persona, desde tu escritorio" onClick={abrir3d} disabled={!vidaPiso}>
+            <button type="button" className="of-btn is-sm" title={t("Camina por la oficina en primera persona, desde tu escritorio")} onClick={abrir3d} disabled={!vidaPiso}>
               <Icono nombre="box" tam={14} />
-              Vista 3D
+              {t("Vista 3D")}
             </button>
-            <button type="button" className="of-btn is-sm" title="Pantalla completa para dejar en un televisor (1920 × 1080)" onClick={abrirTv}>
+            <button type="button" className="of-btn is-sm" title={t("Pantalla completa para dejar en un televisor (1920 × 1080)")} onClick={abrirTv}>
               <Icono nombre="tv" tam={14} />
-              Modo TV
+              {t("Modo TV")}
             </button>
           </div>
           <div className="of-hdr of-hdr-2">
@@ -611,7 +625,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             empresas={oficina.empresas}
             agentes={oficina.agentes}
             filtro={filtro}
-            o={{ chico: false, rm, oscuro, seleccionado: sel ?? vr.resp?.id ?? null, onSeleccionar: seleccionar }}
+            o={{ chico: false, rm, oscuro, seleccionado: sel ?? vr.resp?.id ?? null, apagados, onSeleccionar: seleccionar }}
             onReintentar={oficina.reintentar}
             sync={oficina.sync}
             pausado={tv}
@@ -636,9 +650,9 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
       {ficha && !tv ? (
         <Capa>
           {celular ? (
-            <FichaHoja onCerrar={cerrarFicha}>{ficha}</FichaHoja>
+            <FichaHoja onCerrar={cerrarFicha} quieta={!!tareaAbierta}>{ficha}</FichaHoja>
           ) : (
-            <FichaFlotante ancla={ancla} onCerrar={cerrarFicha} ancho={agente ? anchoFicha(agente) : undefined} seguir={en3d}>
+            <FichaFlotante ancla={ancla} onCerrar={cerrarFicha} ancho={agente ? anchoFicha(agente) : undefined} seguir={en3d} quieta={!!tareaAbierta}>
               {ficha}
             </FichaFlotante>
           )}
@@ -691,7 +705,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           ahora={ahora}
           hrefPagina={hrefTarea(tareaAbierta.prefijo, tareaAbierta.ref)}
           enlacePagina={enlazar(hrefTarea(tareaAbierta.prefijo, tareaAbierta.ref))}
-          onCerrar={() => setTareaAbierta(null)}
+          onCerrar={cerrarTarea}
           avisar={avisar}
           onCambio={() => {
             const empresa = [...oficina.empresas, ...oficina.ocultas].find((e) => e.prefijo === tareaAbierta.prefijo.toUpperCase());
@@ -714,7 +728,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             onCerrar={cerrar3d}
             onAgente={abrirDesdeFila}
             onEscritorio={tocarEscritorio}
-            abierto={!!agente || !!escritorio || !!vr.agente}
+            abierto={!!agente || !!escritorio || !!vr.agente || !!tareaAbierta}
           />
         </Capa>
       ) : null}

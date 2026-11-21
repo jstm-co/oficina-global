@@ -9,6 +9,7 @@
 // 0.3.0 (JST-96 §10): caminan y hay sobres y mascotas, pero no conversaciones.
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { copyTextToClipboard, useHostNavigation, usePluginToast, type PluginWidgetProps } from "@paperclipai/plugin-sdk/ui";
+import { t } from "../i18n.js";
 import { abreVentana } from "../lista.js";
 import { ANCHO_WIDGET, anchoWidgetCelular, armarPiso } from "../plano.js";
 import { PAGE_ROUTE } from "../shared.js";
@@ -101,7 +102,7 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
         <ConteoEmpresas oficina={oficina} conAgentes={false} className="of-wsub" />
         <span className="of-sp" />
         <a className="of-wlink" {...abrir}>
-          Abrir
+          {t("Abrir")}
           <Icono nombre="arrow-right" tam={14} />
         </a>
       </div>
@@ -110,7 +111,7 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
         {caidas.length > 0 ? (
           <div className="of-wmsg">
             <Icono nombre="triangle-alert" tam={12} />
-            No pude leer {caidas.join(", ")}
+            {t("No pude leer {nombres}", { nombres: caidas.join(", ") })}
           </div>
         ) : null}
         <Piso

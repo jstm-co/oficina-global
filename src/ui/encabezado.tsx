@@ -4,6 +4,7 @@
 // 0.4.0 (JST-162 §4) suma «Conversaciones», a la derecha de «Mascotas». JST-410: en computador, «Mascotas» y «Conversaciones»
 // van dentro del menú «Ambiente» (`menuAmbiente.tsx`); aquí quedan para el celular.
 import { useId, useState, type FocusEvent, type MouseEvent } from "react";
+import { plural, t } from "../i18n.js";
 import { ESTADOS, ORDEN_LEYENDA, type ContadoresVista, type Dibujo } from "../vista.js";
 import { cambiarAjustes, useAjustes } from "./ajustes.js";
 import { Tooltip } from "./capas.js";
@@ -13,13 +14,13 @@ import type { EmpresaVista, Oficina } from "./useOficina.js";
 export type Resaltado = Dibujo | null;
 
 const nombres = (lista: readonly { nombre: string }[]) =>
-  lista.length <= 1 ? (lista[0]?.nombre ?? "") : `${lista.slice(0, -1).map((e) => e.nombre).join(", ")} y ${lista.at(-1)!.nombre}`;
+  lista.length <= 1 ? (lista[0]?.nombre ?? "") : t("{lista} y {ultimo}", { lista: lista.slice(0, -1).map((e) => e.nombre).join(", "), ultimo: lista.at(-1)!.nombre });
 
 /** Por qué faltan las empresas sin agentes (tooltip de «N empresas», §9). `null` si no falta ninguna. */
 export function porQueFaltan(ocultas: readonly EmpresaVista[]): string | null {
   if (ocultas.length === 0) return null;
-  if (ocultas.length === 1) return `${ocultas[0]!.nombre} no aparece: todavía no tiene agentes. Su sala aparece sola cuando tenga el primero.`;
-  return `${nombres(ocultas)} no aparecen: todavía no tienen agentes. Sus salas aparecen solas cuando tengan el primero.`;
+  if (ocultas.length === 1) return t("{nombre} no aparece: todavía no tiene agentes. Su sala aparece sola cuando tenga el primero.", { nombre: ocultas[0]!.nombre });
+  return t("{nombres} no aparecen: todavía no tienen agentes. Sus salas aparecen solas cuando tengan el primero.", { nombres: nombres(ocultas) });
 }
 
 /**
@@ -32,7 +33,12 @@ export function ConteoEmpresas({ oficina, conAgentes, className, dentro }: { ofi
   const id = useId();
   const empresas = oficina.empresas;
   const conocidos = empresas.length > 0 && empresas.every((e) => e.conocidos);
-  const texto = `${conAgentes && conocidos ? `${empresas.reduce((n, e) => n + e.agentes, 0)} agentes · ` : ""}${empresas.length || ""} empresas`;
+  const texto =
+    conAgentes && conocidos
+      ? t("{agentes} · {empresas}", { agentes: plural(empresas.reduce((n, e) => n + e.agentes, 0), "agente", "agentes"), empresas: empresas.length === 1 ? t("1 empresa") : t("{e} empresas", { e: empresas.length || "" }) })
+      : empresas.length === 1
+        ? t("1 empresa")
+        : t("{e} empresas", { e: empresas.length || "" });
   const motivo = porQueFaltan(oficina.ocultas);
   if (!motivo) return <span className={className}>{texto}</span>;
   const mostrar = (e: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>) => setRect(e.currentTarget.getBoundingClientRect());
@@ -57,7 +63,7 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        <span className="of-lt">{corto ? "Sin conexión" : "No pude leer las empresas, reintento en 20 s"}</span>
+        <span className="of-lt">{corto ? t("Sin conexión") : t("No pude leer las empresas, reintento en 20 s")}</span>
       </span>
     );
   }
@@ -65,18 +71,21 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live">
         <Icono nombre="loader" tam={12} className="of-spin" />
-        <span className="of-lt">{total ? `Leyendo las ${total} empresas…` : "Leyendo las empresas…"}</span>
+        <span className="of-lt">{total ? t("Leyendo las {total} empresas…", { total }) : t("Leyendo las empresas…")}</span>
       </span>
     );
   }
   const caidas = oficina.caidas;
   if (caidas.length > 0) {
     const ok = total - caidas.length;
-    const verbo = caidas.length === 1 ? "no responde" : "no responden";
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        <span className="of-lt">{corto ? `En vivo · ${ok} de ${total}` : `En vivo en ${ok} de ${total} · ${nombres(caidas)} ${verbo}, reintento en 20 s`}</span>
+        <span className="of-lt">{corto
+            ? t("En vivo · {ok} de {total}", { ok, total })
+            : caidas.length === 1
+              ? t("En vivo en {ok} de {total} · {nombres} no responde, reintento en 20 s", { ok, total, nombres: nombres(caidas) })
+              : t("En vivo en {ok} de {total} · {nombres} no responden, reintento en 20 s", { ok, total, nombres: nombres(caidas) })}</span>
       </span>
     );
   }
@@ -84,22 +93,22 @@ export function EstadoVivo({ oficina, corto = false }: { oficina: Oficina; corto
     return (
       <span className="of-live is-warn">
         <Icono nombre="triangle-alert" tam={12} />
-        <span className="of-lt">{corto ? "En vivo · sin «Te toca»" : "En vivo · sin «Te toca», reintento en 20 s"}</span>
+        <span className="of-lt">{corto ? t("En vivo · sin «Te toca»") : t("En vivo · sin «Te toca», reintento en 20 s")}</span>
       </span>
     );
   }
   return (
-    <span className="of-live" title="Cada cambio llega en 1 s por el canal en vivo de cada empresa">
+    <span className="of-live" title={t("Cada cambio llega en 1 s por el canal en vivo de cada empresa")}>
       <i className="of-pulse" />
-      <span className="of-lt">{corto ? "En vivo" : `En vivo · ${total} de ${total} empresas`}</span>
+      <span className="of-lt">{corto ? t("En vivo") : t("En vivo · {total} de {total} empresas", { total })}</span>
     </span>
   );
 }
 
 const AYUDA: Partial<Record<Dibujo, string>> = {
-  trabaja: "Resaltar a los que están trabajando",
-  toca: "Resaltar a los que te necesitan (pueden estar además trabajando o con error)",
-  error: "Resaltar a los que tienen error",
+  trabaja: t("Resaltar a los que están trabajando"),
+  toca: t("Resaltar a los que te necesitan (pueden estar además trabajando o con error)"),
+  error: t("Resaltar a los que tienen error"),
 };
 
 interface PropsContadores {
@@ -174,7 +183,7 @@ export function Menores(p: PropsContadores & { xs?: boolean }) {
           >
             <Icono nombre={ESTADOS[st].icono} tam={12} />
             <b>{n}</b>
-            <span>{st === "libre" ? (n === 1 ? "libre" : "libres") : "en pausa"}</span>
+            <span>{st === "libre" ? (n === 1 ? t("libre") : t("libres")) : t("en pausa")}</span>
           </button>
         );
       })}
@@ -208,15 +217,15 @@ export function FiltroEmpresas({ oficina, filtro, onFiltro, celular }: { oficina
   const todas = oficina.empresas.map((e) => e.prefijo);
   const compacto = !celular && todas.length >= 5;
   const nombreLeido = (e: EmpresaVista) =>
-    e.estado.error ? `${e.nombre}, no responde` : e.conocidos ? `${e.nombre}, ${e.agentes} ${e.agentes === 1 ? "agente" : "agentes"}` : e.nombre;
+    e.estado.error ? t("{nombre}, no responde", { nombre: e.nombre }) : e.conocidos ? t("{nombre}, {agentes}", { nombre: e.nombre, agentes: plural(e.agentes, "agente", "agentes") }) : e.nombre;
   const alternar = (prefijo: string) => {
     const siguiente = filtro.includes(prefijo) ? filtro.filter((p) => p !== prefijo) : [...filtro, prefijo];
     onFiltro(siguiente.length >= todas.length ? [] : siguiente.sort());
   };
   return (
-    <div className={cx("of-cofs", celular && "is-m", compacto && "is-cmp")} role="group" aria-label="Filtrar por empresa">
+    <div className={cx("of-cofs", celular && "is-m", compacto && "is-cmp")} role="group" aria-label={t("Filtrar por empresa")}>
       <button type="button" className={cx("of-cof is-all", filtro.length === 0 && "is-on")} aria-pressed={filtro.length === 0} onClick={() => onFiltro([])}>
-        Todas
+        {t("Todas")}
       </button>
       {oficina.empresas.map((e) => {
         const on = filtro.includes(e.prefijo);
@@ -241,11 +250,11 @@ export function FiltroEmpresas({ oficina, filtro, onFiltro, celular }: { oficina
 }
 
 export function ChipAnimacionReducida({ soloIcono = false }: { soloIcono?: boolean }) {
-  const ayuda = "Tu sistema pide menos animación: los personajes quedan quietos y solo cambian cuando cambia su estado";
+  const ayuda = t("Tu sistema pide menos animación: los personajes quedan quietos y solo cambian cuando cambia su estado");
   return (
     <span className={cx("of-rmchip", soloIcono && "is-ic")} title={ayuda}>
       <Icono nombre="pause" tam={12} />
-      {soloIcono ? <span className="of-sr">Animación reducida</span> : "Animación reducida"}
+      {soloIcono ? <span className="of-sr">{t("Animación reducida")}</span> : t("Animación reducida")}
     </span>
   );
 }
@@ -257,7 +266,7 @@ export function Banners({ oficina, corto, c, libres }: { oficina: Oficina; corto
   const reintentar = (
     <button type="button" className="of-btn is-sm" onClick={oficina.reintentar}>
       <Icono nombre="refresh" tam={14} />
-      Reintentar
+      {t("Reintentar")}
     </button>
   );
   const banners = [];
@@ -266,7 +275,7 @@ export function Banners({ oficina, corto, c, libres }: { oficina: Oficina; corto
       <div key="emp" className="of-banner" role="alert">
         <Icono nombre="triangle-alert" tam={14} />
         <span>
-          <b>No pude leer las empresas.</b> {oficina.errorEmpresas}
+          <b>{t("No pude leer las empresas.")}</b> {oficina.errorEmpresas}
         </span>
         <span className="of-sp" />
         {reintentar}
@@ -275,15 +284,21 @@ export function Banners({ oficina, corto, c, libres }: { oficina: Oficina; corto
   }
   if (caidas.length > 0) {
     const n = total - caidas.length;
-    const otras = n === 1 ? "La otra empresa está al día" : `Las otras ${n} empresas están al día`;
-    const quedan = caidas.length === 1 ? "queda a oscuras" : "quedan a oscuras";
-    const responda = caidas.length === 1 ? "responda" : "respondan";
+    const uno = caidas.length === 1;
+    const largo =
+      n === 1
+        ? uno
+          ? t("La otra empresa está al día; {nombres} queda a oscuras hasta que responda.", { nombres: nombres(caidas) })
+          : t("La otra empresa está al día; {nombres} quedan a oscuras hasta que respondan.", { nombres: nombres(caidas) })
+        : uno
+          ? t("Las otras {n} empresas están al día; {nombres} queda a oscuras hasta que responda.", { n, nombres: nombres(caidas) })
+          : t("Las otras {n} empresas están al día; {nombres} quedan a oscuras hasta que respondan.", { n, nombres: nombres(caidas) });
     banners.push(
       <div key="caidas" className="of-banner" role="alert">
         <Icono nombre="triangle-alert" tam={14} />
         <span>
-          <b>No pude leer {nombres(caidas)}.</b>{" "}
-          {corto ? (n === 1 ? "La otra está al día." : `Las otras ${n} están al día.`) : `${otras}; ${nombres(caidas)} ${quedan} hasta que ${responda}.`}
+          <b>{t("No pude leer {nombres}.", { nombres: nombres(caidas) })}</b>{" "}
+          {corto ? (n === 1 ? t("La otra está al día.") : t("Las otras {n} están al día.", { n })) : largo}
         </span>
         <span className="of-sp" />
         {reintentar}
@@ -295,8 +310,8 @@ export function Banners({ oficina, corto, c, libres }: { oficina: Oficina; corto
       <div key="toca" className="of-banner" role="alert">
         <Icono nombre="triangle-alert" tam={14} />
         <span>
-          <b>No pude leer «Te toca».</b>{" "}
-          {corto ? "No sé quién te necesita; lo demás está al día." : "Por ahora no sé quién te necesita; el resto de la oficina está al día."}
+          <b>{t("No pude leer «Te toca».")}</b>{" "}
+          {corto ? t("No sé quién te necesita; lo demás está al día.") : t("Por ahora no sé quién te necesita; el resto de la oficina está al día.")}
         </span>
         <span className="of-sp" />
         {reintentar}
@@ -309,7 +324,12 @@ export function Banners({ oficina, corto, c, libres }: { oficina: Oficina; corto
       <div key="libres" className="of-banner is-ok" role="status">
         <Icono nombre="coffee" tam={14} />
         <span>
-          <b>Todos libres.</b> {corto ? "Nadie trabajando ni esperándote." : `Nadie trabajando ni esperándote: ${n === 1 ? "está en la sala de descanso" : `los ${n} están en la sala de descanso`}.`}
+          <b>{t("Todos libres.")}</b>{" "}
+          {corto
+            ? t("Nadie trabajando ni esperándote.")
+            : n === 1
+              ? t("Nadie trabajando ni esperándote: está en la sala de descanso.")
+              : t("Nadie trabajando ni esperándote: los {n} están en la sala de descanso.", { n })}
         </span>
       </div>,
     );
@@ -329,7 +349,7 @@ export function Leyenda({ celular }: { celular: boolean }) {
               <b>{ESTADOS[st].label}</b> {ESTADOS[st].leyenda}
             </span>
           ) : (
-            `${ESTADOS[st].label}: ${ESTADOS[st].leyenda}`
+            t("{estado}: {detalle}", { estado: ESTADOS[st].label, detalle: ESTADOS[st].leyenda })
           )}
         </span>
       ))}
@@ -338,10 +358,10 @@ export function Leyenda({ celular }: { celular: boolean }) {
         <Icono nombre="mail" tam={12} />
         {celular ? (
           <span>
-            <b>Sobre</b> le pasaron una tarea
+            <b>{t("Sobre")}</b> {t("le pasaron una tarea")}
           </span>
         ) : (
-          "Sobre: le pasaron una tarea"
+          t("Sobre: le pasaron una tarea")
         )}
       </span>
     </div>
@@ -355,11 +375,11 @@ export function Leyenda({ celular }: { celular: boolean }) {
  */
 export function BotonMascotas({ celular }: { celular: boolean }) {
   const { mascotas } = useAjustes();
-  const titulo = mascotas ? "Ocultar las mascotas (se guarda en este navegador)" : "Mostrar las mascotas (se guarda en este navegador)";
+  const titulo = mascotas ? t("Ocultar las mascotas (se guarda en este navegador)") : t("Mostrar las mascotas (se guarda en este navegador)");
   const alternar = () => cambiarAjustes({ mascotas: !mascotas });
   if (celular) {
     return (
-      <button type="button" className={cx("of-ibtn is-ghost of-petbtn is-m", !mascotas && "is-off")} aria-pressed={mascotas} aria-label={mascotas ? "Mascotas" : "Mascotas ocultas"} title={titulo} onClick={alternar}>
+      <button type="button" className={cx("of-ibtn is-ghost of-petbtn is-m", !mascotas && "is-off")} aria-pressed={mascotas} aria-label={mascotas ? t("Mascotas") : t("Mascotas ocultas")} title={titulo} onClick={alternar}>
         <Icono nombre="paw-print" tam={14} />
       </button>
     );
@@ -367,7 +387,7 @@ export function BotonMascotas({ celular }: { celular: boolean }) {
   return (
     <button type="button" className={cx("of-btn is-sm of-petbtn", !mascotas && "is-off")} aria-pressed={mascotas} title={titulo} onClick={alternar}>
       <Icono nombre="paw-print" tam={14} />
-      {mascotas ? "Mascotas" : "Mascotas ocultas"}
+      {mascotas ? t("Mascotas") : t("Mascotas ocultas")}
     </button>
   );
 }

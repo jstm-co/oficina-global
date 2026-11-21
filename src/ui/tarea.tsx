@@ -4,6 +4,7 @@
 // (documentos, corridas, aprobaciones) sigue en la página de la tarea, a un clic.
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type AnchorHTMLAttributes, type CSSProperties, type KeyboardEvent as TeclaReact, type ReactNode } from "react";
 import { MarkdownBlock } from "@paperclipai/plugin-sdk/ui";
+import { localeTag, t } from "../i18n.js";
 import { hace } from "../vista.js";
 import type { AgenteVista } from "../vista.js";
 import {
@@ -17,6 +18,7 @@ import {
   nombreEstado,
   nombrePrioridad,
   responsableTarea,
+  mezclarComentarios,
   type ComentarioTarea,
 } from "../tarea.js";
 import { Capa, useAtraparFoco, useEsc } from "./capas.js";
@@ -63,17 +65,22 @@ const hiloVacio = (clave: string): Hilo => ({ clave, tarea: null, errorTarea: nu
 function useHilo(clave: string, ref: string) {
   const [hilo, setHilo] = useState<Hilo>(() => hiloVacio(clave));
   const [intento, setIntento] = useState(0);
+  // Comentarios que el usuario envió en este hilo: si la lectura sale antes y llega después, no los pisa.
+  const locales = useRef<ComentarioTarea[]>([]);
   useEffect(() => {
     let viva = true;
     const parchar = (cambio: Partial<Hilo>) => {
       if (viva) setHilo((h) => (h.clave === clave ? { ...h, ...cambio } : h));
     };
+    locales.current = [];
     setHilo(hiloVacio(clave));
     leerTarea(ref).then(
       (tarea) => {
+        // Cerrado antes de que cargara: ni se marca leída ni se piden los comentarios.
+        if (!viva) return;
         parchar({ tarea });
         leerComentarios(tarea.id, TOPE_COMENTARIOS).then(
-          (comentarios) => parchar({ comentarios }),
+          (comentarios) => parchar({ comentarios: mezclarComentarios(comentarios, locales.current) }),
           (e: Error) => parchar({ errorComentarios: e.message }),
         );
         void marcarLeida(tarea.id).catch(() => undefined);
@@ -84,7 +91,13 @@ function useHilo(clave: string, ref: string) {
       viva = false;
     };
   }, [clave, ref, intento]);
-  const agregar = useCallback((c: ComentarioTarea) => setHilo((h) => (h.clave === clave ? { ...h, comentarios: [c, ...(h.comentarios ?? [])] } : h)), [clave]);
+  const agregar = useCallback(
+    (c: ComentarioTarea) => {
+      locales.current = [c, ...locales.current];
+      setHilo((h) => (h.clave === clave ? { ...h, comentarios: [c, ...(h.comentarios ?? [])] } : h));
+    },
+    [clave],
+  );
   const cambiarEstadoLocal = useCallback(
     (status: string) => setHilo((h) => (h.clave === clave && h.tarea ? { ...h, tarea: { ...h.tarea, status } } : h)),
     [clave],
@@ -139,7 +152,7 @@ function Descripcion({ texto }: { texto: string }) {
       </div>
       {larga ? (
         <button type="button" className="of-tk-mas" aria-expanded={abierta} onClick={() => setAbierta(!abierta)}>
-          {abierta ? "Mostrar menos" : "Mostrar toda la descripción"}
+          {abierta ? t("Mostrar menos") : t("Mostrar toda la descripción")}
         </button>
       ) : null}
     </>
@@ -202,11 +215,12 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
       alAvisar.current?.(
         <>
           <Icono nombre="triangle-alert" tam={14} />
-          <span>No se pudo cambiar el estado de {codigo ?? "la tarea"}: {(e as Error).message}</span>
+          <span>{codigo ? t("No se pudo cambiar el estado de {codigo}: {error}", { codigo, error: (e as Error).message }) : t("No se pudo cambiar el estado de la tarea: {error}", { error: (e as Error).message })}</span>
         </>,
       );
     } finally {
       if (montado.current) setCambiando(false);
+      devolverFoco(botonEstado.current);
     }
   };
 
@@ -218,16 +232,16 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
           if (e.target === e.currentTarget) onCerrar();
         }}
       >
-        <div ref={ref} className={cx("of-tk", celular && "is-m")} role="dialog" aria-modal="true" aria-labelledby={idTitulo} tabIndex={-1} data-oficina-ventana="">
+        <div ref={ref} className={cx("of-tk", celular && "is-m")} role="dialog" aria-modal="true" {...(hilo.errorTarea ? { "aria-label": codigo ?? tarea.ref } : { "aria-labelledby": idTitulo })} tabIndex={-1} data-oficina-ventana="">
           <div className="of-tk-h">
             <EtiquetaEmpresa prefijo={tarea.prefijo} solida />
             <span className="of-tk-cod">{codigo ?? tarea.ref}</span>
             <span className="of-sp" />
-            <a className="of-btn is-sm is-ghost" title="Abrir la página de la tarea, con todo su detalle" {...enlacePagina} href={hrefPagina}>
+            <a className="of-btn is-sm is-ghost" title={t("Abrir la página de la tarea, con todo su detalle")} {...enlacePagina} href={hrefPagina}>
               <Icono nombre="external-link" tam={14} />
-              <span className="of-tk-full">Página completa</span>
+              <span className="of-tk-full">{t("Página completa")}</span>
             </a>
-            <button type="button" className="of-ibtn is-ghost" title="Cerrar (Esc)" aria-label="Cerrar" onClick={onCerrar}>
+            <button type="button" className="of-ibtn is-ghost" title={t("Cerrar (Esc)")} aria-label={t("Cerrar")} onClick={onCerrar}>
               <Icono nombre="x" tam={14} />
             </button>
           </div>
@@ -238,16 +252,16 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                 <div className="of-tk-fallo" role="alert">
                   <Icono nombre="triangle-alert" tam={14} />
                   <span>
-                    <b>No se pudo leer la tarea.</b> {hilo.errorTarea}
+                    <b>{t("No se pudo leer la tarea.")}</b> {hilo.errorTarea}
                   </span>
                 </div>
                 <div className="of-tk-acciones">
                   <button type="button" className="of-btn is-sm" onClick={reintentar}>
                     <Icono nombre="refresh" tam={14} />
-                    Reintentar
+                    {t("Reintentar")}
                   </button>
                   <a className="of-btn is-sm" {...enlacePagina} href={hrefPagina}>
-                    Abrir la página completa
+                    {t("Abrir la página completa")}
                     <Icono nombre="arrow-up-right" tam={14} />
                   </a>
                 </div>
@@ -262,27 +276,27 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                   </h3>
                 ) : (
                   <h3 id={idTitulo} className="of-tk-titulo">
-                    <span className="of-sr">Cargando la tarea</span>
+                    <span className="of-sr">{t("Cargando la tarea")}</span>
                     <span className="of-sk of-tk-sk" style={{ width: "70%", height: 20 }} aria-hidden="true" />
                   </h3>
                 )}
 
-                <section className="of-tk-sec" aria-label="Descripción">
-                  <h4>Descripción</h4>
+                <section className="of-tk-sec" aria-label={t("Descripción")}>
+                  <h4>{t("Descripción")}</h4>
                   {detalle ? (
                     detalle.description?.trim() ? (
                       <Descripcion key={detalle.id} texto={detalle.description} />
                     ) : (
-                      <p className="of-tk-quieto">Sin descripción.</p>
+                      <p className="of-tk-quieto">{t("Sin descripción.")}</p>
                     )
                   ) : (
                     <Esqueleto lineas={3} />
                   )}
                 </section>
 
-                <section className="of-tk-sec" aria-label="Comentarios">
+                <section className="of-tk-sec" aria-label={t("Comentarios")}>
                   <h4>
-                    Comentarios
+                    {t("Comentarios")}
                     {hilo.comentarios ? <span className="of-tk-n">{visibles.length}</span> : null}
                   </h4>
                   {detalle ? (
@@ -293,7 +307,7 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                   ) : null}
                   {hilo.comentarios ? (
                     visibles.length === 0 ? (
-                      <p className="of-tk-quieto of-tk-sinc">Todavía no hay comentarios.</p>
+                      <p className="of-tk-quieto of-tk-sinc">{t("Todavía no hay comentarios.")}</p>
                     ) : (
                       <div className="of-tk-coms">
                         {visibles.map((c) => {
@@ -307,7 +321,7 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                                 <div className="of-tk-ch">
                                   <b>{autor.nombre}</b>
                                   {autor.agente ? <Icono nombre="sparkles" tam={12} /> : null}
-                                  <span title={new Date(c.createdAt).toLocaleString("es")}>{hace(c.createdAt, ahora)}</span>
+                                  <span title={new Date(c.createdAt).toLocaleString(localeTag())}>{hace(c.createdAt, ahora)}</span>
                                 </div>
                                 <Markdown texto={c.body} />
                               </div>
@@ -316,7 +330,7 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                         })}
                         {hilo.comentarios.length >= TOPE_COMENTARIOS ? (
                           <a className="of-tk-enlace" {...enlacePagina} href={hrefPagina}>
-                            Los comentarios anteriores están en la página de la tarea
+                            {t("Los comentarios anteriores están en la página de la tarea")}
                             <Icono nombre="chevron-right" tam={12} />
                           </a>
                         ) : null}
@@ -324,9 +338,9 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                     )
                   ) : hilo.errorComentarios ? (
                     <p className="of-tk-err" role="alert">
-                      No se pudieron cargar los comentarios: {hilo.errorComentarios}.{" "}
+                      {t("No se pudieron cargar los comentarios: {error}.", { error: hilo.errorComentarios })}{" "}
                       <button type="button" className="of-tk-mas" onClick={reintentar}>
-                        Reintentar
+                        {t("Reintentar")}
                       </button>
                     </p>
                   ) : (
@@ -335,9 +349,9 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                 </section>
               </div>
 
-              <aside className="of-tk-lado" aria-label="Detalles">
+              <aside className="of-tk-lado" aria-label={t("Detalles")}>
                 <div className="of-tk-campo">
-                  <span>Estado</span>
+                  <span>{t("Estado")}</span>
                   {estado ? (
                     <div className="of-tk-estado">
                       <button
@@ -360,24 +374,24 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
                   )}
                 </div>
                 <div className="of-tk-campo">
-                  <span>Responsable</span>
+                  <span>{t("Responsable")}</span>
                   {detalle ? (
                     <b>
                       {responsable ? <Icono nombre={responsable.agente ? "sparkles" : "user-check"} tam={14} /> : null}
-                      {responsable?.nombre ?? "Sin asignar"}
+                      {responsable?.nombre ?? t("Sin asignar")}
                     </b>
                   ) : (
                     <span className="of-sk of-tk-sk" style={{ width: 80, height: 14 }} aria-hidden="true" />
                   )}
                 </div>
                 <div className="of-tk-campo">
-                  <span>Prioridad</span>
+                  <span>{t("Prioridad")}</span>
                   {detalle ? <b>{nombrePrioridad(detalle.priority)}</b> : <span className="of-sk of-tk-sk" style={{ width: 56, height: 14 }} aria-hidden="true" />}
                 </div>
                 {detalle ? (
                   <div className="of-tk-fechas">
-                    {detalle.createdAt ? <span>Creada {hace(detalle.createdAt, ahora)}</span> : null}
-                    {detalle.updatedAt ? <span>Actualizada {hace(detalle.updatedAt, ahora)}</span> : null}
+                    {detalle.createdAt ? <span>{t("Creada {cuando}", { cuando: hace(detalle.createdAt, ahora) })}</span> : null}
+                    {detalle.updatedAt ? <span>{t("Actualizada {cuando}", { cuando: hace(detalle.updatedAt, ahora) })}</span> : null}
                   </div>
                 ) : null}
               </aside>
@@ -387,6 +401,16 @@ export function TareaModal({ tarea, agentes, usuarioId, celular, ahora, hrefPagi
       </div>
     </Capa>
   );
+}
+
+/** El botón o la caja se deshabilitan con el foco puesto y el navegador lo suelta: si quedó en `body` o fuera del modal, vuelve. */
+function devolverFoco(el: HTMLElement | null) {
+  const dialogo = el?.closest('[role="dialog"]');
+  requestAnimationFrame(() => {
+    if (!el || !el.isConnected || (el as HTMLButtonElement).disabled) return;
+    const activo = document.activeElement;
+    if (!activo || activo === document.body || !dialogo?.contains(activo)) el.focus();
+  });
 }
 
 function inicial(nombre: string): string {
@@ -423,7 +447,7 @@ function MenuEstado({ actual, onElegir, onCerrar }: { actual: string; onElegir: 
     items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
   };
   return (
-    <div ref={ref} className="of-tk-menu" role="menu" aria-label="Cambiar estado" onKeyDown={mover}>
+    <div ref={ref} className="of-tk-menu" role="menu" aria-label={t("Cambiar estado")} onKeyDown={mover}>
       {ESTADOS_TAREA.map((s) => (
         <button key={s} type="button" role="menuitemradio" aria-checked={s === actual} className="of-tk-mi" onClick={() => onElegir(s)}>
           <Punto estado={s} />
@@ -440,6 +464,7 @@ function Caja({ clave, idTarea, codigo, usuarioId, onEnviado }: { clave: string;
   const [borrador, setBorrador] = useState(() => borradores.get(clave) ?? "");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cajaRef = useRef<HTMLTextAreaElement>(null);
   const escribir = (texto: string) => {
     setBorrador(texto);
     if (texto) borradores.set(clave, texto);
@@ -460,15 +485,17 @@ function Caja({ clave, idTarea, codigo, usuarioId, onEnviado }: { clave: string;
       setError((e as Error).message);
     } finally {
       setEnviando(false);
+      devolverFoco(cajaRef.current);
     }
   };
   return (
     <div className="of-tk-caja">
       <textarea
+        ref={cajaRef}
         value={borrador}
         rows={borrador.includes("\n") || borrador.length > 90 ? 4 : 2}
-        placeholder="Escribe un comentario…"
-        aria-label={`Comentario para ${codigo ?? "la tarea"}`}
+        placeholder={t("Escribe un comentario…")}
+        aria-label={codigo ? t("Comentario para {codigo}", { codigo }) : t("Comentario para la tarea")}
         disabled={enviando}
         onChange={(e) => escribir(e.target.value)}
         onKeyDown={(e) => {
@@ -481,14 +508,14 @@ function Caja({ clave, idTarea, codigo, usuarioId, onEnviado }: { clave: string;
       <div className="of-tk-pie">
         {error ? (
           <span className="of-tk-err" role="alert">
-            No se pudo comentar: {error}
+            {t("No se pudo comentar: {error}", { error })}
           </span>
         ) : (
-          <span className="of-tk-quieto">Acepta Markdown · Ctrl o ⌘ + Enter para enviar</span>
+          <span className="of-tk-quieto">{t("Acepta Markdown · Ctrl o ⌘ + Enter para enviar")}</span>
         )}
         <span className="of-sp" />
         <button type="button" className="of-btn is-sm is-primary" disabled={!cuerpo || enviando} onClick={() => void enviar()}>
-          {enviando ? "Enviando…" : "Comentar"}
+          {enviando ? t("Enviando…") : t("Comentar")}
         </button>
       </div>
     </div>

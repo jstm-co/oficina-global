@@ -10,6 +10,7 @@
 // - Si la ventana está abierta sobre la página de esa misma tarea, el botón de la barra y este muestran lo mismo:
 //   es un solo lector.
 import { contexto, EscritoContexto, ICONO, TEXTO, useContexto } from "./contextoBarra.js";
+import { t } from "../i18n.js";
 import { textoDeTarea } from "./botonContexto.js";
 import type { EstadoContexto } from "./contextoLector.js";
 import { cx, Icono } from "./piso.js";
@@ -40,14 +41,14 @@ export function callarSiLee(tarea: string | null): void {
 
 const aria = (e: EstadoContexto, codigo: string): string =>
   ({
-    listo: `Leer contexto de ${codigo}`,
-    cargando: `Cargando el contexto de ${codigo}`,
-    leyendo: `Detener lectura de ${codigo}`,
-    fin: `Leer contexto de ${codigo}`,
-    error: `No se pudo cargar ${codigo}. Leer contexto otra vez`,
+    listo: t("Leer contexto de {codigo}", { codigo }),
+    cargando: t("Cargando el contexto de {codigo}", { codigo }),
+    leyendo: t("Detener lectura de {codigo}", { codigo }),
+    fin: t("Leer contexto de {codigo}", { codigo }),
+    error: t("No se pudo cargar {codigo}. Leer contexto otra vez", { codigo }),
   })[e];
 const titulo = (e: EstadoContexto, codigo: string): string =>
-  ({ listo: `Leer contexto de ${codigo}`, cargando: "Cargando…", leyendo: "Detener", fin: `Leer contexto de ${codigo}`, error: `No se pudo cargar ${codigo}` })[e];
+  ({ listo: t("Leer contexto de {codigo}", { codigo }), cargando: t("Cargando…"), leyendo: t("Detener"), fin: t("Leer contexto de {codigo}", { codigo }), error: t("No se pudo cargar {codigo}", { codigo }) })[e];
 
 /** El botón, al final de la fila de la tarea (`.of-rmeta`). */
 export function BotonContextoVentana({ tarea, codigo, celular }: { tarea: string; codigo: string; celular: boolean }) {
@@ -70,7 +71,7 @@ export function BotonContextoVentana({ tarea, codigo, celular }: { tarea: string
         {!celular && e === "leyendo" && n > 0 ? <span className="of-ctx-n">{`${c.k + 1}/${n}`}</span> : null}
       </button>
       <span className="of-sr" role="status">
-        {e === "fin" ? "Leído" : e === "error" ? "No se pudo cargar la tarea" : ""}
+        {e === "fin" ? t("Leído") : e === "error" ? t("No se pudo cargar la tarea") : ""}
       </span>
     </>
   );
@@ -91,7 +92,7 @@ export function ErrorVentana({ tarea, celular }: { tarea: string; celular: boole
     <div className="of-rnote is-err" role="alert">
       <Icono nombre="triangle-alert" tam={14} />
       <span>
-        <b>No se pudo cargar la tarea.</b> Prueba otra vez.
+        <b>{t("No se pudo cargar la tarea.")}</b> {t("Prueba otra vez.")}
       </span>
     </div>
   );

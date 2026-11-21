@@ -8,6 +8,7 @@
 // Quien sigue trabajando y además te espera muestra la mano en su globo. El que
 // espera hace más va adelante; caben 3 por sala y los demás esperan en su
 // puesto con la mano, como antes.
+import { t } from "./i18n.js";
 import type { Dibujo } from "./vista.js";
 
 /** Como mucho, por sala. */
@@ -64,15 +65,16 @@ export function esperanEn(agentes: ReadonlyArray<Pick<AgenteFila, "prefijo" | "n
 
 /** El `aria-label` y el tooltip de tu escritorio. */
 export function etiquetaEscritorio(n: number, empresa: string): string {
-  if (n === 0) return `Tu escritorio en ${empresa}: nadie te espera.`;
-  return `Tu escritorio: ${n === 1 ? "1 te espera" : `${n} te esperan`} en ${empresa}. Clic para ver la lista y responder.`;
+  if (n === 0) return t("Tu escritorio en {empresa}: nadie te espera.", { empresa });
+  if (n === 1) return t("Tu escritorio: 1 te espera en {empresa}. Clic para ver la lista y responder.", { empresa });
+  return t("Tu escritorio: {n} te esperan en {empresa}. Clic para ver la lista y responder.", { n, empresa });
 }
 
 /** Dónde está cada uno de los que te esperan, en la ventanita de tu escritorio: «1.º en la fila», «sigue trabajando en BET-432»… */
 export function dondeEspera(a: { st: Dibujo; codigo?: string | null }, lugar: number | undefined): { texto: string; codigo: string | null; fila: boolean } {
-  if (lugar !== undefined) return { texto: `${lugar + 1}.º en la fila`, codigo: null, fila: true };
-  if (a.st === "trabaja") return { texto: "sigue trabajando en", codigo: a.codigo ?? null, fila: false };
-  if (a.st === "error") return { texto: "con error", codigo: null, fila: false };
-  if (a.st === "pausa") return { texto: "en pausa", codigo: null, fila: false };
-  return { texto: "en su puesto", codigo: null, fila: false };
+  if (lugar !== undefined) return { texto: t("{n}.º en la fila", { n: lugar + 1 }), codigo: null, fila: true };
+  if (a.st === "trabaja") return { texto: t("sigue trabajando en"), codigo: a.codigo ?? null, fila: false };
+  if (a.st === "error") return { texto: t("con error"), codigo: null, fila: false };
+  if (a.st === "pausa") return { texto: t("en pausa"), codigo: null, fila: false };
+  return { texto: t("en su puesto"), codigo: null, fila: false };
 }

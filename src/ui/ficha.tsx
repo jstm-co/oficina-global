@@ -8,8 +8,9 @@
 // ficha, una vez por run), y a quien te espera se le responde en la ventana
 // (`onResponder`) en vez de ir a la tarea.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type AnchorHTMLAttributes, type CSSProperties, type ReactNode } from "react";
-import { hrefRun as rutaRun, hrefTarea } from "../estado.js";
+import { hrefRun as rutaRun, hrefTarea, tituloVisible } from "../estado.js";
 import { textoFicha } from "../hora.js";
+import { t } from "../i18n.js";
 import { diaYHora, duracion, horaLinea, textoCopia, type LineaLog } from "../log.js";
 import { errorAntiguo, estaSilenciado } from "../erroresViejos.js";
 import { chipDe } from "../responder.js";
@@ -168,10 +169,10 @@ function AvisoErrorViejo({ a, ahora }: { a: AgenteVista; ahora: number }) {
       <div className="of-fsilencio">
         <span>
           <Icono nombre="bell" tam={12} />
-          Silenciado
+          {t("Silenciado")}
         </span>
         <button type="button" className="of-btn is-xs" onClick={() => reactivarError(a.id)}>
-          Volver a avisar
+          {t("Volver a avisar")}
         </button>
       </div>
     );
@@ -181,15 +182,15 @@ function AvisoErrorViejo({ a, ahora }: { a: AgenteVista; ahora: number }) {
       <div className="of-fsilencio">
         <span>
           <Icono nombre="triangle-alert" tam={12} />
-          Error antiguo: ya no cuenta en «con error»
+          {t("Error antiguo: ya no cuenta en «con error»")}
         </span>
       </div>
     );
   }
   return (
     <div className="of-fsilencio">
-      <button type="button" className="of-btn is-xs" title={'Deja de contar en "con error" hasta que tenga un error nuevo'} onClick={() => silenciarError(a)}>
-        Silenciar
+      <button type="button" className="of-btn is-xs" title={t('Deja de contar en "con error" hasta que tenga un error nuevo')} onClick={() => silenciarError(a)}>
+        {t("Silenciar")}
       </button>
     </div>
   );
@@ -226,7 +227,7 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
     void (copiar ?? copiarSolo)(texto).then(
       () => {
         const n = log.lineas.length;
-        const mensaje = `Copiado: código, hora y ${n} ${n === 1 ? "línea" : "líneas"} del log`;
+        const mensaje = n === 1 ? t("Copiado: código, hora y {n} línea del log", { n }) : t("Copiado: código, hora y {n} líneas del log", { n });
         if (avisar) {
           avisar(
             <>
@@ -239,7 +240,7 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
           setTimeout(() => setCopiado(false), 2000);
         }
       },
-      () => avisar?.(<span>No pude copiar el log.</span>),
+      () => avisar?.(<span>{t("No pude copiar el log.")}</span>),
     );
   };
 
@@ -248,7 +249,7 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
     cajaLog = (
       <div className="of-logbox" aria-busy="true">
         <div className="of-logh">
-          <span>Final del log</span>
+          <span>{t("Final del log")}</span>
         </div>
         <div className="of-sklog">
           {ANCHOS_SK_LOG.map((w, i) => (
@@ -261,15 +262,15 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
     cajaLog = (
       <div className="of-logbox">
         <div className="of-logh">
-          <span>Final del log</span>
+          <span>{t("Final del log")}</span>
         </div>
         <div className="of-lognote" role="status">
           <Icono nombre="cloud-off" tam={14} />
-          <span>No pude leer el log.</span>
+          <span>{t("No pude leer el log.")}</span>
           <span className="of-sp" />
           <button type="button" className="of-btn is-xs" onClick={reintentar}>
             <Icono nombre="refresh" tam={12} />
-            Reintentar
+            {t("Reintentar")}
           </button>
         </div>
       </div>
@@ -278,11 +279,11 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
     cajaLog = (
       <div className="of-logbox">
         <div className="of-logh">
-          <span>Final del log</span>
+          <span>{t("Final del log")}</span>
         </div>
         <div className="of-lognote is-vacio" role="status">
           <Icono nombre="info" tam={14} />
-          <span>Este run no dejó log.</span>
+          <span>{t("Este run no dejó log.")}</span>
         </div>
       </div>
     );
@@ -291,15 +292,15 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
       <div className="of-logbox">
         <div className="of-logh">
           <span>
-            Final del log · {log.lineas.length} {log.lineas.length === 1 ? "línea" : "líneas"}
+            {log.lineas.length === 1 ? t("Final del log · {n} línea", { n: log.lineas.length }) : t("Final del log · {n} líneas", { n: log.lineas.length })}
           </span>
           <span className="of-sp" />
-          <button type="button" className="of-btn is-xs" title="Copia el código, la hora y estas líneas" onClick={copiarLog}>
+          <button type="button" className="of-btn is-xs" title={t("Copia el código, la hora y estas líneas")} onClick={copiarLog}>
             <Icono nombre={copiado ? "check" : "copy"} tam={12} />
-            {copiado ? "Copiado" : "Copiar"}
+            {copiado ? t("Copiado") : t("Copiar")}
           </button>
         </div>
-        <div ref={refLog} className="of-log" role="log" tabIndex={0} aria-label={`Final del log del run ${runCorto(run.id)}`}>
+        <div ref={refLog} className="of-log" role="log" tabIndex={0} aria-label={t("Final del log del run {run}", { run: runCorto(run.id) })}>
           {log.lineas.map((l, i) => (
             <div key={i} className={cx("of-ll", l.error && "is-err")}>
               <i>{horaLinea(l.ts)}</i>
@@ -313,27 +314,27 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
 
   return (
     <>
-      <div className="of-fk">Qué pasó</div>
+      <div className="of-fk">{t("Qué pasó")}</div>
       <div className="of-errbox">
         <Icono nombre="triangle-alert" tam={14} />
-        <span>{a.motivo ?? run?.error ?? "El último run terminó con error."}</span>
+        <span>{a.motivo ?? run?.error ?? t("El último run terminó con error.")}</span>
       </div>
       {run ? (
         <div className="of-exm">
           {run.errorCode || extra ? (
             <div>
-              <span className="of-exk">Código</span>
+              <span className="of-exk">{t("Código")}</span>
               {run.errorCode ? <code className="of-excode">{run.errorCode}</code> : null}
               {extra ? <code className="of-exsub">{extra}</code> : null}
             </div>
           ) : null}
           {cuando ? (
             <div>
-              <span className="of-exk">Cuándo</span>
+              <span className="of-exk">{t("Cuándo")}</span>
               <span>
                 {cuando}
                 {fin ? ` · ${hace(fin, ahora)}` : ""}
-                {duro ? ` · duró ${duro}` : ""}
+                {duro ? ` · ${t("duró {duro}", { duro })}` : ""}
               </span>
             </div>
           ) : null}
@@ -349,7 +350,7 @@ function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }
       {cajaLog}
       {fila ? (
         <>
-          <div className="of-fk">Tarea</div>
+          <div className="of-fk">{t("Tarea")}</div>
           {fila}
         </>
       ) : null}
@@ -394,19 +395,19 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
   const ademas = a.need && a.st !== "toca";
   const desde = a.st === "toca" ? (a.teNecesita.map((e) => e.desde).filter(Boolean).sort()[0] ?? a.desde) : a.desde;
   const cuando = a.st === "pausa" ? desdeCuando(desde, ahora) : hace(desde, ahora);
-  const fila = (t: typeof tarea) => <FilaTarea prefijo={a.prefijo} tarea={t} enlazar={enlazar} />;
+  const fila = (ta: typeof tarea) => <FilaTarea prefijo={a.prefijo} tarea={ta} enlazar={enlazar} />;
 
   let cuerpo: ReactNode = null;
   if (a.st === "trabaja") {
     cuerpo = (
       <>
-        <div className="of-fk">Tarea actual</div>
+        <div className="of-fk">{t("Tarea actual")}</div>
         {fila(tarea)}
         {a.run ? (
           <div className="of-facts">
             <span>
               <Icono nombre={a.run.enCola ? "hourglass" : "activity"} tam={12} />
-              Run {runCorto(a.run.id)} · {a.run.enCola ? "en cola, parte en segundos" : `empezó ${hace(a.run.desde, ahora)}`}
+              {a.run.enCola ? t("Run {run} · en cola, parte en segundos", { run: runCorto(a.run.id) }) : t("Run {run} · empezó {cuando}", { run: runCorto(a.run.id), cuando: hace(a.run.desde, ahora) })}
             </span>
             {lineaHora ? (
               <span className={cx("of-eta-f", estimada?.tipo === "sin" && "is-sin")}>
@@ -423,7 +424,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
       <div className="of-facts">
         <span>
           <Icono nombre="coffee" tam={12} />
-          Sin run en curso: te espera en su puesto
+          {t("Sin run en curso: te espera en su puesto")}
         </span>
       </div>
     );
@@ -438,10 +439,10 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
     // Con error y un reintento en cola: el run nuevo todavía no dice nada del error.
     cuerpo = (
       <>
-        <div className="of-fk">Qué pasó</div>
+        <div className="of-fk">{t("Qué pasó")}</div>
         <div className="of-errbox">
           <Icono nombre="triangle-alert" tam={14} />
-          <span>{a.motivo ?? "El último run terminó con error."}</span>
+          <span>{a.motivo ?? t("El último run terminó con error.")}</span>
         </div>
         {fila(tarea)}
         <AvisoErrorViejo a={a} ahora={ahora} />
@@ -450,7 +451,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
   } else if (a.st === "pausa") {
     cuerpo = (
       <>
-        <div className="of-fk">En pausa {cuando}</div>
+        <div className="of-fk">{t("En pausa {cuando}", { cuando })}</div>
         {a.motivo ? (
           <div className="of-facts">
             <span>
@@ -459,19 +460,19 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
             </span>
           </div>
         ) : null}
-        {tarea ? <div className="of-fk">Última tarea</div> : null}
+        {tarea ? <div className="of-fk">{t("Última tarea")}</div> : null}
         {fila(tarea)}
       </>
     );
   } else {
     cuerpo = (
       <>
-        {tarea ? <div className="of-fk">Última tarea</div> : null}
+        {tarea ? <div className="of-fk">{t("Última tarea")}</div> : null}
         {fila(tarea)}
         <div className="of-facts">
           <span>
             <Icono nombre="coffee" tam={12} />
-            En la sala de descanso {hace(a.desde, ahora)}
+            {t("En la sala de descanso {cuando}", { cuando: hace(a.desde, ahora) })}
           </span>
         </div>
       </>
@@ -480,17 +481,19 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
 
   const esperas = a.need ? (
     <>
-      <div className="of-fk">Espera tu respuesta{a.teNecesita.length > 1 ? ` · ${a.teNecesita.length}` : ""}</div>
+      <div className="of-fk">{a.teNecesita.length > 1 ? t("Espera tu respuesta · {n}", { n: a.teNecesita.length }) : t("Espera tu respuesta")}</div>
       <div className="of-qlist">
         {a.teNecesita.map((e, i) => {
           const tipo = onResponder ? chipDe(e) : ESPERAS[e.tipo];
+          // El rótulo de `chipDe` queda en español para las voces (JST-413): aquí se traduce al mostrarlo.
+          const rotulo = t(tipo.label);
           const contenido = (
             <>
               <span className="of-qk">
                 <Icono nombre={tipo.icono} tam={12} />
-                {tipo.label}
+                {rotulo}
               </span>
-              <span className="of-qq">{e.titulo ?? e.identifier ?? tipo.label}</span>
+              <span className="of-qq">{e.titulo ? tituloVisible(e.titulo) : (e.identifier ?? rotulo)}</span>
               <span className="of-qt">
                 {e.identifier ? <span className="of-tid">{e.identifier}</span> : null}
                 {hace(e.desde, ahora)}
@@ -521,7 +524,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
   const responder = onResponder && a.need ? (
     <button type="button" className="of-btn is-primary is-toca" onClick={() => onResponder(0)}>
       <Icono nombre="hand" tam={14} />
-      {n > 1 ? `Responder · ${n}` : "Responder"}
+      {n > 1 ? t("Responder · {n}", { n }) : t("Responder")}
     </button>
   ) : null;
 
@@ -531,7 +534,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
     botones = (
       <>
         {responder}
-        {a.st === "trabaja" ? <Boton href={hrefRun} enlazar={enlazar}>Ver run</Boton> : <Boton href={hrefAgente(a)} enlazar={enlazar}>Ver agente</Boton>}
+        {a.st === "trabaja" ? <Boton href={hrefRun} enlazar={enlazar}>{t("Ver run")}</Boton> : <Boton href={hrefAgente(a)} enlazar={enlazar}>{t("Ver agente")}</Boton>}
       </>
     );
   } else if (responder && a.st === "error") {
@@ -539,44 +542,44 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
     botones = (
       <>
         {responder}
-        <Boton href={hrefRun} enlazar={enlazar}>Ver run</Boton>
-        <Boton href={hrefTareaActual} enlazar={enlazar}>Abrir tarea</Boton>
+        <Boton href={hrefRun} enlazar={enlazar}>{t("Ver run")}</Boton>
+        <Boton href={hrefTareaActual} enlazar={enlazar}>{t("Abrir tarea")}</Boton>
       </>
     );
   } else if (responder) {
     botones = (
       <>
         {responder}
-        <Boton href={hrefAgente(a)} enlazar={enlazar}>Ver agente</Boton>
+        <Boton href={hrefAgente(a)} enlazar={enlazar}>{t("Ver agente")}</Boton>
       </>
     );
   } else if (a.st === "trabaja" && !a.need) {
     botones = (
       <>
-        <Boton href={hrefTareaActual} enlazar={enlazar} clase="is-primary">Abrir tarea</Boton>
-        <Boton href={hrefRun} enlazar={enlazar}>Ver run</Boton>
+        <Boton href={hrefTareaActual} enlazar={enlazar} clase="is-primary">{t("Abrir tarea")}</Boton>
+        <Boton href={hrefRun} enlazar={enlazar}>{t("Ver run")}</Boton>
       </>
     );
   } else if (a.st === "toca" || (a.st === "trabaja" && a.need)) {
     const primero = a.teNecesita[0];
     botones = (
       <>
-        <Boton href={hrefEspera(a)} enlazar={enlazar} clase="is-primary is-toca">{primero ? ESPERAS[primero.tipo].boton : "Responder"}</Boton>
-        {a.st === "trabaja" ? <Boton href={hrefRun} enlazar={enlazar}>Ver run</Boton> : <Boton href={hrefAgente(a)} enlazar={enlazar}>Ver agente</Boton>}
+        <Boton href={hrefEspera(a)} enlazar={enlazar} clase="is-primary is-toca">{primero ? ESPERAS[primero.tipo].boton : t("Responder")}</Boton>
+        {a.st === "trabaja" ? <Boton href={hrefRun} enlazar={enlazar}>{t("Ver run")}</Boton> : <Boton href={hrefAgente(a)} enlazar={enlazar}>{t("Ver agente")}</Boton>}
       </>
     );
   } else if (a.st === "error") {
     botones = (
       <>
-        <Boton href={hrefRun} enlazar={enlazar} clase="is-primary">Ver run</Boton>
-        <Boton href={hrefTareaActual} enlazar={enlazar}>Abrir tarea</Boton>
+        <Boton href={hrefRun} enlazar={enlazar} clase="is-primary">{t("Ver run")}</Boton>
+        <Boton href={hrefTareaActual} enlazar={enlazar}>{t("Abrir tarea")}</Boton>
       </>
     );
   } else {
     botones = (
       <>
-        <Boton href={hrefTareaActual} enlazar={enlazar}>Abrir última tarea</Boton>
-        <Boton href={hrefAgente(a)} enlazar={enlazar}>Ver agente</Boton>
+        <Boton href={hrefTareaActual} enlazar={enlazar}>{t("Abrir última tarea")}</Boton>
+        <Boton href={hrefAgente(a)} enlazar={enlazar}>{t("Ver agente")}</Boton>
       </>
     );
   }
@@ -597,20 +600,20 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
             <span>{a.empresa}</span>
           </div>
         </div>
-        <button type="button" className="of-ibtn of-x" aria-label="Cerrar" onClick={onCerrar}>
+        <button type="button" className="of-ibtn of-x" aria-label={t("Cerrar")} onClick={onCerrar}>
           <Icono nombre="x" tam={14} />
         </button>
       </div>
       <div className="of-fsts">
         <div className={cx("of-fst", `of-c-${a.st}`)}>
           <Icono nombre={s.icono} tam={14} />
-          <b>{a.st === "trabaja" && a.run?.enCola ? "En cola" : s.label}</b>
+          <b>{a.st === "trabaja" && a.run?.enCola ? t("En cola") : s.label}</b>
           {ademas || !cuando ? null : <span>· {cuando}</span>}
         </div>
         {ademas ? (
           <div className="of-fst is-also of-c-toca">
             <Icono nombre="hand" tam={14} />
-            <b>Te necesita</b>
+            <b>{t("Te necesita")}</b>
           </div>
         ) : null}
       </div>
@@ -629,7 +632,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
       </div>
       {hermes.length > 1 ? (
         <div className="of-herm">
-          <div className="of-fk">Hermes en las {hermes.length} empresas</div>
+          <div className="of-fk">{t("Hermes en las {n} empresas", { n: hermes.length })}</div>
           <div className="of-hrow">
             {hermes.map((h) => (
               <button key={h.id} type="button" className={cx("of-hpill", h.id === a.id && "is-on")} aria-pressed={h.id === a.id} onClick={() => onSeleccionar(h.id)}>
@@ -658,7 +661,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
  * o a la izquierda si no cabe; al menos a 12 px del borde y a 60 px de arriba.
  * `seguir`: el ancla se mueve sola (la de la vista 3D), y la ficha va con ella en cada cuadro.
  */
-export function FichaFlotante({ ancla, children, onCerrar, ancho = 340, seguir = false }: { ancla: HTMLElement | null; children: ReactNode; onCerrar: () => void; ancho?: number; seguir?: boolean }) {
+export function FichaFlotante({ ancla, children, onCerrar, ancho = 340, seguir = false, quieta = false }: { ancla: HTMLElement | null; children: ReactNode; onCerrar: () => void; ancho?: number; seguir?: boolean; quieta?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
@@ -697,13 +700,15 @@ export function FichaFlotante({ ancla, children, onCerrar, ancho = 340, seguir =
   }, [ancla, seguir]);
   useEffect(() => {
     const fuera = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (ref.current?.contains(t) || ancla?.contains(t)) return;
+      // `quieta`: el modal de tarea está encima; sus clics no son «fuera» de la ficha.
+      if (quieta) return;
+      const blanco = e.target as Node;
+      if (ref.current?.contains(blanco) || ancla?.contains(blanco)) return;
       onCerrar();
     };
     document.addEventListener("mousedown", fuera);
     return () => document.removeEventListener("mousedown", fuera);
-  }, [ancla, onCerrar]);
+  }, [ancla, onCerrar, quieta]);
   return (
     <div ref={ref} className="of-pop" style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0, width: ancho }}>
       {children}
@@ -712,10 +717,10 @@ export function FichaFlotante({ ancla, children, onCerrar, ancho = 340, seguir =
 }
 
 /** Hoja inferior (celular y modo TV). */
-export function FichaHoja({ children, onCerrar, tv = false }: { children: ReactNode; onCerrar: () => void; tv?: boolean }) {
+export function FichaHoja({ children, onCerrar, tv = false, quieta = false }: { children: ReactNode; onCerrar: () => void; tv?: boolean; quieta?: boolean }) {
   return (
     <>
-      <div className="of-sheet-bg" onClick={onCerrar} />
+      <div className="of-sheet-bg" onClick={quieta ? undefined : onCerrar} />
       <div className={cx("of-sheet", tv && "is-tv")}>
         {tv ? null : <div className="of-grab" />}
         {children}

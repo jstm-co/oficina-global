@@ -279,6 +279,9 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of[data-hl="pausa"] .of-st-pausa .of-spr.of-who, .of[data-hl="libre"] .of-st-libre .of-spr.of-who { filter: drop-shadow(2px 0 0 var(--hlc)) drop-shadow(-2px 0 0 var(--hlc)) drop-shadow(0 2px 0 var(--hlc)) drop-shadow(0 -2px 0 var(--hlc)); }
 .of[data-hl="trabaja"] { --hlc: var(--of-s-trabaja); } .of[data-hl="toca"] { --hlc: var(--of-s-toca); } .of[data-hl="error"] { --hlc: var(--of-s-error); }
 .of[data-hl="pausa"] { --hlc: var(--of-s-pausa); } .of[data-hl="libre"] { --hlc: var(--of-s-libre); }
+/* JST-410: un error antiguo o silenciado no cuenta en «con error»: tampoco se resalta. */
+.of[data-hl="error"] .of-st-error.is-viejo .of-spr, .of[data-hl="error"] .of-st-error.is-viejo .of-spr.of-who { opacity: .22; filter: grayscale(1); }
+.of[data-hl="error"] .of-bub.of-st-error.is-viejo { opacity: .12; }
 
 /* Globos (HTML, nítidos) */
 .of-bub { position: absolute; z-index: 900; transform: translate(-50%, -100%); pointer-events: none;
@@ -426,6 +429,10 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-leyenda.is-m b { font-weight: 500; color: var(--of-fg); }
 .of-hint { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: var(--of-muted-fg); }
 .of-version { margin-top: 6px; font-size: 12px; }
+/* Selector de idioma (JST-413), junto a la versión */
+.of-idioma { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; vertical-align: middle; color: var(--of-muted-fg); }
+.of-idioma select { height: 22px; padding: 0 4px; border: 1px solid var(--of-border); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.of-idioma select:focus-visible { outline: 2px solid var(--of-ring); outline-offset: 1px; }
 
 /* Celular */
 .of.is-m .of-msgs { padding: 0 12px 8px; }

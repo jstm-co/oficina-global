@@ -10,6 +10,7 @@
 // turna las empresas cada 5 s. Nada de esto lee: los nombres salen de lo que la
 // página ya leyó (§2).
 import { textoSinTarea } from "./estado.js";
+import { t } from "./i18n.js";
 import type { Dibujo } from "./vista.js";
 
 /** Cada cuánto pasa a la siguiente tarea el rótulo de una sala, y el de 1x (§3.4 y §3.6). */
@@ -100,7 +101,7 @@ export function vueltaDelPiso(agentes: readonly AgenteRotulo[]): ItemRotulo[] {
   return mezcla;
 }
 
-const ESTADO_SIN_TAREA: Record<Dibujo, string> = { trabaja: "Trabajando", toca: "Libre", error: "Con error", pausa: "En pausa", libre: "Libre" };
+const ESTADO_SIN_TAREA: Record<Dibujo, string> = { trabaja: t("Trabajando"), toca: t("Libre"), error: t("Con error"), pausa: t("En pausa"), libre: t("Libre") };
 
 /**
  * Lo que cuenta el rótulo del agente con el mouse o el foco encima (§3.3): lo

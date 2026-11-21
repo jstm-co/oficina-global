@@ -5,6 +5,7 @@
 // del mismo origen. El host no le da React a esta página: va en el bundle.
 import { createRoot } from "react-dom/client";
 import { idInstalacion } from "../fuentes.js";
+import { t } from "../i18n.js";
 import { PLUGIN_KEY } from "../shared.js";
 import { asegurarEstilos } from "../ui/estilos.js";
 import type { Enlazar } from "../ui/ficha.js";
@@ -42,7 +43,7 @@ async function copiar(texto: string): Promise<void> {
   area.select();
   const ok = document.execCommand("copy");
   area.remove();
-  if (!ok) throw new Error("No se pudo copiar");
+  if (!ok) throw new Error(t("No se pudo copiar"));
 }
 
 function Tv() {

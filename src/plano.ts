@@ -320,9 +320,10 @@ export function armarSala(
   if (lw > 110) muebles.push(pieza("estante", w - 26, MURO - 8, MURO + 18));
   if (lw > 150) {
     muebles.push(pieza("planta-grande", w - 18, h - 30, h));
-    // En una sala baja (2 filas de escritorios, JST-410) tu fila llega hasta donde iría el puff: ahí no va.
+    // En una sala baja del computador (2 filas de escritorios, JST-410) tu fila llega hasta donde iría el puff: ahí
+    // no va. El TV y el widget quedan como estaban.
     const ultimo = fila.at(-1);
-    if (!ultimo || ultimo.y <= h - 36) muebles.push(pieza("puff", lx + 4, h - 22, h - 10));
+    if (!holgado || !ultimo || ultimo.y <= h - 36) muebles.push(pieza("puff", lx + 4, h - 22, h - 10));
   }
   else if (lw > 90) muebles.push(pieza("dispensador", w - 14, h - 30, h));
 
@@ -427,6 +428,9 @@ const ESCALAS_COMPUTADOR: readonly number[] = [6, 5, 4, 3.5, 3, 2.5, 2, 1.5];
 
 const ESCALA_MINIMA = 1.5;
 
+/** Cuánto más angosto que la pantalla (en arte) puede quedar el piso para que todos tengan asiento. */
+const MARGEN_ASIENTOS = 24;
+
 export function escalasComputador(dpr = 1): number[] {
   return ESCALAS_COMPUTADOR.filter((e) => Number.isInteger(e) || Math.abs(e * dpr - Math.round(e * dpr)) < 0.01);
 }
@@ -480,8 +484,14 @@ function columnasCon(agentes: number, r: number): number {
  * (JST-410): en qué filas van (sin cambiar el orden) y cuántas filas de
  * escritorios lleva cada fila de salas. `null` si de ninguna forma cabe a lo
  * ancho; con `h` infinito, la más baja.
+ *
+ * `sinAsiento` dice en qué filas de una forma hay una sala donde no se sientan
+ * todos: a esas se les suman filas de escritorios (la sala queda más alta y su
+ * descanso más ancho) mientras quepa, y la forma que ni así sirve se descarta.
+ * Sin eso, la forma ganadora podía no servir y se perdía la escala entera: una
+ * ventana 2 px más ancha daba un piso más chico.
  */
-function mejorReparto(salas: readonly EntradaSala[], w: number, h: number): Reparto | null {
+function mejorReparto(salas: readonly EntradaSala[], w: number, h: number, sinAsiento?: (r: Reparto) => number[]): Reparto | null {
   const plan = PLANES.computador;
   const ordenadas = [...salas].sort((a, b) => a.prefijo.localeCompare(b.prefijo));
   const preferidas = (s: EntradaSala) => Math.min(columnasDe(s.prefijo, "computador", s.agentes), Math.max(1, s.agentes));
@@ -520,22 +530,46 @@ function mejorReparto(salas: readonly EntradaSala[], w: number, h: number): Repa
       alturas[cual] = Math.max(...opciones[cual]!.filter((r) => r < alturas[cual]!));
     }
     if (alto() > h && Number.isFinite(h)) continue;
-    const anchos = filas.map((fila, f) => anchoFila(fila, alturas[f]!));
     const parejo = salas.length / filas.length;
-    // El descanso puede crecer hasta un poco más del doble de lo mínimo; más ancho, queda vacío.
-    const comodos = filas.map((fila, f) => anchos[f]! + fila.reduce((a, s) => a + Math.round(descansoMinimo(s.agentes) * 1.2), 0));
-    const comodo = Math.max(...comodos);
-    // Lo que una fila se estira más allá de eso para alcanzar el ancho del piso (una sala sola en una fila larga)
-    // pesa como columnas de escritorios cambiadas.
-    const estirado = comodos.reduce((a, c) => a + Math.max(0, Math.min(w, comodo) - c), 0) / plan.px;
-    const nota =
-      filas.reduce((a, fila, f) => a + desvio(fila, alturas[f]!), 0) +
-      filas.reduce((a, fila) => a + Math.abs(fila.length - parejo), 0) * 0.5 +
-      (Math.max(...anchos) - Math.min(...anchos)) / 100 +
-      estirado +
-      (filas.length - 1) * 0.25;
-    const candidato: Reparto = { filas, alturas, alto: alto(), nota, comodo };
-    if (!mejor || (Number.isFinite(h) ? candidato.nota < mejor.nota : candidato.alto < mejor.alto || (candidato.alto === mejor.alto && candidato.nota < mejor.nota))) mejor = candidato;
+    const armar = (): Reparto => {
+      const anchos = filas.map((fila, f) => anchoFila(fila, alturas[f]!));
+      // El descanso puede crecer hasta un poco más del doble de lo mínimo; más ancho, queda vacío.
+      const comodos = filas.map((fila, f) => anchos[f]! + fila.reduce((a, s) => a + Math.round(descansoMinimo(s.agentes) * 1.2), 0));
+      const comodo = Math.max(...comodos);
+      // Lo que una fila se estira más allá de eso para alcanzar el ancho del piso (una sala sola en una fila larga)
+      // pesa como columnas de escritorios cambiadas.
+      const estirado = comodos.reduce((a, c) => a + Math.max(0, Math.min(w, comodo) - c), 0) / plan.px;
+      const nota =
+        filas.reduce((a, fila, f) => a + desvio(fila, alturas[f]!), 0) +
+        filas.reduce((a, fila) => a + Math.abs(fila.length - parejo), 0) * 0.5 +
+        (Math.max(...anchos) - Math.min(...anchos)) / 100 +
+        estirado +
+        (filas.length - 1) * 0.25;
+      return { filas, alturas: [...alturas], alto: alto(), nota, comodo };
+    };
+    const gana = (c: Reparto) =>
+      !mejor || (Number.isFinite(h) ? c.nota < mejor.nota : c.alto < mejor.alto || (c.alto === mejor.alto && c.nota < mejor.nota));
+    let candidato = armar();
+    if (!gana(candidato)) continue;
+    if (sinAsiento) {
+      let faltan = sinAsiento(candidato);
+      while (faltan.length > 0) {
+        let subio = false;
+        for (const f of faltan) {
+          const mayores = opciones[f]!.filter((r) => r > alturas[f]!);
+          if (mayores.length === 0) continue;
+          const antes = alturas[f]!;
+          alturas[f] = Math.min(...mayores);
+          if (alto() > h) alturas[f] = antes;
+          else subio = true;
+        }
+        if (!subio) break;
+        candidato = armar();
+        faltan = sinAsiento(candidato);
+      }
+      if (faltan.length > 0 || !gana(candidato)) continue;
+    }
+    mejor = candidato;
   }
   return mejor;
 }
@@ -559,12 +593,27 @@ export function armarPisoComputador(salas: readonly EntradaSala[], contenedor: n
   if (medidas.length === 0) return armarPiso(salas, anchoComputador(contenedor), "computador");
   const escalas = escalasComputador(dpr);
   const anchoArte = (e: number) => Math.floor((contenedor - 48) / e);
-  let elegido: { escala: number; reparto: Reparto } | null = null;
+  let elegido: { escala: number; reparto: Reparto; ancho: number } | null = null;
   const probar = (escala: number): boolean => {
-    const reparto = mejorReparto(medidas, anchoArte(escala), Math.floor((altoLibre - RESERVA_PAGINA) / escala));
-    if (!reparto || !cabenTodos(reparto, Math.min(anchoArte(escala), reparto.comodo))) return false;
-    elegido = { escala, reparto };
-    return true;
+    const alto = Math.floor((altoLibre - RESERVA_PAGINA) / escala);
+    // Los lugares del descanso van en una grilla y el sofá al centro: con 1 px más de ancho una sala puede perder un
+    // asiento. Si a este ancho las formas que caben fallan solo por eso, se prueba un piso un poco más angosto (hasta
+    // una vuelta y media de la grilla): así una ventana más ancha nunca da una escala menor.
+    for (let menos = 0; menos <= MARGEN_ASIENTOS; menos++) {
+      const ancho = anchoArte(escala) - menos;
+      let porAsientos = false;
+      const reparto = mejorReparto(medidas, ancho, alto, (r) => {
+        const faltan = filasSinAsiento(r, Math.min(ancho, r.comodo));
+        if (faltan.length > 0) porAsientos = true;
+        return faltan;
+      });
+      if (reparto) {
+        elegido = { escala, reparto, ancho };
+        return true;
+      }
+      if (!porAsientos) return false;
+    }
+    return false;
   };
   // Antes de obligar a bajar la página, 1,5x aunque no caiga en pixeles enteros: se ve la oficina completa.
   if (!escalas.some(probar) && !escalas.includes(ESCALA_MINIMA)) probar(ESCALA_MINIMA);
@@ -583,12 +632,12 @@ export function armarPisoComputador(salas: readonly EntradaSala[], contenedor: n
           break;
         }
       }
-      elegido = { escala, reparto };
+      elegido = { escala, reparto, ancho: anchoArte(escala) };
       break;
     }
   }
   if (!elegido) return armarPiso(salas, anchoComputador(contenedor), "computador");
-  const w = Math.min(anchoArte(elegido.escala), elegido.reparto.comodo);
+  const w = Math.min(elegido.ancho, elegido.reparto.comodo);
   if (salas.length === 0) return { escena: "computador", escala: elegido.escala, w, h: BORDE * 2, salas: [] };
   return armarPisoRepartido(elegido.reparto, w, elegido.escala);
 }
@@ -598,9 +647,16 @@ function armarPisoRepartido(reparto: Reparto, w: number, escala: number): PisoPl
   return armarFilas(reparto.filas, (s, f) => columnasCon(s.agentes, reparto.alturas[f]!), reparto.alturas, w, "computador", plan, escala, descansoMinimo, true);
 }
 
+/** Las filas de salas donde, con todos libres, a alguna sala le falta un asiento por agente. */
+function filasSinAsiento(reparto: Reparto, w: number): number[] {
+  const salas = armarPisoRepartido(reparto, w, 2).salas;
+  const cortas = new Set(salas.filter((s) => s.asientos.length < s.puestos.length).map((s) => s.prefijo));
+  return reparto.filas.flatMap((fila, f) => (fila.some((s) => cortas.has(s.prefijo)) ? [f] : []));
+}
+
 /** Con todos libres, cada sala tiene un asiento por agente. */
 function cabenTodos(reparto: Reparto, w: number): boolean {
-  return armarPisoRepartido(reparto, w, 2).salas.every((s) => s.asientos.length >= s.puestos.length);
+  return filasSinAsiento(reparto, w).length === 0;
 }
 
 /** Alto del lienzo del TV que queda para el piso: 1080 − 113 de cabecera − 46 reservados para un banner (§14). */
