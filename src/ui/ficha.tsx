@@ -11,10 +11,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type AnchorH
 import { hrefRun as rutaRun, hrefTarea } from "../estado.js";
 import { textoFicha } from "../hora.js";
 import { diaYHora, duracion, horaLinea, textoCopia, type LineaLog } from "../log.js";
+import { errorAntiguo, estaSilenciado } from "../erroresViejos.js";
 import { chipDe } from "../responder.js";
 import type { Sincronizador, UltimoTrabajo } from "../sincronizador.js";
 import type { RunResumen, TareaRef } from "../shared.js";
 import { desdeCuando, ESPERAS, ESTADOS, hace, motivoPausa, runCorto, type AgenteVista } from "../vista.js";
+import { reactivarError, silenciarError, useErroresSilenciados } from "./erroresSilenciados.js";
 import { claseEmpresa, cx, EtiquetaEmpresa, Icono, Personaje } from "./piso.js";
 import type { Animacion } from "./sprites.js";
 import { useHoras } from "./useOficina.js";
@@ -155,6 +157,42 @@ interface PropsError {
 }
 
 /** «Qué pasó», código, cuándo, run, el final del log y la tarea (§4). */
+/** JST-410: silenciar el error actual, o la nota de por qué ya no cuenta en «con error». */
+function AvisoErrorViejo({ a, ahora }: { a: AgenteVista; ahora: number }) {
+  const silenciados = useErroresSilenciados();
+  if (a.st !== "error") return null;
+  if (estaSilenciado(a, silenciados)) {
+    return (
+      <div className="of-fsilencio">
+        <span>
+          <Icono nombre="bell" tam={12} />
+          Silenciado
+        </span>
+        <button type="button" className="of-btn is-xs" onClick={() => reactivarError(a.id)}>
+          Volver a avisar
+        </button>
+      </div>
+    );
+  }
+  if (errorAntiguo(a, ahora)) {
+    return (
+      <div className="of-fsilencio">
+        <span>
+          <Icono nombre="triangle-alert" tam={12} />
+          Error antiguo: ya no cuenta en «con error»
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="of-fsilencio">
+      <button type="button" className="of-btn is-xs" title={'Deja de contar en "con error" hasta que tenga un error nuevo'} onClick={() => silenciarError(a)}>
+        Silenciar
+      </button>
+    </div>
+  );
+}
+
 function ErrorCompleto({ a, ultimo, sync, ahora, enlazar, fila, copiar, avisar }: PropsError) {
   const run = ultimo?.run ?? null;
   const { log, reintentar } = useFinalLog(sync, run);
@@ -388,7 +426,12 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
       </div>
     );
   } else if (a.st === "error" && !a.run) {
-    cuerpo = <ErrorCompleto a={a} ultimo={ultimo} sync={sync} ahora={ahora} enlazar={enlazar} fila={tarea?.identifier ? fila(tarea) : null} copiar={copiar} avisar={avisar} />;
+    cuerpo = (
+      <>
+        <ErrorCompleto a={a} ultimo={ultimo} sync={sync} ahora={ahora} enlazar={enlazar} fila={tarea?.identifier ? fila(tarea) : null} copiar={copiar} avisar={avisar} />
+        <AvisoErrorViejo a={a} ahora={ahora} />
+      </>
+    );
   } else if (a.st === "error") {
     // Con error y un reintento en cola: el run nuevo todavía no dice nada del error.
     cuerpo = (
@@ -399,6 +442,7 @@ export function Ficha({ agente: a, agentes, sync, ahora, rm, enlazar, onCerrar, 
           <span>{a.motivo ?? "El último run terminó con error."}</span>
         </div>
         {fila(tarea)}
+        <AvisoErrorViejo a={a} ahora={ahora} />
       </>
     );
   } else if (a.st === "pausa") {

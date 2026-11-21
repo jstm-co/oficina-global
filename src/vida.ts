@@ -2917,7 +2917,7 @@ export class Vida {
   /**
    * Al volver a la pestaña (o al cerrarse el TV), cada rótulo sigue con lo que
    * contaba hasta el próximo paso de su reloj. Si no, los que avanzaron
-   * mientras no se veía cambiarían todos en el mismo instante, y otra vez al
+   * mientras no se veía cambiarían todos a la vez, y otra vez al
    * llegar la relectura (§3.4, JST-155).
    */
   private retenerRotulos(ahora: number): void {
@@ -3110,7 +3110,10 @@ export class Vida {
     if (this.escritos.get(clave) === valor) return;
     this.escritos.set(clave, valor);
     const px = this.plano?.escala ?? 1;
-    el.style.transform = `translate(${x * px}px, ${y * px}px)`;
+    // Con una escala media (1,5x, JST-410) la posición cae en medios pixeles: en una pantalla de densidad 1 se redondea.
+    const paso = Number.isInteger(px) ? 0 : (globalThis as { devicePixelRatio?: number }).devicePixelRatio === 1 ? 1 : 2;
+    const en = (v: number) => (paso ? Math.round(v * px * paso) / paso : v * px);
+    el.style.transform = `translate(${en(x)}px, ${en(y)}px)`;
     if (z !== undefined) el.style.zIndex = String(z);
   }
 

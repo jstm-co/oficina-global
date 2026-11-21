@@ -307,6 +307,54 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-hd h1 { font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; }
 .of-hd .of-sub { color: var(--of-muted-fg); font-size: 13px; }
 .of-sub[tabindex], .of-wsub[tabindex], .of-tvsub[tabindex] { cursor: default; border-radius: 4px; }
+/* JST-410: cabecera de computador en 3 filas de alto fijo: 1) título y botones, en UNA línea; 2) contadores y filtro; 3) «Te necesitan». */
+.of-hd:not(.is-m) { gap: 8px; padding-top: 12px; padding-bottom: 10px; }
+.of-hdr-1 { flex-wrap: nowrap; }
+.of-hdr-1 > h1, .of-hdr-1 > .of-btn, .of-hdr-1 > .of-rmchip { flex: none; white-space: nowrap; }
+/* Lo largo (el conteo y el estado en vivo) cede primero, con «…»: los botones nunca saltan de línea. */
+.of-hdr-1 > .of-sub { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.of-hdr-1 > .of-live { flex: 0 1 auto; min-width: 0; overflow: hidden; padding: 6px; margin: -6px; }
+.of-hdr-1 > .of-live .of-lt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.of-hdr-1 > .of-sp { flex: 1 1 0; min-width: 0; }
+/* Con poco ancho, los botones quedan solo con el ícono (el texto sigue ahí para los lectores de pantalla y en el title). */
+@container (max-width: 1060px) {
+  .of-hdr-1 .of-btn { font-size: 0; gap: 0; padding: 0 9px; }
+  .of-hdr-1 .of-btn > svg.of-s12 { display: none; }
+}
+.of-ambbtn .of-iaa-cv { margin-left: -2px; color: var(--of-muted-fg); }
+.of-amb { display: flex; flex-direction: column; gap: 2px; }
+.of-amb-row { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--of-fg); font-size: 13px; text-align: left; white-space: nowrap; cursor: pointer; }
+.of-amb-row:hover { background: var(--of-hover-strong); }
+.of-amb-row:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-amb-row.is-off > svg:first-child { color: var(--of-muted-fg); }
+.of-amb-n { font-weight: 500; }
+.of-amb-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--of-s-toca); }
+.of-amb-st { margin-left: auto; font-size: 12px; color: var(--of-muted-fg); }
+.of-amb-cv { flex: none; color: var(--of-muted-fg); }
+.of-amb-sw { position: relative; flex: none; width: 28px; height: 16px; border-radius: 8px; background: var(--of-input); transition: background .12s; }
+.of-amb-sw > i { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .12s; }
+.of-amb-sw.is-on { background: var(--of-s-toca); }
+.of-amb-sw.is-on > i { transform: translateX(12px); }
+.of-hpop.is-ambiente { width: 300px; padding: 6px; }
+@media (prefers-reduced-motion: reduce) { .of-amb-sw, .of-amb-sw > i { transition: none; } }
+/* Franja «Te necesitan»: 36 px siempre; si los ítems no caben, se desplaza en horizontal sin barra. */
+.of-te { display: flex; align-items: center; gap: 10px; height: 36px; min-width: 0; }
+.of-te-h { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--of-s-toca-fg); white-space: nowrap; }
+.of-te-h svg { color: var(--of-s-toca); }
+.of-te-h b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.of-te-l { flex: 1; min-width: 0; height: 36px; display: flex; align-items: center; gap: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.of-te-l::-webkit-scrollbar { display: none; }
+.of-te-it { flex: none; max-width: 520px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; height: 30px; padding-right: 4px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--of-s-toca) 35%, var(--of-border)); background: color-mix(in srgb, var(--of-s-toca) var(--of-s-alpha), transparent); }
+.of-te-it:hover { border-color: var(--of-s-toca); }
+.of-te-m { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 2px 0 2px; border: 0; border-radius: 8px; background: transparent; color: var(--of-fg); font-size: 12.5px; text-align: left; white-space: nowrap; cursor: pointer; }
+.of-te-m:focus-visible, .of-te-it > .of-btn:focus-visible { outline: 2px solid var(--of-ring); outline-offset: -2px; }
+.of-te-n { flex: none; font-weight: 600; }
+.of-te-m > .of-cotag { flex: none; }
+.of-te-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--of-muted-fg); }
+.of-te-t .of-tid { font: 500 11.5px/17px ui-monospace, SFMono-Regular, Menlo, monospace; margin-right: 6px; }
+.of-te-mas { flex: none; font-size: 11.5px; font-weight: 600; color: var(--of-s-toca-fg); }
+.of-te-it > .of-btn { flex: none; }
+.of-te-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--of-muted-fg); white-space: nowrap; }
 .of-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--of-muted-fg); white-space: nowrap; }
 .of-live.is-warn { color: var(--of-danger-fg); }
 .of-live.is-warn svg { color: var(--of-s-error); }

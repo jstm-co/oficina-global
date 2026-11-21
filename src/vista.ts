@@ -2,6 +2,7 @@
 // la pose, la frase para el lector de pantalla, los contadores y los tiempos.
 import { aspectoDe } from "./aspecto.js";
 import { textoSinTarea, type AgenteOficina, type Espera, type TipoEspera } from "./estado.js";
+import { esErrorViejo, silenciadosPorOmision, type Silenciados } from "./erroresViejos.js";
 import { textoGlobo, type Estimacion } from "./hora.js";
 
 /** Lo que se dibuja: el estado base, salvo que esté libre y te necesite (vuelve a su puesto y levanta la mano). */
@@ -118,13 +119,20 @@ export interface ContadoresVista {
   error: number;
   pausa: number;
   libre: number;
+  /** Con error de hace más de un día o silenciado (JST-410): ya no cuentan en `error`. */
+  erroresViejos: number;
 }
 
-/** Contadores independientes (§5): «te necesitan» cuenta a todos los que esperan, aunque trabajen o tengan error. */
-export function contarVista(agentes: readonly AgenteVista[]): ContadoresVista {
-  const c: ContadoresVista = { trabaja: 0, toca: 0, error: 0, pausa: 0, libre: 0 };
+/**
+ * Contadores independientes (§5): «te necesitan» cuenta a todos los que esperan, aunque trabajen o tengan error.
+ * JST-410: los errores viejos no suman en «con error»; van en `erroresViejos`. `ahora` (por omisión, la hora de
+ * ahora) y `silenciados` (por omisión, los del almacén del navegador, o ninguno) son opcionales.
+ */
+export function contarVista(agentes: readonly AgenteVista[], ahora: number = Date.now(), silenciados: Silenciados = silenciadosPorOmision()): ContadoresVista {
+  const c: ContadoresVista = { trabaja: 0, toca: 0, error: 0, pausa: 0, libre: 0, erroresViejos: 0 };
   for (const a of agentes) {
-    if (a.st !== "toca") c[a.st] += 1;
+    if (esErrorViejo(a, ahora, silenciados)) c.erroresViejos += 1;
+    else if (a.st !== "toca") c[a.st] += 1;
     if (a.need) c.toca += 1;
   }
   return c;

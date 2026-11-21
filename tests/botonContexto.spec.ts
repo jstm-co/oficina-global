@@ -54,7 +54,7 @@ describe("lo corto también se lee", () => {
 describe("el inglés se mira en lo que se lee (JST-310)", () => {
   // Como las «Review productivity for …» que crea Paperclip: la plantilla en inglés y, al final,
   // los comentarios del agente en español. Entera tiene más español que inglés.
-  const avance = "- run `abc1234`: ⏳ Avance: ya está el arreglo de la prueba, falta que la QA lo vea en la copia y que el usuario lo apruebe en la tarjeta.";
+  const avance = "- run `abc1234`: ⏳ Avance: ya está el arreglo del caso, falta que la QA lo vea en la copia y que el usuario lo apruebe en la tarjeta.";
   const plantilla = [
     "Paperclip detected an unusual productivity/progression pattern on an assigned issue.",
     "## Source",

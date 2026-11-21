@@ -10,6 +10,7 @@ Plugin para [Paperclip](https://github.com/paperclipai/paperclip) que dibuja a l
 ## Qué hace
 
 - **Un piso con una sala por empresa.** Cada agente tiene su escritorio y su personaje. Trabajando teclea con el código de su tarea en un globo; si te necesita, levanta la mano y hace fila frente a tu escritorio; con error se pone rojo; en pausa duerme; libre va a la sala de descanso.
+- **Todo en una pantalla.** En el computador el piso entero cabe bajo la cabecera, desde un notebook hasta un monitor 4K: la oficina elige la escala más grande que cabe y acomoda las salas a la forma de la pantalla. Una franja arriba muestra quién te necesita, cada uno con su botón «Responder». Un error de hace más de un día, o uno que silencias desde la ficha del agente, deja de contar en el contador rojo y baja a «Errores antiguos» en la lista.
 - **Se mueve.** Los agentes caminan entre su escritorio y el descanso. Una tarea que pasa de un agente a otro viaja en un sobre o se entrega en la mesa. Los libres conversan sobre lo que de verdad pasa en la oficina, y hay mascotas en el pasillo que responden al clic.
 - **Responder sin salir.** Las preguntas, confirmaciones, tareas sugeridas y aprobaciones que te dejan los agentes («Te toca») se responden en una ventana de la oficina, con tu sesión. La oficina solo escribe cuando tú envías una respuesta.
 - **Avisos y voces** (apagados hasta que los actives). Cuando un agente empieza a necesitarte suena una campanita y su voz dice qué necesita («te necesito», «tengo un error», «terminé», «empecé»), con una voz distinta por agente.

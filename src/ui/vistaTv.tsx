@@ -16,6 +16,7 @@ import { fotoDe, llegadas, nombreCorto, type Llegada } from "../avisos.js";
 import { abreVentana } from "../lista.js";
 import { armarPisoTv } from "../plano.js";
 import { contarVista, type AgenteVista } from "../vista.js";
+import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { useAjustes } from "./ajustes.js";
 import { Banners, Contadores, ConteoEmpresas, EstadoVivo } from "./encabezado.js";
 import { Ficha, FichaHoja, type Enlazar } from "./ficha.js";
@@ -111,7 +112,9 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
     () => armarPisoTv(oficina.empresas.map((e) => ({ prefijo: e.prefijo, agentes: e.agentes })), previas),
     [oficina.empresas, previas],
   );
-  const c = contarVista(oficina.agentes);
+  // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
+  const silenciados = useErroresSilenciados();
+  const c = contarVista(oficina.agentes, ahora, silenciados);
   const agente = sel ? oficina.agentes.find((a) => a.id === sel) : undefined;
   // La ventana sigue con lo último que se supo del agente hasta que se cierra (no pierde «Listo»).
   const ultimoResp = useRef<AgenteVista | null>(null);

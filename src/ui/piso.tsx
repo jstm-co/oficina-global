@@ -28,7 +28,7 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode } from "react";
 import { hash } from "../aspecto.js";
 import { spriteConPies } from "../caminos.js";
-import { CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
+import { claseEscala, CON_COLOR, MURO, spriteDe, type PisoPlano, type SalaPlano } from "../plano.js";
 import { lineasDe, nombreQueCabe, tituloDe, unCorteMenos, type Linea } from "../charlas.js";
 import { esperanEn, etiquetaEscritorio } from "../escritorio.js";
 import { textoRun } from "../estado.js";
@@ -1397,7 +1397,7 @@ export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReinten
   const titulo = (codigo: string) => titulos?.titulo(codigo) ?? null;
   const suelo = (
     <div
-      className={cx("of-piso", `is-x${plano.escala}`)}
+      className={cx("of-piso", `is-x${claseEscala(plano.escala)}`)}
       style={{ "--px": plano.escala, "--fw": plano.w, "--fh": plano.h, isolation: "isolate" } as CSSProperties}
     >
       <div className="of-pasillo" />

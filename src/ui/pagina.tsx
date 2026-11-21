@@ -27,9 +27,12 @@ import { anchoCelular, anchoComputador, armarPiso, armarPisoComputador, armarSal
 import type { Vida } from "../vida.js";
 import { PLUGIN_KEY } from "../shared.js";
 import { contarVista, type AgenteVista } from "../vista.js";
+import { useErroresSilenciados } from "./erroresSilenciados.js";
 import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js";
 import { Banners, BotonMascotas, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
 import { BotonConversaciones } from "./menuConversaciones.js";
+import { BotonAmbiente } from "./menuAmbiente.js";
+import { FranjaTeNecesitan } from "./franjaToca.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
 import { PieVersion } from "./pieVersion.js";
@@ -158,6 +161,8 @@ function useContenedor() {
   const ref = useRef<HTMLDivElement>(null);
   const [ancho, setAncho] = useState(0);
   const [altoLibre, setAltoLibre] = useState(0);
+  // La densidad de la pantalla (JST-410): con 2, el piso también puede ir a 1,5x, 2,5x o 3,5x. Cambia con el zoom.
+  const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1);
   const [margen, setMargen] = useState<CSSProperties>({});
   const [barra, setBarra] = useState(0);
   useLayoutEffect(() => {
@@ -184,6 +189,7 @@ function useContenedor() {
         sb = Math.max(0, Math.min(padre.offsetWidth - padre.clientWidth - bordes, 16));
       }
       setBarra(sb);
+      setDpr(window.devicePixelRatio || 1);
       setAncho(el.clientWidth + sb);
       const hd = el.querySelector<HTMLElement>(":scope > .of-hd");
       if (hd) {
@@ -203,7 +209,7 @@ function useContenedor() {
       window.removeEventListener("resize", medir);
     };
   }, []);
-  return { ref, ancho, altoLibre, estilo: { ...margen, "--of-sb": `${barra}px` } as CSSProperties };
+  return { ref, ancho, altoLibre, dpr, estilo: { ...margen, "--of-sb": `${barra}px` } as CSSProperties };
 }
 
 export function OficinaGlobalPage({ context }: PluginPageProps) {
@@ -220,7 +226,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   // Con todas las empresas: la activa puede ser una sin agentes, que no se dibuja.
   const enlazar = useEnlazar(usePrefijoActivo(context, [...oficina.empresas, ...oficina.ocultas]));
   const urlTv = useUrlTv();
-  const { ref, ancho, altoLibre, estilo } = useContenedor();
+  const { ref, ancho, altoLibre, dpr, estilo } = useContenedor();
   const previas = useSalasPrevias();
   // 0.9.0: el Resumen usa lo que la Oficina ya tiene (no pide nada por su cuenta hasta abrir su menú).
   useEffect(() => resumen.fijarOficina(oficina), [oficina]);
@@ -341,15 +347,17 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
         ? armarSalaAcercada({ prefijo: salaAcercada.prefijo, agentes: salaAcercada.agentes }, anchoPiso)
         : celular
           ? armarPiso(empresasSala, anchoPiso, "celular")
-          : armarPisoComputador(empresasSala, ancho || 1200, altoLibre, previas),
+          : armarPisoComputador(empresasSala, ancho || 1200, altoLibre, previas, dpr),
     // `clave` resume las empresas y sus agentes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clave, anchoPiso, celular, salaAcercada?.prefijo, salaAcercada?.agentes, ancho, altoLibre, previas],
+    [clave, anchoPiso, celular, salaAcercada?.prefijo, salaAcercada?.agentes, ancho, altoLibre, previas, dpr],
   );
 
   // Contadores: solo las empresas del filtro (o la sala acercada).
   const visibles = oficina.agentes.filter((a) => (salaAcercada ? a.prefijo === salaAcercada.prefijo : filtro.length === 0 || filtro.includes(a.prefijo)));
-  const c = contarVista(visibles);
+  // JST-410: un error de hace más de un día, o silenciado, no cuenta en «con error».
+  const silenciados = useErroresSilenciados();
+  const c = contarVista(visibles, ahora, silenciados);
   const cargandoCont = oficina.cargando && oficina.agentes.length === 0;
   const pCont = { c, hl, onHl: (st: NonNullable<Resaltado>) => setHl((h) => (h === st ? null : st)), cargando: cargandoCont, sinAtencion: oficina.sinAtencion };
   const libres = todosLibres(oficina);
@@ -544,7 +552,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     cuerpo = (
       <>
         <div className="of-hd">
-          <div className="of-hdr">
+          {/* JST-410: fila 1 de botones (una sola línea), fila 2 de contadores y filtro, fila 3 «Te necesitan» (alto fijo). */}
+          <div className="of-hdr of-hdr-1">
             <h1>Oficina global</h1>
             <ConteoEmpresas oficina={oficina} conAgentes className="of-sub" />
             <EstadoVivo oficina={oficina} />
@@ -553,23 +562,21 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             {/* Con la vista 3D abierta, va en su barra (el menú abierto es uno para los dos botones). */}
             {en3d ? null : <BotonResumen />}
             <BotonesAvisos celular={false} agentes={oficina.agentes} rm={rm} />
-            <BotonMascotas celular={false} />
-            <BotonConversaciones celular={false} />
+            <BotonAmbiente agentes={oficina.agentes} />
+            <button type="button" className="of-btn is-sm" title="Camina por la oficina en primera persona, desde tu escritorio" onClick={abrir3d} disabled={!vidaPiso}>
+              <Icono nombre="box" tam={14} />
+              Vista 3D
+            </button>
             <button type="button" className="of-btn is-sm" title="Pantalla completa para dejar en un televisor (1920 × 1080)" onClick={abrirTv}>
               <Icono nombre="tv" tam={14} />
               Modo TV
             </button>
           </div>
-          <div className="of-hdr">
+          <div className="of-hdr of-hdr-2">
             <Contadores modo="pagina" {...pCont} />
             <FiltroEmpresas oficina={oficina} filtro={filtro} onFiltro={setFiltro} celular={false} />
-            {/* En esta fila, que tiene espacio: en la de arriba haría saltar los botones a otra línea y le quitaría alto al piso. */}
-            <span className="of-sp" />
-            <button type="button" className="of-btn is-sm" title="Camina por la oficina en primera persona, desde tu escritorio" onClick={abrir3d} disabled={!vidaPiso}>
-              <Icono nombre="box" tam={14} />
-              Vista 3D
-            </button>
           </div>
+          <FranjaTeNecesitan agentes={visibles} cargando={cargandoCont} sinAtencion={oficina.sinAtencion} onResponder={(id, desde) => responderDesde(id, desde)} />
         </div>
         <div className="of-msgs">
           <Banners oficina={oficina} corto={false} c={c} libres={libres} />
