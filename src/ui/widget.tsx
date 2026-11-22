@@ -137,6 +137,9 @@ export function OficinaGlobalWidget({ context }: PluginWidgetProps) {
           onAcercar={celular ? (sala) => navigation.navigate(`${rutaPagina}?sala=${encodeURIComponent(sala)}`) : undefined}
           // Tu escritorio (0.5.0, JST-163 §14): en el widget, un clic abre la página, como el resto.
           onEscritorio={celular ? null : () => navigation.navigate(rutaPagina)}
+          // JST-428: la mesa de bloqueadas, igual: un clic abre la página.
+          bloqueadas={oficina.bloqueadas}
+          onMesa={celular ? null : () => navigation.navigate(rutaPagina)}
           onReintentar={oficina.reintentar}
           sync={oficina.sync}
           charlas={false}

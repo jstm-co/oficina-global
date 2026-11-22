@@ -44,6 +44,8 @@ import { mueblesDeSala } from "../adornos.js";
 import { adornoDeHoy, ahoraOficina, enChileAhora, type Adorno } from "../fechas.js";
 import { luzDeSala } from "../luzSala.js";
 import { useAhora } from "./ahora.js";
+import { GloboMesa, MesaBloqueos } from "./mesaBloqueos.js";
+import type { Bloqueada } from "../bloqueos.js";
 import { tx } from "./i18n.js";
 import { fuenteIa, registrarPisoIa, registroUsoIa, useIaActiva } from "./ia.js";
 import { PATHS, type NombreIcono } from "./iconos.js";
@@ -902,9 +904,12 @@ interface PropsSala {
   titulo: (codigo: string) => string | null;
   /** Clic en tu escritorio (JST-163 §14): la ventanita con quiénes te esperan. `null`: sin clic (el TV). */
   onEscritorio: ((prefijo: string, el: HTMLElement) => void) | null;
+  /** JST-428: cuántas tareas bloqueadas tiene la empresa (el número de su mesa) y el clic en la mesa (`null`: el TV). */
+  nBloqueadas: number;
+  onMesa: ((prefijo: string, el: HTMLElement) => void) | null;
 }
 
-function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReintentar, vida, revisores, horaDe, ahoraDe, titulo, onEscritorio }: PropsSala) {
+function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReintentar, vida, revisores, horaDe, ahoraDe, titulo, onEscritorio, nBloqueadas, onMesa }: PropsSala) {
   // Se vuelve a dibujar cuando cambia la forma de esta sala (alguien llega, dobla, un sobre cambia de fase).
   useSyncExternalStore(vida.suscribir, () => vida.version(sala.prefijo));
   // 0.6.0: el globo que suena lleva el 🔊.
@@ -948,6 +953,7 @@ function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReinte
           <EscritorioVacio key={i} prefijo={sala.prefijo} x={p.x} y={p.y} />
         ))}
         {sala.escritorio ? <EscritorioTu sala={sala} n={0} empresa={nombre} chico={o.chico} rm={o.rm} onClick={null} /> : null}
+        {sala.mesaBloqueos ? <MesaBloqueos sala={sala} n={0} empresa={nombre} chico={o.chico} onClick={null} /> : null}
         <div className="of-cover is-off" role="status">
           <div className="of-offmsg">
             <Icono nombre="cloud-off" tam={18} />
@@ -1022,6 +1028,11 @@ function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReinte
         );
       }
     }
+    // JST-428: la mesa de bloqueadas: solo un mueble con un número, sin tocar nada de lo demás.
+    if (sala.mesaBloqueos) {
+      piezas.push(<MesaBloqueos key="mesab" sala={sala} n={nBloqueadas} empresa={nombre} chico={o.chico} onClick={onMesa} />);
+      if (!o.chico && nBloqueadas > 0) globos.push(<GloboMesa key="mesab-g" sala={sala} n={nBloqueadas} />);
+    }
     for (const s of vida.sobresManoDe(sala.prefijo)) piezas.push(<SobreMano key={`sm-${s.id}`} s={s} vida={vida} />);
     const jv = o.chico ? null : vida.juntaDe(sala.prefijo);
     if (jv) entrega = <GlobosEntrega key={`e-${jv.id}`} j={jv} sala={sala} marca={marca} />;
@@ -1083,7 +1094,8 @@ function Sala({ sala, empresa, agentes, o, escala, atenuada, onAcercar, onReinte
     if (hilos.length === 0 && ents.length === 0) return;
     const izq = rr.left + sala.descanso.x * k + 2 * pantalla;
     const der = rr.left + (sala.descanso.x + sala.descanso.w) * k - 2 * pantalla;
-    const estado = Array.from(room.querySelectorAll<HTMLElement>(".of-bub")).map((b) => b.getBoundingClientRect());
+    // El globo de la mesa de bloqueadas (JST-428) no es de estado: dura días y no debe esconder los hilos.
+    const estado = Array.from(room.querySelectorAll<HTMLElement>(".of-bub:not(.of-b-mesa)")).map((b) => b.getBoundingClientRect());
     for (const el of hilos) {
       el.style.setProperty("--dx", "0px");
       const r = el.getBoundingClientRect();
@@ -1279,6 +1291,10 @@ export interface PropsPiso {
   tv?: boolean;
   /** Clic en tu escritorio (0.5.0, JST-163 §14): en la página, la ventanita con quiénes te esperan; en el widget, abrir la página. Sin esto, no se puede hacer clic (el TV). */
   onEscritorio?: ((prefijo: string, el: HTMLElement) => void) | null;
+  /** JST-428: las tareas bloqueadas de todas las empresas (cada sala cuenta las suyas, sin el filtro de la página). */
+  bloqueadas?: readonly Bloqueada[];
+  /** JST-428: clic en la mesa de bloqueadas de una sala: su panel. Sin esto, no se puede hacer clic (el TV). */
+  onMesa?: ((prefijo: string, el: HTMLElement) => void) | null;
   /** 0.6.0: la voz lee lo de la oficina (la página y el TV; el widget no habla, JST-225 §5). */
   voz?: boolean;
   /**
@@ -1408,7 +1424,7 @@ function RotuloPiso({ vida, ancho }: { vida: Vida; ancho: number }) {
   return <Rotulo clave={ROTULO_PISO} v={v} vida={vida} piso etiqueta={t("Qué se hace en la oficina")} style={{ width: ancho }} />;
 }
 
-export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReintentar, sync = null, charlas = true, pausado = false, mascotasTocables = true, tv = false, onEscritorio = null, voz: conVoz = false, ia: conIa = false, onVida = null }: PropsPiso) {
+export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReintentar, sync = null, charlas = true, pausado = false, mascotasTocables = true, tv = false, onEscritorio = null, bloqueadas = [], onMesa = null, voz: conVoz = false, ia: conIa = false, onVida = null }: PropsPiso) {
   const porPrefijo = new Map(empresas.map((e) => [e.prefijo, e]));
   // 0.5.0 (JST-163 §9): la hora estimada de quien trabaja, con sus últimos runs; se vuelve a calcular cada minuto.
   // JST-192: cada uno en su instante del minuto, para que ningún globo la cambie a la vez que otro ni que un rótulo (§8).
@@ -1474,6 +1490,8 @@ export function Piso({ plano, empresas, agentes, o, filtro, onAcercar, onReinten
           ahoraDe={ahoraDe}
           titulo={titulo}
           onEscritorio={tv ? null : onEscritorio}
+          nBloqueadas={bloqueadas.filter((b) => b.prefijo === sala.prefijo).length}
+          onMesa={tv ? null : onMesa}
         />
       ))}
       <CapaMascotas vida={vida} tocables={mascotasTocables && !tv} />

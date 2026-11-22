@@ -381,6 +381,11 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-bq-m { font-size: 12px; color: var(--of-fg); overflow-wrap: anywhere; }
 .of-bq-a { margin-top: 3px; }
 .of-bq-mas { margin: 6px 0 0; font-size: 12px; color: var(--of-muted-fg); }
+/* JST-428: un grupo por empresa; el encabezado queda pegado arriba al desplazarse */
+.of-bq-gh { position: sticky; top: -12px; z-index: 1; display: flex; align-items: center; gap: 6px; margin: 4px -14px 0; padding: 8px 14px 6px; background: var(--of-popover); border-top: 1px solid var(--of-border); font-size: 12.5px; }
+.of-bq-gn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.of-bq-gh b { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--of-muted-fg); }
+.of-bq-gh + .of-bq-l > .of-bq-it:first-child { border-top: 0; padding-top: 3px; }
 .of-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--of-muted-fg); white-space: nowrap; }
 .of-live.is-warn { color: var(--of-danger-fg); }
 .of-live.is-warn svg { color: var(--of-s-error); }

@@ -212,6 +212,20 @@ export const CSS_VIDA = /* css */ `
 .of-ent.is-alta::before, .of-ent.is-alta::after, .of-ent.is-arriba::before, .of-ent.is-arriba::after { display: none; }
 .of-rm .of-ent { animation: none; }
 @media (prefers-reduced-motion: reduce) { .of-ent { animation: none; } }
+/* La mesa de bloqueadas (JST-428): una mesita con carpetas y un número NEUTRO (ni morado ni rojo: no es un aviso) */
+.of-ws.of-mesab.is-fijo { cursor: default; }
+.of-ws.of-mesab:hover .of-spr, .of-ws.of-mesab:focus-visible .of-spr { filter: brightness(1.12); }
+.of-ws.of-mesab.is-fijo:hover .of-spr { filter: none; }
+.of-carpetas { position: absolute; z-index: 2; left: calc(var(--x) * var(--px) * 1px); top: calc(var(--y) * var(--px) * 1px);
+  width: calc(8px * var(--px)); height: calc(4px * var(--px)); box-sizing: border-box; border: 1px solid #5a4410; border-radius: 1px;
+  background: linear-gradient(#e2b857 0 50%, #c99a3a 50% 100%); box-shadow: 0 calc(-1px * var(--px)) 0 -1px #f0d28a, calc(1px * var(--px)) 0 0 -1px #8a6a1c; pointer-events: none; }
+.of-mcnt { position: absolute; z-index: 6; left: calc(var(--x) * var(--px) * 1px); top: calc(var(--y) * var(--px) * 1px);
+  min-width: 11px; height: 11px; padding: 0 2px; box-sizing: border-box; border-radius: 6px; background: #4b5563; color: #fff; box-shadow: 0 0 0 1px var(--of-bg);
+  font: 700 8px/11px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+.of-bub.of-b-mesa { background: #e5e7eb; color: #1f2937; border-color: #4b5563; font-family: Inter, system-ui, sans-serif; font-weight: 600; letter-spacing: 0; gap: 2px; }
+.of-bub.of-b-mesa b { font: 700 1.05em/1 ui-monospace, SFMono-Regular, Menlo, monospace; margin-right: 1px; }
+.of[data-hl] .of-bub.of-b-mesa { opacity: .12; }
+
 /* El sobre en la mano (o sobre la mesa) va con quien lo lleva */
 .of-sobre.is-mano { pointer-events: none; }
 /* La etiqueta del sobre dice para quién va: «BET-434 → Ingeniero frontend» */

@@ -1,6 +1,6 @@
 // JST-426: «Bloqueadas sin nadie moviéndolas», la lógica pura y que no se cuele en lo que sí te necesita.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { armarBloqueos, bloqueosDe, claveMotivo, LectorMotivos, MAX_BLOQUEOS_MOSTRADAS, recortarBloqueos, recortarMotivo, type EmpresaBloqueos } from "../src/bloqueos.js";
+import { armarBloqueos, bloqueosDe, claveMotivo, LectorMotivos, recortarMotivo, agruparBloqueos, etiquetaMesa, type Bloqueada, type EmpresaBloqueos } from "../src/bloqueos.js";
 import { armarEmpresa, contar, esperasPorAgente, tipoEspera } from "../src/estado.js";
 import { setLocale } from "../src/i18n.js";
 import type { AgenteApi, ItemAtencion } from "../src/shared.js";
@@ -111,13 +111,43 @@ describe("armarBloqueos", () => {
     const lista = armarBloqueos([empresa([bloqueo(1), bloqueo(2)], { conRunVivo: new Set([id(1)]) }), { ...empresa([bloqueo(3)]), id: id(2), atencion: null }]);
     expect(lista.map((b) => b.identifier)).toEqual(["AAA-2"]);
   });
-  it("filtra por empresas visibles (vacío: todas) y recorta a 20", () => {
+  it("filtra por empresas visibles (vacío: todas)", () => {
     const lista = armarBloqueos([empresa([bloqueo(1)]), { ...empresa([bloqueo(2)]), id: id(2), prefijo: "BBB" }]);
     expect(bloqueosDe(lista, ["BBB"]).map((b) => b.prefijo)).toEqual(["BBB"]);
     expect(bloqueosDe(lista, [])).toHaveLength(2);
-    const muchas = Array.from({ length: 25 }, (_, i) => i);
-    expect(recortarBloqueos(muchas)).toEqual({ vistas: muchas.slice(0, MAX_BLOQUEOS_MOSTRADAS), mas: 5 });
-    expect(recortarBloqueos([1, 2])).toEqual({ vistas: [1, 2], mas: 0 });
+  });
+});
+
+const fila = (n: number, prefijo: string, empresa: string): Bloqueada => ({ companyId: id(1), prefijo, empresa, issueId: id(n), identifier: `${prefijo}-${n}`, titulo: `Tarea ${n}`, href: null, agenteId: null, desde: null, estado: "blocked", frena: 0, dePersona: false });
+
+describe("agruparBloqueos (JST-428)", () => {
+  it("un grupo por empresa, en el orden en que aparece cada una, y dentro el orden de la lista", () => {
+    const lista = [fila(1, "BBB", "Empresa B"), fila(2, "AAA", "Empresa A"), fila(3, "BBB", "Empresa B"), fila(4, "CCC", "Empresa C"), fila(5, "AAA", "Empresa A")];
+    const g = agruparBloqueos(lista);
+    expect(g.map((x) => x.prefijo)).toEqual(["BBB", "AAA", "CCC"]);
+    expect(g.map((x) => x.empresa)).toEqual(["Empresa B", "Empresa A", "Empresa C"]);
+    expect(g[0]!.vistas.map((b) => b.issueId)).toEqual([id(1), id(3)]);
+    expect(g[1]!.vistas.map((b) => b.issueId)).toEqual([id(2), id(5)]);
+    expect(g.map((x) => [x.total, x.mas])).toEqual([[2, 0], [2, 0], [1, 0]]);
+  });
+  it("cada grupo muestra hasta 8 y cuenta las que quedan fuera; el tope es por grupo, no global", () => {
+    const lista = [...Array.from({ length: 11 }, (_, i) => fila(i + 1, "AAA", "Empresa A")), ...Array.from({ length: 9 }, (_, i) => fila(i + 20, "BBB", "Empresa B")), fila(40, "CCC", "Empresa C")];
+    const g = agruparBloqueos(lista);
+    expect(g.map((x) => [x.vistas.length, x.total, x.mas])).toEqual([[8, 11, 3], [8, 9, 1], [1, 1, 0]]);
+    expect(g[0]!.vistas.map((b) => b.issueId)).toEqual(Array.from({ length: 8 }, (_, i) => id(i + 1)));
+    expect(agruparBloqueos(lista, 2).map((x) => x.vistas.length)).toEqual([2, 2, 1]);
+  });
+  it("vacío: sin grupos", () => {
+    expect(agruparBloqueos([])).toEqual([]);
+  });
+});
+
+describe("etiquetaMesa (JST-428)", () => {
+  it("0, 1 y varias", () => {
+    setLocale("es");
+    expect(etiquetaMesa(0, "Empresa A")).toBe("Nada bloqueado en Empresa A");
+    expect(etiquetaMesa(1, "Empresa A")).toBe("1 bloqueada en Empresa A");
+    expect(etiquetaMesa(3, "Empresa A")).toBe("3 bloqueadas en Empresa A");
   });
 });
 
@@ -218,6 +248,20 @@ describe("los bloqueos no son «te necesita»", () => {
     expect(vistas(con).every((a) => !a.need)).toBe(true);
     const siempre = () => true;
     expect(llegadas(fotoDe(vistas(sin), siempre), fotoDe(vistas(con), siempre))).toEqual([]);
+  });
+  it("con bloqueadas en una sala (la mesa, JST-428) los contadores y `need` de los agentes no cambian", () => {
+    setLocale("es");
+    const sin = armarEmpresa(datos([]), new Map());
+    const con = armarEmpresa(datos([bloqueo(1), bloqueo(2), bloqueo(3)]), new Map());
+    const lista = armarBloqueos([empresa([bloqueo(1), bloqueo(2), bloqueo(3)])]);
+    expect(lista).toHaveLength(3);
+    expect(lista.filter((b) => b.prefijo === "AAA")).toHaveLength(3);
+    const vistas = (l: typeof con) => l.map((a) => vistaDe(a, "Empresa A"));
+    expect(contar(con)).toEqual(contar(sin));
+    expect(contarVista(vistas(con))).toEqual(contarVista(vistas(sin)));
+    expect(vistas(con).map((a) => a.need)).toEqual(vistas(sin).map((a) => a.need));
+    expect(vistas(con).every((a) => !a.need)).toBe(true);
+    expect(esperasPorAgente(lista.map((b) => bloqueo(Number(b.identifier!.slice(4)))), [ag(900)]).porAgente.size).toBe(0);
   });
   it("el sincronizador los expone aparte de agentes()", async () => {
     const empresas = [{ id: id(1), name: "Empresa A", issuePrefix: "AAA", status: "active" }];
