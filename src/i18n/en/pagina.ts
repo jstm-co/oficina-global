@@ -82,6 +82,14 @@ export const pagina: Record<string, string> = {
   "A cargo: {nombre}": "In charge: {nombre}",
   "sin agente": "no agent",
   "Abrir tarea {codigo}": "Open issue {codigo}",
+  // JST-428: la mesa de bloqueadas de cada sala y el panel por empresa
+  "Nada bloqueado en {empresa}": "Nothing blocked in {empresa}",
+  "1 bloqueada en {empresa}": "1 blocked in {empresa}",
+  "{n} bloqueadas en {empresa}": "{n} blocked in {empresa}",
+  "{n} bloqueada": "{n} blocked",
+  "{n} bloqueadas": "{n} blocked",
+  "Bloqueadas en {empresa}": "Blocked in {empresa}",
+  "Nada bloqueado aquí.": "Nothing blocked here.",
   // Menú «Ambiente»
   Activadas: "On",
   Apagadas: "Off",

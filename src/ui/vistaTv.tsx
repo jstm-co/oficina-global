@@ -219,6 +219,7 @@ export function VistaTv({ oficina, enlazar, urlTv, copiar, onSalir, pantallaComp
             onReintentar={oficina.reintentar}
             sync={oficina.sync}
             tv
+            bloqueadas={oficina.bloqueadas}
             voz
             ia={onSalir !== null}
           />

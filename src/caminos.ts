@@ -113,6 +113,10 @@ export function rejillaDe(sala: SalaPlano): Rejilla {
   const ocupada = new Uint8Array(ancho * alto);
   const solidos = sala.muebles.filter((m) => MUEBLES_SOLIDOS.has(m.nombre) && PIEZAS[m.nombre]);
   const cajas = cajasDe(sala);
+  // La mesa de bloqueadas (JST-428) no está en `muebles` (la 3D no la dibuja), pero en el piso no se pisa.
+  const mesa = sala.mesaBloqueos;
+  const cajaMesa: Caja | null = mesa ? [mesa.x, mesa.y, mesa.x + mesa.w, mesa.y + mesa.h] : null;
+  if (cajaMesa) cajas.push(cajaMesa);
   for (let cy = 0; cy < alto; cy++) {
     for (let cx = 0; cx < ancho; cx++) {
       const x = cx * CELDA + CELDA / 2;
@@ -126,6 +130,7 @@ export function rejillaDe(sala: SalaPlano): Rejilla {
     const t = PIEZAS[m.nombre]!;
     return [m.x, m.y, m.x + t.w, m.y + t.h];
   });
+  if (cajaMesa) cuerpos.push(cajaMesa);
   return { ancho, alto, ocupada, cuerpos };
 }
 

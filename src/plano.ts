@@ -139,6 +139,12 @@ export interface SalaPlano {
   escritorio: { x: number; y: number } | null;
   /** Los pies de cada lugar de la fila de tu escritorio, hacia abajo (hasta 3; ninguno sin escritorio). */
   fila: Array<{ x: number; y: number }>;
+  /**
+   * La mesa de bloqueadas (JST-428): una mesita contra el muro derecho del descanso, sobre la planta grande o el
+   * dispensador, con la pila de carpetas de las tareas bloqueadas. Pieza aparte (no está en `muebles`). `null` donde
+   * no va: sin tu escritorio (el celular), con un descanso de menos de 98 o una sala de menos de 96 de alto.
+   */
+  mesaBloqueos: Caja | null;
   /** La mesita del descanso, donde se juntan para una entrega (0.5.0, JST-163 §10). */
   mesa: Caja;
 }
@@ -161,7 +167,7 @@ function pieza(nombre: string, x: number, y: number, z: number): Pieza {
   return { nombre, x, y, z };
 }
 
-function medida(nombre: string): { w: number; h: number } {
+export function medida(nombre: string): { w: number; h: number } {
   const m = PIEZAS[nombre];
   if (!m) throw new Error(`Falta la pieza ${nombre} en muebles.json`);
   return m;
@@ -261,6 +267,10 @@ const SEPARACIONES: ReadonlyArray<readonly [number, number]> = [
   [16, 14],
 ];
 
+/** La mesa de bloqueadas (JST-428) pide un descanso de al menos 98 de ancho y una sala de al menos 96 de alto. */
+const MESA_BLOQUEOS_DESCANSO = 98;
+const MESA_BLOQUEOS_ALTO = 96;
+
 /** Tu fila: el primero a 8 de arte del frente de tu escritorio (sus pies, 62 bajo su esquina) y cada uno 13 más atrás. */
 const FILA_PRIMERO = 62;
 const FILA_PASO = 13;
@@ -314,6 +324,19 @@ export function armarSala(
       [ux + 6, uy + 30, ux + 26, uy + FILA_PRIMERO + 2 + FILA_PASO * Math.max(0, fila.length - 1)],
     ];
   }
+  // La mesa de bloqueadas (JST-428): misma escena que tu escritorio, y solo si el descanso y la sala dan para ella.
+  let mesaBloqueos: Caja | null = null;
+  if (escritorio && lw >= MESA_BLOQUEOS_DESCANSO && h >= MESA_BLOQUEOS_ALTO) {
+    const m = medida("mesita");
+    mesaBloqueos = { x: w - 24, y: h - 44, w: m.w, h: m.h };
+  }
+  // Con 1 de margen y el espacio de los pies delante, ahí no hay lugares de pie. Se quitan al final, sin pasar la
+  // caja a `salaDescanso`: así el resto del descanso queda igual que sin mesa (la separación elegida no cambia).
+  const sinMesa = (lista: Asiento[]) => {
+    const m = mesaBloqueos;
+    if (!m) return lista;
+    return lista.filter((a) => a.sofa || !(a.x + 13 > m.x - 2 && a.x + 3 < m.x + m.w + 2 && a.y + 24 > m.y - 2 && a.y + 17 < m.y + m.h + 5));
+  };
   const armarDescanso = (separacion?: readonly [number, number]) => salaDescanso(lx, MURO + 4, lw, h - MURO - 8, { cafetera: lw > 64, sofaCalido, izq: escritorio ? 30 : 0, apartado, separacion });
   let descanso = armarDescanso();
   muebles.push(...descanso.muebles);
@@ -356,6 +379,7 @@ export function armarSala(
       }
     }
   }
+  asientos = sinMesa(asientos);
 
   return {
     prefijo,
@@ -373,6 +397,7 @@ export function armarSala(
     rotulo,
     escritorio,
     fila,
+    mesaBloqueos,
     mesa: descanso.mesa,
   };
 }
