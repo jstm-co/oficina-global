@@ -631,31 +631,15 @@ describe("Revisor.objetos: todo lo que git enviaría, con sus rutas", () => {
     });
   }, 60000);
 
-  it("las rutas que nunca se publican son un hallazgo, estén o no en .gitignore: instancia.local.ts, .claude/, .env, spike/, _privado/", async () => {
+  it("las rutas que nunca se publican son un hallazgo, estén o no en .gitignore: instancia.json, instancia.local.ts, .claude/, .env, spike/, _privado/", async () => {
     await conRepoGit(async (c, repo) => {
-      const prohibidas = ["instancia.local.ts", "src/instancia.local.ts", ".claude/settings.local.json", ".env.produccion", "spike/prueba.txt", "_privado/revisar.json", "pruebas/a.txt", "publico/a.txt"];
+      const prohibidas = ["instancia.json", "datos/instancia.json", "otra/Instancia.JSON", "instancia.json.bak", "x/instancia.local.json", "src/instancia.ts", "instancia.local.ts", "src/instancia.local.ts", ".claude/settings.local.json", ".env.produccion", "spike/prueba.txt", "_privado/revisar.json", "pruebas/a.txt", "publico/a.txt"];
       for (const ruta of prohibidas) escribir(repo, ruta, "limpio\n");
       escribir(repo, "src/otro.ts", "limpio\n");
       commitearTodo(c, repo, "JST-1: prohibidas");
       const r = await revisarObjetos(c, repo);
       for (const ruta of prohibidas) expect(r.antes, ruta).toMatch(new RegExp(`^${ruta.replace(/\./g, "\\.")}: (carpeta que no se publica|archivo propio de una instancia|archivo de entorno)$`, "m"));
       expect(r.antes).not.toContain("otro.ts");
-    });
-  }, 60000);
-
-  it("src/instancia.ts con datos es un hallazgo; el del repo (vacío, con comentarios) no", async () => {
-    await conRepoGit(async (c, repo) => {
-      const delRepo = readFileSync(join(RAIZ, "src/instancia.ts"), "utf8");
-      escribir(repo, "src/instancia.ts", delRepo);
-      commitearTodo(c, repo, "JST-1: instancia vacía");
-      const vacia = await revisarObjetos(c, repo);
-      expect(vacia.n, vacia.antes).toBe(0);
-
-      escribir(repo, "src/instancia.ts", `${delRepo}\nexport const ASPECTO_FIJO: Record<string, string> = { uno: "dos" };\n`);
-      commitearTodo(c, repo, "JST-1: instancia con datos");
-      const con = await revisarObjetos(c, repo, ["HEAD", "--not", "HEAD~1"]);
-      expect(con.antes).toContain("src/instancia.ts: trae datos de una instancia");
-      expect(con.n).toBe(1);
     });
   }, 60000);
 

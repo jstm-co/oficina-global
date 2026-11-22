@@ -4,7 +4,7 @@
 import { hash } from "./aspecto.js";
 import { ETIQUETA_ROL, tituloVisible, type Espera } from "./estado.js";
 import { t } from "./i18n.js";
-import { CORTOS_INSTANCIA } from "./instancia.js";
+import { instancia } from "./datosInstancia.js";
 import { textoRacha } from "./dichos.js";
 import { categoriaError, MOTIVO_VOZ } from "./motivoError.js";
 import { analizarPregunta, normalizarRol, sinRolDelante, tareaParaVoz } from "./paraVoz.js";
@@ -17,7 +17,7 @@ import type { AgenteVista } from "./vista.js";
 
 /**
  * Los que la regla deja raros (por nombre del agente, como están en Paperclip).
- * Los nombres propios de la instancia, en `instancia.ts`.
+ * Los nombres propios de la instancia, en `instancia.json` (ver `datosInstancia.ts`): ganan a estos.
  */
 export const CORTOS: Readonly<Record<string, string>> = {
   "Líder Técnico": "Líder técnico",
@@ -36,7 +36,6 @@ export const CORTOS: Readonly<Record<string, string>> = {
   Disenador: "Diseñador",
   Qa: "QA",
   RevisorCodigo: "Revisor de código",
-  ...CORTOS_INSTANCIA,
 };
 
 /** Palabras que en Paperclip quedaron sin tilde. */
@@ -63,7 +62,9 @@ const TILDES: Readonly<Record<string, string>> = {
  * después de la primera palabra (las siglas y las letras sueltas en mayúscula, como la «A» de «Sonda A», quedan igual).
  */
 export function nombreCorto(nombre: string): string {
-  const fijo = CORTOS[nombre.trim()];
+  const clave = nombre.trim();
+  const propios = instancia().nombresCortos;
+  const fijo = Object.hasOwn(propios, clave) ? propios[clave] : Object.hasOwn(CORTOS, clave) ? CORTOS[clave] : undefined;
   if (fijo) return fijo;
   const corte = nombre.split(/\s+\/\s+|\s+\(|\s+\+\s+|\s+&\s+/)[0]!.trim() || nombre.trim();
   return corte

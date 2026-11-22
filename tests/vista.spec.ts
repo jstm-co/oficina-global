@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { ASPECTO_FIJO, aspectoDe, rolDeSprite } from "../src/aspecto.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { aspectoDe, rolDeSprite } from "../src/aspecto.js";
+import { INSTANCIA_VACIA, leerDatosInstancia, ponerInstancia } from "../src/datosInstancia.js";
 import type { AgenteOficina, Espera } from "../src/estado.js";
 import { contarVista, desdeCuando, dibujo, etiqueta, hace, vistaDe } from "../src/vista.js";
 import PERSONAJES from "../src/ui/assets/personajes.json" with { type: "json" };
@@ -89,11 +90,29 @@ describe("tiempos", () => {
 describe("aspecto de cada agente (design-spec §4)", () => {
   const filas = new Set(PERSONAJES.filas.map((f) => f.id));
 
-  it("cada aspecto fijo de la instancia existe en la hoja y gana a la regla (vale con el mapa lleno o vacío)", () => {
-    for (const [id, aspecto] of Object.entries(ASPECTO_FIJO)) {
-      expect(filas.has(aspecto), aspecto).toBe(true);
-      expect(aspectoDe({ id, nombre: "X", cargo: null, rolApi: null, adapterType: "claude_local" })).toBe(aspecto);
+  afterEach(() => ponerInstancia(INSTANCIA_VACIA));
+
+  it("el aspecto fijo de la instancia (por ID) existe en la hoja y gana a la regla; sin datos, manda la regla", () => {
+    const x = { id: "agente-1", nombre: "X", cargo: null, rolApi: null, adapterType: "claude_local" };
+    const regla = aspectoDe(x);
+    ponerInstancia(leerDatosInstancia({ aspectoFijo: { "agente-1": "direccion-2", "agente-2": "hermes-1" } }));
+    expect(filas.has("direccion-2")).toBe(true);
+    expect(aspectoDe(x)).toBe("direccion-2");
+    expect(aspectoDe({ ...x, id: "agente-2", nombre: "Chief of staff", rolApi: "ceo" })).toBe("hermes-1");
+    expect(aspectoDe({ ...x, id: "agente-3" })).toMatch(/^ingenieria-[1-5]$/); // sin aspecto fijo: la regla
+    ponerInstancia(INSTANCIA_VACIA);
+    expect(aspectoDe(x)).toBe(regla);
+  });
+
+  it("un aspecto fijo que no existe en la hoja se ignora y manda la regla", () => {
+    const x = { id: "agente-1", nombre: "X", cargo: null, rolApi: null, adapterType: "claude_local" };
+    const regla = aspectoDe(x);
+    for (const malo of ["", "inventado-1", "direccion-9", "direccion-0", "direccion", "constructor-1", "__proto__-1", "direccion-1x"]) {
+      ponerInstancia(leerDatosInstancia({ aspectoFijo: { "agente-1": malo } }));
+      expect(aspectoDe(x), malo).toBe(regla);
     }
+    ponerInstancia(leerDatosInstancia({ aspectoFijo: {} }));
+    expect(aspectoDe({ ...x, id: "constructor" })).toMatch(/^ingenieria-[1-5]$/); // un id que es una clave heredada no encuentra nada
   });
 
   it("regla para un agente nuevo: Hermes, luego nombre o cargo, luego rol, luego ingeniería", () => {

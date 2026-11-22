@@ -2,6 +2,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { carpetaAlmacen } from "./almacenVoces.js";
+import { cargarInstanciaDeArchivo, publicarInstancia } from "./instanciaArchivo.js";
 import { PreparadorVoces } from "./vozViva.js";
 
 // La oficina lee todo desde la UI, con la sesión del usuario: el worker no lee
@@ -23,6 +24,16 @@ let voces: PreparadorVoces | null = null;
 
 const plugin = definePlugin({
   async setup(ctx) {
+    // Los datos de la instancia (aspecto fijo, nombres cortos, pronunciación) se leen de su archivo al arrancar y se
+    // publican para la interfaz. Un fallo aquí nunca impide que el worker arranque.
+    try {
+      const { datos, ruta, error } = cargarInstanciaDeArchivo();
+      const publicada = publicarInstancia(resolve(RAIZ, "dist", "ui"), datos);
+      if (error) ctx.logger.info(`instancia: no se pudo leer ${ruta} (${error}); se usan los datos vacíos`);
+      else ctx.logger.info(`instancia: ${Object.keys(datos.aspectoFijo).length} aspectos, ${Object.keys(datos.nombresCortos).length} nombres cortos, ${datos.pronunciarKokoro.length} pronunciaciones${publicada ? "" : " (no se pudo publicar para la interfaz)"}`);
+    } catch {
+      // Sin datos de la instancia, la oficina funciona con las reglas de siempre.
+    }
     voces = new PreparadorVoces({ raiz: RAIZ, almacen: carpetaAlmacen(RAIZ), log: (mensaje, datos) => ctx.logger.info(mensaje, datos) });
     // «prepara estas frases»: responde al tiro (el RPC corta a los 30 s) y las hace en segundo plano.
     ctx.actions.register("voz-preparar", async (params) => {

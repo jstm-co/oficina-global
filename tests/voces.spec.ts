@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asignarVoces, archivoDe, plan, type AgentePlan } from "../generador/plan.js";
 import { enPalabras, paraDecir } from "../generador/pronunciar.js";
-import { PRONUNCIAR_KOKORO_INSTANCIA } from "../src/instancia.js";
+import { INSTANCIA_VACIA, leerDatosInstancia, ponerInstancia } from "../src/datosInstancia.js";
 import { vocesDe } from "../src/eleccionVoces.js";
 import { archivoVivo, audioDe, claveAudio, duracionAudio, extensionDe, leerIndice, NOMBRE_PAIS, paisesEdge, VOCES, VOCES_REPARTO, VOZ_RESUMEN, vozDeAgente, vozPorId, type IndiceVoces, type VozId } from "../src/voces.js";
 import { wavPcm16 } from "../src/audio.js";
@@ -121,14 +121,16 @@ describe("pronunciación", () => {
     expect(paraDecir("Plugins, de JSTM: empecé.", "chatterbox")).toBe("Plugins, de jota ese te eme: empecé.");
   });
 
-  it("los nombres de la instancia (src/instancia.ts) se escriben como se dicen solo en Kokoro (vale con la lista llena o vacía)", () => {
-    for (const [re, por] of PRONUNCIAR_KOKORO_INSTANCIA) {
-      // Cada regla es una palabra suelta («\bNombre\b»): sin los «\b» queda el nombre tal cual se escribe.
-      const nombre = re.source.replace(/\\b/g, "");
-      const frase = `Líder técnico, de ${nombre}: te necesito.`;
-      expect(paraDecir(frase, "kokoro")).toBe(`Líder técnico, de ${por}: te necesito.`);
+  it("los nombres de la instancia (instancia.json) se escriben como se dicen solo en Kokoro, después de las fijas; vacíos, no cambia nada", () => {
+    const frase = "Plugins, de Nombre Raro: te necesito.";
+    try {
+      ponerInstancia(leerDatosInstancia({ pronunciarKokoro: [["\\bRaro\\b", "Raaro"], ["(", "mala"]] }));
+      expect(paraDecir(frase, "kokoro")).toBe("Plaguins, de Nombre Raaro: te necesito.");
       for (const motor of ["edge", "chatterbox", "qwen3"] as const) expect(paraDecir(frase, motor), motor).toBe(frase);
+    } finally {
+      ponerInstancia(INSTANCIA_VACIA);
     }
+    expect(paraDecir(frase, "kokoro")).toBe("Plaguins, de Nombre Raro: te necesito.");
   });
 
   it("en los clones los números van en palabras", () => {

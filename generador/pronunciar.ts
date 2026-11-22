@@ -1,7 +1,7 @@
 // Cómo se le escribe a cada motor el texto de una frase para que se diga bien
 // (JST-124, medido transcribiendo cada audio con Whisper). Solo cambia lo que
 // se oye: el subtítulo y el índice usan el texto de siempre.
-import { PRONUNCIAR_KOKORO_INSTANCIA } from "../src/instancia.js";
+import { instancia } from "../src/datosInstancia.js";
 import type { Motor } from "../src/voces.js";
 
 /** Súbelo si cambia lo de aquí: los audios hechos con lo anterior se vuelven a generar. */
@@ -26,11 +26,11 @@ const SIGLAS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bCMO\b/g, "ce eme o"],
 ];
 
-/** Kokoro (espeak-ng): «Plugins» sale con jota. Los nombres propios de la instancia, en `src/instancia.ts`. */
-const KOKORO: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\bPlugins\b/g, "Plaguins"],
-  ...PRONUNCIAR_KOKORO_INSTANCIA,
-];
+/** Kokoro (espeak-ng): «Plugins» sale con jota. */
+const KOKORO_FIJAS: ReadonlyArray<readonly [RegExp, string]> = [[/\bPlugins\b/g, "Plaguins"]];
+
+/** Las fijas y después los nombres propios de la instancia (`instancia.json`, ver `src/datosInstancia.ts`): se arma al usarla, no al cargar el módulo. */
+const kokoro = (): ReadonlyArray<readonly [RegExp, string]> => [...KOKORO_FIJAS, ...instancia().pronunciarKokoro];
 
 const UNIDADES = ["cero", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve", "diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve", "veinte", "veintiuno", "veintidós", "veintitrés", "veinticuatro", "veinticinco", "veintiséis", "veintisiete", "veintiocho", "veintinueve"];
 const DECENAS = ["", "", "", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"];
@@ -69,7 +69,7 @@ export function paraDecir(texto: string, motor: Motor): string {
   let t = numerosParaDecir(texto);
   for (const [re, por] of TODAS) t = t.replace(re, por);
   if (motor !== "edge") for (const [re, por] of SIGLAS) t = t.replace(re, por);
-  if (motor === "kokoro") for (const [re, por] of KOKORO) t = t.replace(re, por);
+  if (motor === "kokoro") for (const [re, por] of kokoro()) t = t.replace(re, por);
   // Chatterbox y Qwen3 leen mal los números («Sprint 140» → «Sprint 40»).
   // El punto de los miles («6.700») se saca antes: si no, sale «seis. setecientos».
   if (motor === "chatterbox" || motor === "qwen3") t = t.replace(/(?<=\d)\.(?=\d{3}(?!\d))/g, "").replace(/\d{1,6}/g, (d) => ` ${enPalabras(Number(d))} `).replace(/\s+/g, " ").replace(/ ([,.:;])/g, "$1").trim();

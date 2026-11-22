@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -293,19 +293,18 @@ except m.Alto as e:
 describe("scripts/solo-ci.mjs (prepublishOnly)", () => {
   const SOLO_CI = join(RAIZ, "scripts/solo-ci.mjs");
 
-  async function correr(carpeta: string, enActions: boolean, conInstancia: boolean) {
-    const { env } = entornoAislado(carpeta, undefined, enActions ? { GITHUB_ACTIONS: "true" } : {});
-    if (!enActions) delete env.GITHUB_ACTIONS;
+  async function correr(carpeta: string, actions: string | null) {
+    const { env } = entornoAislado(carpeta, undefined, actions === null ? {} : { GITHUB_ACTIONS: actions });
+    if (actions === null) delete env.GITHUB_ACTIONS;
     const trabajo = join(carpeta, "trabajo");
     escribir(trabajo, "package.json", "{}\n");
-    if (conInstancia) escribir(trabajo, "instancia.local.ts", "export const propio = 1;\n");
     return lanzar(process.execPath, [SOLO_CI], { cwd: trabajo, env });
   }
 
   it("sale 1 sin GITHUB_ACTIONS=true", async () => {
     const carpeta = carpetaTemporal("solo-ci");
     try {
-      const r = await correr(carpeta, false, false);
+      const r = await correr(carpeta, null);
       expect(r.estado, r.todo).toBe(1);
       expect(r.errores).toContain("only published by the");
     } finally {
@@ -313,31 +312,20 @@ describe("scripts/solo-ci.mjs (prepublishOnly)", () => {
     }
   }, 60000);
 
-  it("sale 1 con GITHUB_ACTIONS=true si hay un instancia.local.ts en la carpeta", async () => {
+  it("sale 1 con GITHUB_ACTIONS distinto de «true» (por ejemplo «1»)", async () => {
     const carpeta = carpetaTemporal("solo-ci");
     try {
-      const r = await correr(carpeta, true, true);
+      const r = await correr(carpeta, "1");
       expect(r.estado, r.todo).toBe(1);
     } finally {
       borrar(carpeta);
     }
   }, 60000);
 
-  it("sale 1 con GITHUB_ACTIONS distinto de «true» (por ejemplo «1») aunque no haya instancia.local.ts", async () => {
+  it("sale 0 con GITHUB_ACTIONS=true", async () => {
     const carpeta = carpetaTemporal("solo-ci");
     try {
-      const { env } = entornoAislado(carpeta, undefined, { GITHUB_ACTIONS: "1" });
-      const r = await lanzar(process.execPath, [SOLO_CI], { cwd: carpeta, env });
-      expect(r.estado, r.todo).toBe(1);
-    } finally {
-      borrar(carpeta);
-    }
-  }, 60000);
-
-  it("sale 0 con GITHUB_ACTIONS=true y sin instancia.local.ts", async () => {
-    const carpeta = carpetaTemporal("solo-ci");
-    try {
-      const r = await correr(carpeta, true, false);
+      const r = await correr(carpeta, "true");
       expect(r.estado, r.todo).toBe(0);
       expect(r.todo).toBe("");
     } finally {
@@ -351,75 +339,249 @@ describe("scripts/solo-ci.mjs (prepublishOnly)", () => {
   });
 });
 
-describe("instalación con GitFlow", () => {
-  const TAG = "v2026.1107.3";
+describe("instalación: el paquete que publicó GitHub, sin compilar (JST-425)", () => {
+  const VERSION = "2026.1107.3";
+  const TAG = `v${VERSION}`;
+  const NOMBRE = "paperclip-plugin-prueba";
 
-  /** Remoto con main en el tag, `repo` (la carpeta de los scripts) y `instalado`, un clon que quedó en un commit anterior. */
-  async function entorno() {
+  // Un `npm` falso: anota cada llamada; `pack` arma el .tgz desde la carpeta `$NPM_PAQUETE` (que trae `package/…`),
+  // como lo bajaría del registro; lo demás (`install`) termina con `$NPM_INSTALL_ESTADO`.
+  const NPM_FALSO = `#!/bin/sh
+printf '%s\\n' "$*" >> "$NPM_LOG"
+if [ "$1" = "pack" ]; then
+  if [ -n "$NPM_SIN_PAQUETE" ]; then echo "npm error code E404" >&2; exit 1; fi
+  tar -czf "$4/paquete.tgz" -C "$NPM_PAQUETE" package
+  printf '[{"filename":"paquete.tgz"}]\\n'
+  exit 0
+fi
+exit \${NPM_INSTALL_ESTADO:-0}
+`;
+
+  interface Paquete { nombre?: string; version?: string; versionManifiesto?: string; archivos?: Record<string, string>; sin?: string[]; opcionales?: Record<string, string> }
+
+  /** Deja en `dir/package/` un paquete como el que publica el CI: package.json, dist/ y lo que se pida. */
+  function armarPaquete(dir: string, p: Paquete = {}) {
+    borrar(dir);
+    const version = p.version ?? VERSION;
+    const archivos: Record<string, string> = {
+      "package.json": JSON.stringify({ name: p.nombre ?? NOMBRE, version, optionalDependencies: p.opcionales }),
+      "dist/manifest.js": `export default { id: "prueba", version: "${p.versionManifiesto ?? version}" };\n`,
+      "dist/worker.js": "// worker\n",
+      "dist/ui/index.js": "// interfaz\n",
+      "generador/motor.py": "# motor\n",
+      "README.md": "# Prueba\n",
+      ...p.archivos,
+    };
+    for (const [ruta, texto] of Object.entries(archivos)) if (!p.sin?.includes(ruta)) escribir(join(dir, "package"), ruta, texto);
+  }
+
+  /** Remoto con main en el tag, `repo` (la carpeta de los scripts, con su package.json) y la carpeta de instalación, que todavía no existe. */
+  async function entorno(extra: NodeJS.ProcessEnv = {}) {
     const carpeta = carpetaTemporal("instalar");
     const bin = join(carpeta, "bin");
     ghFalso(bin);
     const npmLog = join(carpeta, "npm.log");
     writeFileSync(npmLog, "");
-    writeFileSync(join(bin, "npm"), "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$NPM_LOG\"\n");
+    writeFileSync(join(bin, "npm"), NPM_FALSO);
     chmodSync(join(bin, "npm"), 0o755);
     const instalado = join(carpeta, "instalado");
-    const { privado, env } = entornoAislado(carpeta, bin, { NPM_LOG: npmLog, OFICINA_INSTALADO: instalado });
-    const { remoto, repo } = repoConRemoto(carpeta, env);
-    // scripts/version.mjs real: el build comprueba la versión con él.
-    copiarScripts(repo, "scripts/version.mjs");
+    const paquete = join(carpeta, "registro");
+    armarPaquete(paquete);
+    const { privado, env } = entornoAislado(carpeta, bin, { NPM_LOG: npmLog, NPM_PAQUETE: paquete, OFICINA_INSTALADO: instalado, ...extra });
+    const { repo } = repoConRemoto(carpeta, env);
+    escribir(repo, "package.json", JSON.stringify({ name: NOMBRE, version: "0.0.0" }));
     gitEn(repo, env, "add", "-A");
-    gitEn(repo, env, "commit", "-m", "versión");
-    gitEn(repo, env, "push", "origin", "main");
-    execFileSync("git", ["clone", remoto, instalado], { stdio: "pipe", env });
-    escribir(repo, "archivo.txt", "release\n");
-    gitEn(repo, env, "commit", "-am", "release");
+    gitEn(repo, env, "commit", "-m", "release");
     gitEn(repo, env, "tag", TAG);
     gitEn(repo, env, "push", "origin", "main", TAG);
     copiarScripts(repo, "scripts/instalar.py");
-    const instalar = () => python([join(repo, "scripts/instalar.py")], { cwd: carpeta, env });
+    const instalar = (...args: string[]) => python([join(repo, "scripts/instalar.py"), ...args], { cwd: carpeta, env });
     const llamadasNpm = () => readFileSync(npmLog, "utf8").trim().split("\n").filter(Boolean);
-    return { carpeta, env, repo, instalado, privado, instalar, llamadasNpm };
+    const leer = (ruta: string) => readFileSync(join(instalado, ruta), "utf8");
+    return { carpeta, env, repo, instalado, privado, paquete, instalar, llamadasNpm, leer };
   }
 
-  it("deja la carpeta de instalación en el tag, copia instancia.local.ts desde la privada y corre npm ci y npm run build", async () => {
+  it("deja el paquete publicado en una carpeta de instalación nueva, sin npm ci ni npm run build", async () => {
     const e = await entorno();
     try {
-      escribir(e.privado, "instancia.local.ts", "export const propio = 1;\n");
       const r = await e.instalar();
       expect(r.estado, r.todo).toBe(0);
-      expect(r.salida).toContain("2026.1107.3");
-      expect(gitEn(e.instalado, e.env, "rev-parse", "HEAD")).toBe(gitEn(e.repo, e.env, "rev-parse", `${TAG}^{commit}`));
-      expect(gitEn(e.instalado, e.env, "describe", "--exact-match", "--tags")).toBe(TAG);
-      expect(readFileSync(join(e.instalado, "instancia.local.ts"), "utf8")).toBe("export const propio = 1;\n");
-      expect(e.llamadasNpm()).toEqual(["ci", "run build"]);
+      expect(r.salida).toContain(`quedó en ${VERSION}`);
+      expect(r.salida).toContain("sin compilar nada aquí");
+      expect(e.leer("dist/worker.js")).toBe("// worker\n");
+      expect(JSON.parse(e.leer("package.json")).version).toBe(VERSION);
+      const npm = e.llamadasNpm();
+      expect(npm).toHaveLength(1);
+      expect(npm[0]).toMatch(new RegExp(`^pack ${NOMBRE}@${VERSION.replace(/\./g, "\\.")} --pack-destination \\S+ --json --ignore-scripts$`));
+      expect(existsSync(join(e.instalado, "dist/worker.js.instalando"))).toBe(false);
     } finally {
       borrar(e.carpeta);
     }
   }, 60000);
 
-  it("borra instancia.local.ts de la instalación cuando ya no existe en la carpeta privada", async () => {
+  it("sobre una instalación anterior: actualiza, borra de dist/ y generador/ lo que el paquete ya no trae y no toca lo demás", async () => {
     const e = await entorno();
     try {
-      escribir(e.privado, "instancia.local.ts", "export const propio = 1;\n");
-      expect((await e.instalar()).estado).toBe(0);
-      expect(existsSync(join(e.instalado, "instancia.local.ts"))).toBe(true);
-      borrar(join(e.privado, "instancia.local.ts"));
+      // Lo que había: una versión anterior, audios publicados, los datos de la instancia publicados y cosas ajenas al paquete.
+      escribir(e.instalado, "package.json", JSON.stringify({ name: NOMBRE, version: "2026.1101.0" }));
+      escribir(e.instalado, "dist/worker.js", "// worker viejo\n");
+      escribir(e.instalado, "dist/trozo-viejo.js", "// ya no existe\n");
+      escribir(e.instalado, "dist/ui/viejo.css", "x\n");
+      escribir(e.instalado, "generador/motor_viejo.py", "# ya no existe\n");
+      escribir(e.instalado, "dist/ui/voces/indice.json", "{}\n");
+      escribir(e.instalado, "dist/ui/voces/vivo/frase.mp3", "audio\n");
+      escribir(e.instalado, "dist/ui/instancia.json", '{"aspectoFijo":{}}\n');
+      escribir(e.instalado, "node_modules/algo/index.js", "// dependencia\n");
+      escribir(e.instalado, "notas.txt", "mías\n");
       const r = await e.instalar();
       expect(r.estado, r.todo).toBe(0);
-      expect(existsSync(join(e.instalado, "instancia.local.ts"))).toBe(false);
-      expect(e.llamadasNpm()).toEqual(["ci", "run build", "ci", "run build"]);
+      expect(e.leer("dist/worker.js")).toBe("// worker\n");
+      expect(JSON.parse(e.leer("package.json")).version).toBe(VERSION);
+      for (const borrado of ["dist/trozo-viejo.js", "dist/ui/viejo.css", "generador/motor_viejo.py"]) expect(existsSync(join(e.instalado, borrado)), borrado).toBe(false);
+      expect(r.salida).toContain("borré 3 que el paquete ya no trae");
+      expect(e.leer("dist/ui/voces/indice.json")).toBe("{}\n");
+      expect(e.leer("dist/ui/voces/vivo/frase.mp3")).toBe("audio\n");
+      expect(e.leer("dist/ui/instancia.json")).toBe('{"aspectoFijo":{}}\n');
+      expect(e.leer("node_modules/algo/index.js")).toBe("// dependencia\n");
+      expect(e.leer("notas.txt")).toBe("mías\n");
+      expect(e.llamadasNpm()).toHaveLength(1); // solo `pack`
     } finally {
       borrar(e.carpeta);
     }
   }, 60000);
 
-  it("sin instancia.local.ts en la privada deja el de ejemplo y no copia nada", async () => {
+  it("instala una dependencia opcional solo si falta o cambió de versión, con npm install --omit=dev y sin scripts", async () => {
     const e = await entorno();
     try {
+      armarPaquete(e.paquete, { opcionales: { "motor-de-voz": "2.0.1" } });
+      const primera = await e.instalar();
+      expect(primera.estado, primera.todo).toBe(0);
+      expect(e.llamadasNpm()[1]).toBe("install --omit=dev --omit=peer --ignore-scripts --no-audit --no-fund --no-package-lock");
+      // Ya está en esa versión: no se vuelve a instalar.
+      escribir(e.instalado, "node_modules/motor-de-voz/package.json", JSON.stringify({ name: "motor-de-voz", version: "2.0.1" }));
+      const segunda = await e.instalar();
+      expect(segunda.estado, segunda.todo).toBe(0);
+      expect(e.llamadasNpm().filter((l) => l.startsWith("install"))).toHaveLength(1);
+      // Cambió la versión pedida: se instala.
+      armarPaquete(e.paquete, { opcionales: { "motor-de-voz": "2.1.0" } });
+      const tercera = await e.instalar();
+      expect(tercera.estado, tercera.todo).toBe(0);
+      expect(e.llamadasNpm().filter((l) => l.startsWith("install"))).toHaveLength(2);
+      expect(e.llamadasNpm().some((l) => l === "ci" || l.startsWith("run"))).toBe(false);
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  it("si falla la instalación de la dependencia opcional termina en 1 y lo dice", async () => {
+    const e = await entorno({ NPM_INSTALL_ESTADO: "1" });
+    try {
+      armarPaquete(e.paquete, { opcionales: { "motor-de-voz": "2.0.1" } });
+      const r = await e.instalar();
+      expect(r.estado, r.todo).toBe(1);
+      expect(r.salida).toContain("falló la instalación de las dependencias opcionales");
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  it("no escribe en una carpeta con archivos que no es una instalación del plugin", async () => {
+    const e = await entorno();
+    try {
+      escribir(e.instalado, "package.json", JSON.stringify({ name: "otra-cosa" }));
+      escribir(e.instalado, "dist/importante.js", "no tocar\n");
+      const r = await e.instalar();
+      expect(r.estado, r.todo).toBe(1);
+      expect(r.salida).toContain("no es una instalación de");
+      expect(e.leer("dist/importante.js")).toBe("no tocar\n");
+      expect(existsSync(join(e.instalado, "dist/worker.js"))).toBe(false);
+      expect(e.llamadasNpm()).toEqual([]);
+
+      borrar(join(e.instalado, "package.json"));
+      const sinPaquete = await e.instalar();
+      expect(sinPaquete.estado, sinPaquete.todo).toBe(1);
+      expect(e.leer("dist/importante.js")).toBe("no tocar\n");
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  it("no instala sobre una copia de git del repo: ahí borraría código fuente", async () => {
+    const e = await entorno();
+    try {
+      escribir(e.instalado, "package.json", JSON.stringify({ name: NOMBRE, version: "0.0.0" }));
+      escribir(e.instalado, ".git", "gitdir: en-otra-parte\n");
+      escribir(e.instalado, "generador/plan.ts", "// código fuente\n");
+      const r = await e.instalar();
+      expect(r.estado, r.todo).toBe(1);
+      expect(r.salida).toContain("es una copia de git");
+      expect(e.leer("generador/plan.ts")).toBe("// código fuente\n");
+      expect(e.llamadasNpm()).toEqual([]);
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  it("si dist/ui/voces es un enlace simbólico (a los audios, en otra carpeta), no lo borra", async () => {
+    const e = await entorno();
+    try {
+      escribir(e.instalado, "package.json", JSON.stringify({ name: NOMBRE, version: "2026.1101.0" }));
+      escribir(e.carpeta, "audios/indice.json", "{}\n");
+      escribir(e.instalado, "dist/ui/otro.js", "x\n");
+      symlinkSync(join(e.carpeta, "audios"), join(e.instalado, "dist/ui/voces"));
       const r = await e.instalar();
       expect(r.estado, r.todo).toBe(0);
-      expect(existsSync(join(e.instalado, "instancia.local.ts"))).toBe(false);
+      expect(e.leer("dist/ui/voces/indice.json")).toBe("{}\n");
+      expect(existsSync(join(e.instalado, "dist/ui/otro.js"))).toBe(false);
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  it("avisa si en la carpeta privada quedó un instancia.local.ts de antes", async () => {
+    const e = await entorno();
+    try {
+      escribir(e.privado, "instancia.local.ts", "export const viejo = 1;\n");
+      const r = await e.instalar();
+      expect(r.estado, r.todo).toBe(0);
+      expect(r.salida).toContain("instancia.local.ts");
+      expect(r.salida).toContain("instancia.json");
+    } finally {
+      borrar(e.carpeta);
+    }
+  }, 60000);
+
+  for (const [caso, paquete, mensaje] of [
+    ["otro nombre", { nombre: "paquete-de-otro" }, "el paquete dice paquete-de-otro@"],
+    ["otra versión", { version: "2026.1101.0" }, "el paquete dice paperclip-plugin-prueba@2026.1101.0"],
+    ["un manifiesto compilado con otra versión", { versionManifiesto: "0.0.1" }, "El manifiesto compilado del paquete no dice la versión"],
+    ["sin dist/worker.js", { sin: ["dist/worker.js"] }, "le falta: dist/worker.js"],
+  ] as [string, Paquete, string][]) {
+    it(`no instala nada si lo que baja de npm viene con ${caso}`, async () => {
+      const e = await entorno();
+      try {
+        escribir(e.instalado, "package.json", JSON.stringify({ name: NOMBRE, version: "2026.1101.0" }));
+        escribir(e.instalado, "dist/worker.js", "// worker viejo\n");
+        armarPaquete(e.paquete, paquete);
+        const r = await e.instalar();
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain(mensaje);
+        expect(r.salida).toContain("No instalo nada");
+        expect(e.leer("dist/worker.js")).toBe("// worker viejo\n");
+      } finally {
+        borrar(e.carpeta);
+      }
+    }, 60000);
+  }
+
+  it("si npm todavía no tiene la versión, termina en 1 y pide volver a intentarlo", async () => {
+    const e = await entorno({ NPM_SIN_PAQUETE: "1" });
+    try {
+      const r = await e.instalar();
+      expect(r.estado, r.todo).toBe(1);
+      expect(r.salida).toContain("No pude bajar");
+      expect(r.salida).toContain("vuelve a intentarlo");
+      expect(existsSync(e.instalado)).toBe(false);
     } finally {
       borrar(e.carpeta);
     }
@@ -429,7 +591,8 @@ describe("instalación con GitFlow", () => {
     const e = await entorno();
     try {
       escribir(e.repo, "archivo.txt", "después del release\n");
-      gitEn(e.repo, e.env, "commit", "-am", "sin tag");
+      gitEn(e.repo, e.env, "add", "archivo.txt");
+      gitEn(e.repo, e.env, "commit", "-m", "sin tag");
       gitEn(e.repo, e.env, "push", "origin", "main");
       const r = await e.instalar();
       expect(r.estado, r.todo).toBe(1);
@@ -440,19 +603,22 @@ describe("instalación con GitFlow", () => {
     }
   }, 60000);
 
-  it("--seco no escribe nada", async () => {
+  it("--seco no baja ni escribe nada", async () => {
     const e = await entorno();
     try {
-      escribir(e.privado, "instancia.local.ts", "export const propio = 1;\n");
-      const antes = gitEn(e.instalado, e.env, "rev-parse", "HEAD");
-      const r = await python([join(e.repo, "scripts/instalar.py"), "--seco"], { cwd: e.carpeta, env: e.env });
+      const r = await e.instalar("--seco");
       expect(r.estado, r.todo).toBe(0);
       expect(r.salida).toContain("[seco]");
-      expect(gitEn(e.instalado, e.env, "rev-parse", "HEAD")).toBe(antes);
-      expect(existsSync(join(e.instalado, "instancia.local.ts"))).toBe(false);
+      expect(r.salida).toContain(`${NOMBRE}@${VERSION}`);
+      expect(existsSync(e.instalado)).toBe(false);
       expect(e.llamadasNpm()).toEqual([]);
     } finally {
       borrar(e.carpeta);
     }
   }, 60000);
+
+  it("el instalador no compila: su código no llama a npm ci ni a npm run build", () => {
+    const fuente = readFileSync(join(RAIZ, "scripts/instalar.py"), "utf8").replace(/"""[\s\S]*?"""/, "");
+    expect(fuente).not.toMatch(/"ci"|"build"/);
+  });
 });
