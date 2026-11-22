@@ -24,8 +24,9 @@
 // 6. El canal de cada empresa se abre junto con su primera lectura, y la
 //    empresa sigue «cargando» hasta que el canal abre (JST-131): antes, una
 //    entrega no llega y la página diría «En vivo» sin sacar su sobre.
-import { agenteQuePasoARevision, agenteVisible, armarEmpresa, contar, pasoARevision, revisionesSinAgente, seguirSinCamino, tareasEnRevision, tareasFaltantes, type AgenteOficina, type DatosEmpresa, type Entregas, type VistaSinCamino } from "./estado.js";
-import { abrirCanal, ErrorHttp, leerActividad, leerEmpresa, leerLog, leerTarea, listarAgentes, listarAtencion, listarEmpresas, listarRunsVivos, runsDelAgente, tareaDelRun, ultimoRun, type Canal, type Conexion } from "./fuentes.js";
+import { armarBloqueos, LectorMotivos, type Bloqueada } from "./bloqueos.js";
+import { agenteQuePasoARevision, agenteVisible, armarEmpresa, prefijoDe, contar, pasoARevision, revisionesSinAgente, seguirSinCamino, tareasEnRevision, tareasFaltantes, type AgenteOficina, type DatosEmpresa, type Entregas, type VistaSinCamino } from "./estado.js";
+import { abrirCanal, ErrorHttp, leerActividad, leerEmpresa, leerLog, leerMotivoBloqueo, leerTarea, listarAgentes, listarAtencion, listarEmpresas, listarRunsVivos, runsDelAgente, tareaDelRun, ultimoRun, type Canal, type Conexion } from "./fuentes.js";
 import { lineasDelLog, type LineaLog } from "./log.js";
 import type { Empresa, EventoVivo, ItemAtencion, RunResumen, TareaRef } from "./shared.js";
 
@@ -274,6 +275,32 @@ export class Sincronizador {
       const datos = this.datos.get(empresa.id);
       return datos && !this.estados.get(empresa.id)?.error ? armarEmpresa(datos, this.tareas, this.entregasDe(empresa.id), this.tareasTomadas) : [];
     });
+  }
+
+  /**
+   * JST-426: las tareas bloqueadas sin nadie moviéndolas de las empresas leídas sin error (`blocker_attention` del feed,
+   * sin descartadas; fuera las que tienen un run vivo ahora). No cuentan como «te necesita»: no pasan por `agentes()`.
+   */
+  bloqueos(): Bloqueada[] {
+    return armarBloqueos(
+      this.empresas.map((empresa) => {
+        const datos = this.datos.get(empresa.id);
+        const sana = datos && !this.estados.get(empresa.id)?.error;
+        const conRunVivo = new Set<string>();
+        for (const run of sana ? datos.runs : []) {
+          if (run.status !== "running" && run.status !== "queued") continue;
+          const tarea = run.issueId ?? this.tareasTomadas.get(run.id);
+          if (tarea) conRunVivo.add(tarea);
+        }
+        return { id: empresa.id, prefijo: prefijoDe(empresa), nombre: empresa.name, atencion: sana ? datos.atencion : null, conRunVivo };
+      }),
+    );
+  }
+
+  private lectorDeMotivos: LectorMotivos | null = null;
+  /** JST-426: el lector (uno por sincronizador) del motivo de cada bloqueo, con memoria. */
+  motivos(): LectorMotivos {
+    return (this.lectorDeMotivos ??= new LectorMotivos((id) => leerMotivoBloqueo(this.cx, id)));
   }
 
   estadoEmpresa(companyId: string): EstadoCarga {
