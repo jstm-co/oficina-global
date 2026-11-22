@@ -131,10 +131,22 @@ Outside Chrome, the plugin uses the page's `LanguageModel` if it has one (the sa
 
 ## Adapting it to your instance
 
-This needs an install from source.
+- **Your agents' fixed characters, short names and pronunciations** go in a file called `instancia.json` in the plugin's data folder, next to the voices: `~/Library/Application Support/oficina-global/` on macOS, `%LOCALAPPDATA%\oficina-global\` on Windows and `~/.local/share/oficina-global/` on Linux. The plugin reads it when it starts, so restart the plugin after editing it. Nothing to build, and an update from npm keeps it. Every key is optional:
 
-- `src/instancia.ts`: the fixed character of some agents (by ID) and how proper names are pronounced by the voices. In the repository it is empty: each agent gets a character from its name, title and role. To set your own, copy it to `instancia.local.ts` at the root (git ignores it) and build.
-- `src/plano.ts`: how many columns each room has and which companies get their own color, by prefix. It comes tuned for the rooms of our instance (prefixes `BET`, `ELM`, `JST` and `MIG`); the others are drawn with the default sizes and in gray.
+  ```json
+  {
+    "aspectoFijo": { "<agent id>": "direccion-1" },
+    "nombresCortos": { "Data and Reporting Engineer": "Data" },
+    "pronunciarKokoro": [["\\bName\\b", "How it is said"]]
+  }
+  ```
+
+  - `aspectoFijo`: the character of an agent, by agent ID. The value is a row of [personajes.png](src/ui/assets/personajes.png), such as `direccion-1` or `qa-2`; one that does not exist is ignored.
+  - `nombresCortos`: the short name of an agent, by its name as written in Paperclip, when the automatic one reads oddly.
+  - `pronunciarKokoro`: pairs of regular expression and replacement, for names the Kokoro voice engine says wrong.
+
+  Without the file, each agent gets a character from its name, title and role.
+- `src/plano.ts` (this one needs an install from source): how many columns each room has and which companies get their own color, by prefix. It comes tuned for the rooms of our instance (prefixes `BET`, `ELM`, `JST` and `MIG`); the others are drawn with the default sizes and in gray.
 
 ## Development
 

@@ -2,13 +2,11 @@
 // JST-65, §4). Sin React ni red.
 //
 // 1. Los agentes de la instancia tienen su aspecto fijo (mapa por ID en
-//    `instancia.ts`, que gana a la regla).
+//    `instancia.json`, ver `datosInstancia.ts`; gana a la regla).
 // 2. Si no está en el mapa: adaptador Hermes → nombre o cargo → rol de Paperclip
 //    → ingeniería. La variante (`-1`, `-2`…) sale de un hash del ID, así que es
 //    la misma en cada recarga.
-import { ASPECTO_FIJO } from "./instancia.js";
-
-export { ASPECTO_FIJO };
+import { instancia } from "./datosInstancia.js";
 
 /** Variantes que hay en la hoja de sprites por rol. Si se dibuja una nueva, se suma aquí. */
 export const VARIANTES: Record<string, number> = {
@@ -67,10 +65,17 @@ export function rolDeSprite(agente: DatosAspecto): string {
   }
 }
 
+/** ¿Existe esta fila en la hoja de sprites (`direccion-3`)? Un aspecto fijo de la instancia que no existe se ignora. */
+export function aspectoExiste(aspecto: string): boolean {
+  const m = /^(.+)-([1-9]\d*)$/.exec(aspecto);
+  return !!m && Object.hasOwn(VARIANTES, m[1]!) && Number(m[2]) <= VARIANTES[m[1]!]!;
+}
+
 /** Fila de `personajes.png` (`direccion-3`, `hermes-1`…) para un agente. */
 export function aspectoDe(agente: DatosAspecto): string {
-  const fijo = ASPECTO_FIJO[agente.id];
-  if (fijo) return fijo;
+  const fijos = instancia().aspectoFijo;
+  const fijo = Object.hasOwn(fijos, agente.id) ? fijos[agente.id] : undefined;
+  if (fijo && aspectoExiste(fijo)) return fijo;
   const rol = rolDeSprite(agente);
   if (rol === "direccion" && /Chief of staff/.test(`${agente.nombre} ${agente.cargo ?? ""}`)) return "direccion-3";
   const variantes = VARIANTES[rol] ?? 1;

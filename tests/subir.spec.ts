@@ -121,6 +121,13 @@ print(json.dumps([
       api?: DatosApi;
       /** Sube de verdad (a un remoto bare local) con un `gh` falso que no encuentra PR y crea uno. */
       subirDeVerdad?: boolean;
+      /** El resto del `gh` falso (en vez del de siempre). Tiene `$GH_LOG` para anotar y `$GH_DIR` para leer respuestas. */
+      gh?: string;
+      /** Deja en `$GH_DIR` las respuestas que va a dar el `gh` falso. */
+      prepararGh?: (dir: string) => void;
+      /** Las banderas de `subir.py` después del mensaje (por omisión, `--rapido`). */
+      banderas?: string[];
+      env?: NodeJS.ProcessEnv;
     }
 
     const GH_DE_VERDAD = `if [ "$1" = "pr" ] && [ "$2" = "list" ]; then echo '[]'; exit 0; fi
@@ -129,10 +136,17 @@ if [ "$1" = "pr" ] && [ "$2" = "create" ]; then echo 'https://example.invalid/pu
     async function correrSubir(caso: Caso) {
       const carpeta = carpetaTemporal("subir-e2e");
       const bin = join(carpeta, "bin");
-      ghFalso(bin, caso.subirDeVerdad ? GH_DE_VERDAD : "");
+      ghFalso(bin, caso.gh ?? (caso.subirDeVerdad ? GH_DE_VERDAD : ""));
+      // Un `npm` que solo anota: subir.py no lo llama salvo con --local.
+      writeFileSync(join(bin, "npm"), `#!/bin/sh\nprintf '%s\\n' "$*" >> "$NPM_LOG"\nexit 1\n`, { mode: 0o755 });
+      const ghLog = join(carpeta, "gh.log");
+      const npmLog = join(carpeta, "npm.log");
+      const ghDir = join(carpeta, "gh");
+      mkdirSync(ghDir, { recursive: true });
+      caso.prepararGh?.(ghDir);
       const api = caso.api ? await apiFalsa(caso.api) : null;
       try {
-        const { casa, privado, env } = entornoAislado(carpeta, bin);
+        const { casa, privado, env } = entornoAislado(carpeta, bin, { GH_LOG: ghLog, GH_DIR: ghDir, NPM_LOG: npmLog, ...caso.env });
         if (api) sesionFalsa(casa, api.url);
         if (api || caso.config) configPrivada(privado, caso.config ?? {}); // con sesión hace falta; la configuración sola la rechaza el revisor
         const remoto = join(carpeta, "remoto.git");
@@ -162,10 +176,12 @@ if [ "$1" = "pr" ] && [ "$2" = "create" ]; then echo 'https://example.invalid/pu
         // `preparar_clon` copia de ahí el control pre-push.
         copiarScripts(repo, "subir.py", "scripts/revisar.py", "scripts/hooks");
         const tarea = caso.tarea ?? "JST-1";
-        const r = await python(["subir.py", tarea, "-m", `${tarea}: Change something`, ...(caso.subirDeVerdad ? [] : ["--seco"]), "--rapido"], { cwd: repo, env });
+        const r = await python(["subir.py", tarea, "-m", `${tarea}: Change something`, ...(caso.subirDeVerdad ? [] : ["--seco"]), ...(caso.banderas ?? ["--rapido"])], { cwd: repo, env });
         const enRemoto = execFileSync("git", ["--git-dir", remoto, "branch", "--list", "jst-1"], { env, encoding: "utf8" }).trim();
         const tags = execFileSync("git", ["--git-dir", remoto, "tag", "--list"], { env, encoding: "utf8" }).trim();
-        return { ...r, enRemoto, tags };
+        const leer = (ruta: string) => (existsSync(ruta) ? readFileSync(ruta, "utf8").trim().split("\n").filter(Boolean) : []);
+        const cuerpos = leer(join(ghDir, "cuerpos.txt")).map((linea) => JSON.parse(linea) as { title: string; body: string });
+        return { ...r, enRemoto, tags, gh: leer(ghLog), npm: leer(npmLog), cuerpos };
       } finally {
         await api?.cerrar();
         borrar(carpeta);
@@ -322,6 +338,183 @@ if [ "$1" = "pr" ] && [ "$2" = "create" ]; then echo 'https://example.invalid/pu
       expect(r.enRemoto).toContain("jst-1"); // la rama sí llegó
       expect(r.tags).toBe(""); // el tag, no
     }, 60000);
+
+    describe("el CI lo corre GitHub (JST-425)", () => {
+      // Un `gh` falso que anota cada llamada y contesta las corridas de GitHub Actions desde archivos:
+      // `corridas-1.json` la primera vez que se pregunta, `corridas-2.json` la segunda… y la última se repite.
+      const GH_CON_CI = `printf '%s\\n' "$*" >> "$GH_LOG"
+if [ "$1" = "pr" ] && [ "$2" = "list" ]; then if [ -f "$GH_DIR/pr-list.json" ]; then cat "$GH_DIR/pr-list.json"; else echo '[]'; fi; exit 0; fi
+if [ "$1" = "pr" ] && [ "$2" = "create" ]; then echo 'https://example.invalid/pull/7'; exit 0; fi
+if [ "$1" = "pr" ] && [ "$2" = "ready" ]; then exit 0; fi
+if [ "$1" = "api" ] && [ "$2" = "-X" ]; then tr -d '\\n' < "$6" >> "$GH_DIR/cuerpos.txt"; echo >> "$GH_DIR/cuerpos.txt"; exit 0; fi
+if [ "$1" = "api" ] && [ "\${2#*pulls/}" != "$2" ]; then
+  if [ -f "$GH_DIR/cabeza" ]; then sha=$(cat "$GH_DIR/cabeza"); else sha=$(git --git-dir "$GH_DIR/../remoto.git" rev-parse jst-1); fi
+  printf '{"head":{"sha":"%s"}}\\n' "$sha"; exit 0
+fi
+if [ "$1" = "api" ]; then
+  n=$(cat "$GH_DIR/veces" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$GH_DIR/veces"
+  while [ "$n" -gt 1 ] && [ ! -f "$GH_DIR/corridas-$n.json" ]; do n=$((n - 1)); done
+  if [ -f "$GH_DIR/corridas-$n.json" ]; then cat "$GH_DIR/corridas-$n.json"; else echo '{"workflow_runs": []}'; fi
+  exit 0
+fi`;
+      const corridas = (...lista: [string, string, string | null][]) =>
+        JSON.stringify({ workflow_runs: lista.map(([name, status, conclusion]) => ({ name, status, conclusion, html_url: `https://example.invalid/runs/${name}` })) });
+      const RAPIDO = { OFICINA_CI_CADA: "0.05", OFICINA_CI_APARECE: "1.5", OFICINA_CI_TERMINA: "3" };
+      const preguntasCi = (gh: string[]) => gh.filter((l) => l.includes("actions/runs?head_sha="));
+
+      it("sin --listo sube, deja el PR como borrador y no espera el CI ni corre npm", async () => {
+        const r = await correrSubir({ subirDeVerdad: true, gh: GH_CON_CI, banderas: [], env: RAPIDO });
+        expect(r.estado, r.todo).toBe(0);
+        expect(r.enRemoto).toContain("jst-1");
+        expect(r.gh.some((l) => l.startsWith("pr create") && l.includes("--draft"))).toBe(true);
+        expect(preguntasCi(r.gh)).toEqual([]);
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+        expect(r.npm).toEqual([]);
+        expect(r.salida).toContain("borrador (falta QA)");
+      }, 60000);
+
+      it("con --listo crea el PR como borrador, espera el CI y solo cuando pasa lo marca listo", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => {
+            writeFileSync(join(dir, "corridas-1.json"), corridas());
+            writeFileSync(join(dir, "corridas-2.json"), corridas(["CI", "in_progress", null]));
+            writeFileSync(join(dir, "corridas-3.json"), corridas(["CI", "completed", "success"]));
+          },
+        });
+        expect(r.estado, r.todo).toBe(0);
+        const crear = r.gh.findIndex((l) => l.startsWith("pr create"));
+        const listo = r.gh.findIndex((l) => l === "pr ready 7 --repo jstm-co/oficina-global");
+        expect(r.gh[crear]).toContain("--draft");
+        expect(preguntasCi(r.gh)).toHaveLength(4); // sin corridas, corriendo, terminó, y una mirada más para confirmar
+        expect(listo).toBeGreaterThan(r.gh.map((l) => l.includes("actions/runs?head_sha=")).lastIndexOf(true));
+        expect(preguntasCi(r.gh)[0]).toMatch(/head_sha=[0-9a-f]{40}/);
+        expect(r.salida).toContain(`CI de GitHub en verde para ${/head_sha=([0-9a-f]{7})/.exec(preguntasCi(r.gh)[0]!)![1]}`);
+        expect(r.cuerpos.at(-1)?.body).toContain("ready for approval");
+        expect(r.salida).toContain("CI de GitHub en verde");
+        expect(r.salida).toContain("listo para aprobar");
+        expect(r.npm).toEqual([]);
+      }, 60000);
+
+      it("con --listo y el CI en rojo termina en 1, dice qué falló y el PR queda como borrador", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "completed", "failure"], ["Otra", "completed", "success"])),
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.enRemoto).toContain("jst-1"); // la rama sí subió: el CI corre sobre ella
+        expect(r.salida).toContain("El CI de GitHub no pasó");
+        expect(r.salida).toContain("CI: failure https://example.invalid/runs/CI");
+        expect(r.salida).toContain("Subí jst-1");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+        expect(r.cuerpos.every((c) => !c.body.includes("ready for approval"))).toBe(true);
+      }, 60000);
+
+      it("una corrida cancelada cuenta como falla", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "completed", "cancelled"])),
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("CI: cancelled");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+      }, 60000);
+
+      it("si todas las corridas se saltaron, nada se probó: termina en 1 sin marcar listo", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "completed", "skipped"])),
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("no probó nada");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+      }, 60000);
+
+      it("si aparece otra corrida cuando las primeras ya terminaron, la espera también", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => {
+            writeFileSync(join(dir, "corridas-1.json"), corridas(["Rápida", "completed", "success"]));
+            writeFileSync(join(dir, "corridas-2.json"), corridas(["Rápida", "completed", "success"], ["CI", "in_progress", null]));
+            writeFileSync(join(dir, "corridas-3.json"), corridas(["Rápida", "completed", "success"], ["CI", "completed", "failure"]));
+          },
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("CI: failure");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+      }, 60000);
+
+      it("si alguien subió otro commit a la rama mientras corría el CI, no marca listo", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => {
+            writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "completed", "success"]));
+            writeFileSync(join(dir, "cabeza"), "f".repeat(40));
+          },
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("alguien subió otro commit");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+        expect(r.cuerpos.every((c) => !c.body.includes("ready for approval"))).toBe(true);
+      }, 60000);
+
+      it("con --listo, si el CI no empieza, termina en 1 sin marcar listo", async () => {
+        const r = await correrSubir({ subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("no empezó");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+      }, 60000);
+
+      it("con --listo, si el CI no termina a tiempo, termina en 1 sin marcar listo", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: { ...RAPIDO, OFICINA_CI_TERMINA: "0.6" },
+          prepararGh: (dir) => writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "queued", null])),
+        });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.salida).toContain("sigue corriendo");
+        expect(r.gh.some((l) => l.startsWith("pr ready"))).toBe(false);
+      }, 60000);
+
+      it("un PR que ya estaba listo vuelve a borrador mientras el CI prueba el commit nuevo, y queda listo si pasa", async () => {
+        const r = await correrSubir({
+          subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO,
+          prepararGh: (dir) => {
+            writeFileSync(join(dir, "pr-list.json"), JSON.stringify([{ number: 7, url: "https://example.invalid/pull/7", isDraft: false }]));
+            writeFileSync(join(dir, "corridas-1.json"), corridas(["CI", "completed", "success"], ["Docs", "completed", "skipped"]));
+          },
+        });
+        expect(r.estado, r.todo).toBe(0);
+        const aBorrador = r.gh.findIndex((l) => l === "pr ready 7 --repo jstm-co/oficina-global --undo");
+        const aListo = r.gh.findIndex((l) => l === "pr ready 7 --repo jstm-co/oficina-global");
+        expect(aBorrador).toBeGreaterThan(-1);
+        expect(aListo).toBeGreaterThan(aBorrador);
+        expect(r.gh.some((l) => l.startsWith("pr create"))).toBe(false);
+        expect(r.cuerpos[0]?.body).toContain("draft: QA is still pending");
+        expect(r.cuerpos.at(-1)?.body).toContain("ready for approval");
+      }, 60000);
+
+      it("--seco con --listo no sube ni pregunta por el CI", async () => {
+        const r = await correrSubir({ gh: GH_CON_CI, banderas: ["--listo"], env: RAPIDO });
+        expect(r.estado, r.todo).toBe(0);
+        expect(r.enRemoto).toBe("");
+        expect(preguntasCi(r.gh)).toEqual([]);
+        expect(r.salida).toContain("esperaría el CI de GitHub");
+      }, 60000);
+
+      it("--rapido se sigue aceptando y no cambia nada", async () => {
+        const r = await correrSubir({ subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--rapido"], env: RAPIDO });
+        expect(r.estado, r.todo).toBe(0);
+        expect(r.npm).toEqual([]);
+      }, 60000);
+
+      it("--local corre npm aquí antes de subir, y si falla no sube", async () => {
+        const r = await correrSubir({ subirDeVerdad: true, gh: GH_CON_CI, banderas: ["--local"], env: RAPIDO });
+        expect(r.estado, r.todo).toBe(1);
+        expect(r.npm).toEqual(["ci"]);
+        expect(r.enRemoto).toBe("");
+        expect(r.todo).toContain("No subí nada");
+      }, 60000);
+    });
 
     it("el comando de push de subir.py nombra la dirección de origin y lleva --no-verify y --no-follow-tags", () => {
       const fuente = readFileSync(join(RAIZ, "subir.py"), "utf8");
