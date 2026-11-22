@@ -1,6 +1,7 @@
 // «Bloqueadas sin nadie moviéndolas» (JST-426): las tareas que Paperclip marca como `blocker_attention` porque su
 // árbol de bloqueos no avanza solo. No son «te necesita» (`tipoEspera` las deja fuera a propósito: no siempre te
 // toca a ti): se muestran aparte y callados. Sin React ni navegador, para poder probarlo.
+import { t } from "./i18n.js";
 import type { ItemAtencion, SujetoAtencion } from "./shared.js";
 
 export interface Bloqueada {
@@ -129,10 +130,45 @@ export function bloqueosDe(lista: readonly Bloqueada[], prefijos: readonly strin
   return prefijos.length === 0 ? [...lista] : lista.filter((b) => prefijos.includes(b.prefijo));
 }
 
-/** Las que se muestran (20) y cuántas quedan fuera. */
-export const MAX_BLOQUEOS_MOSTRADAS = 20;
-export function recortarBloqueos<T>(lista: readonly T[], max = MAX_BLOQUEOS_MOSTRADAS): { vistas: T[]; mas: number } {
-  return { vistas: lista.slice(0, max), mas: Math.max(0, lista.length - max) };
+/** Lo que se muestra por empresa en el panel general (JST-428) antes del «y N más». */
+export const MAX_BLOQUEOS_POR_EMPRESA = 8;
+
+export interface GrupoBloqueos {
+  prefijo: string;
+  empresa: string;
+  /** Cuántas bloqueadas tiene la empresa en total. */
+  total: number;
+  /** Las que se muestran (hasta `maxPorGrupo`), en el orden de la lista. */
+  vistas: Bloqueada[];
+  /** Las que quedan fuera. */
+  mas: number;
+}
+
+/**
+ * JST-428: la lista agrupada por empresa para el panel general. Los grupos van en el orden en que aparece cada
+ * empresa en la lista, y dentro de cada uno se conserva el orden de la lista. Cada grupo muestra hasta `maxPorGrupo`.
+ */
+export function agruparBloqueos(lista: readonly Bloqueada[], maxPorGrupo = MAX_BLOQUEOS_POR_EMPRESA): GrupoBloqueos[] {
+  const grupos = new Map<string, Bloqueada[]>();
+  for (const b of lista) {
+    const g = grupos.get(b.prefijo);
+    if (g) g.push(b);
+    else grupos.set(b.prefijo, [b]);
+  }
+  return [...grupos].map(([prefijo, todas]) => ({
+    prefijo,
+    empresa: todas[0]!.empresa,
+    total: todas.length,
+    vistas: todas.slice(0, maxPorGrupo),
+    mas: Math.max(0, todas.length - maxPorGrupo),
+  }));
+}
+
+/** El `aria-label` y el tooltip de la mesa de bloqueadas de una sala (JST-428). */
+export function etiquetaMesa(n: number, empresa: string): string {
+  if (n === 0) return t("Nada bloqueado en {empresa}", { empresa });
+  if (n === 1) return t("1 bloqueada en {empresa}", { empresa });
+  return t("{n} bloqueadas en {empresa}", { n, empresa });
 }
 
 /** El motivo con tope de largo y «…». */

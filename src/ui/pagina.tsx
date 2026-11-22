@@ -38,6 +38,7 @@ import { Banners, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEm
 import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonAmbiente } from "./menuAmbiente.js";
 import { bloqueosDe } from "../bloqueos.js";
+import { PanelBloqueadas } from "./panelBloqueadas.js";
 import { FranjaTeNecesitan } from "./franjaToca.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
@@ -294,6 +295,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   useAvisoAlAbrir(oficina, mostrar);
   /** Tu escritorio abierto (JST-163 §14): de qué sala, y el botón desde donde se abrió. */
   const [escritorio, setEscritorio] = useState<{ prefijo: string; el: HTMLElement } | null>(null);
+  /** JST-428: la mesa de bloqueadas abierta: de qué sala, y el botón desde donde se abrió. */
+  const [mesaAbierta, setMesaAbierta] = useState<{ prefijo: string; el: HTMLElement } | null>(null);
 
   // `?sala=BET` (lo usa el widget en el celular) acerca esa sala.
   useEffect(() => {
@@ -441,6 +444,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
   const abrirTv = () => {
     setSel(null);
     setEscritorio(null);
+    setMesaAbierta(null);
     resumen.cerrar();
     setTv(true);
   };
@@ -450,6 +454,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     (flushSync ?? ((f: () => void) => f()))(() => {
       setSel(null);
       setEscritorio(null);
+      setMesaAbierta(null);
       setEn3d(true);
     });
   };
@@ -465,7 +470,18 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
     (prefijo: string, el: HTMLElement) => {
       ocultar();
       setSel(null);
+      setMesaAbierta(null);
       setEscritorio((actual) => (actual?.prefijo === prefijo ? null : { prefijo, el }));
+    },
+    [ocultar],
+  );
+  // JST-428: clic en la mesa de bloqueadas de una sala: su panel (otra vez, lo cierra).
+  const tocarMesa = useCallback(
+    (prefijo: string, el: HTMLElement) => {
+      ocultar();
+      setSel(null);
+      setEscritorio(null);
+      setMesaAbierta((actual) => (actual?.prefijo === prefijo ? null : { prefijo, el }));
     },
     [ocultar],
   );
@@ -633,6 +649,8 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             sync={oficina.sync}
             pausado={tv}
             onEscritorio={tocarEscritorio}
+            bloqueadas={oficina.bloqueadas}
+            onMesa={tocarMesa}
             voz
             ia
             onVida={setVidaPiso}
@@ -680,7 +698,20 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
           </FichaFlotante>
         </Capa>
       ) : null}
-      {tip && !agente && !escritorio ? <Tooltip tip={tip} /> : null}
+      {mesaAbierta && !tv && !celular ? (
+        <PanelBloqueadas
+          bloqueadas={bloqueosDe(oficina.bloqueadas, [mesaAbierta.prefijo])}
+          agentes={oficina.agentes}
+          lector={oficina.sync?.motivos() ?? null}
+          enlazar={enlazarTarea}
+          ahora={ahora}
+          ancla={mesaAbierta.el}
+          titulo={t("Bloqueadas en {empresa}", { empresa: oficina.empresas.find((e) => e.prefijo === mesaAbierta.prefijo)?.nombre ?? mesaAbierta.prefijo })}
+          agrupado={false}
+          onCerrar={() => setMesaAbierta(null)}
+        />
+      ) : null}
+      {tip && !agente && !escritorio && !mesaAbierta ? <Tooltip tip={tip} /> : null}
       {vr.agente && !tv ? (
         <Capa>
           <VentanaResponder
