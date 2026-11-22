@@ -79,6 +79,12 @@ export interface ItemAtencion {
   relatedIssue?: SujetoAtencion | null;
   originAgentName?: string | null;
   createdAt?: string | null;
+  /** JST-426: los campos que usa la lista de «Bloqueadas» (`blocker_attention`); el resto del feed no los necesita. */
+  companyId?: string | null;
+  activityAt?: string | null;
+  updatedAt?: string | null;
+  /** `null`: no fue descartado. */
+  dismissal?: unknown;
   /** Lo que el feed resume de la tarjeta (la pregunta, la primera tarea sugerida…). */
   detail?: {
     kind?: string;
@@ -86,6 +92,8 @@ export interface ItemAtencion {
     firstQuestionText?: string | null;
     firstTaskTitle?: string | null;
     summaryExcerpt?: string | null;
+    /** `blocker`: cuántas tareas cuelgan de este bloqueo (JST-426). */
+    blockedTaskCount?: number | null;
   } | null;
 }
 

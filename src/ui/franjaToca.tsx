@@ -14,6 +14,9 @@ import { chipDe } from "../responder.js";
 import type { AgenteVista } from "../vista.js";
 import { Capa } from "./capas.js";
 import { contexto, useContexto } from "./contextoBarra.js";
+import { BotonBloqueadas } from "./panelBloqueadas.js";
+import type { Bloqueada, LectorMotivos } from "../bloqueos.js";
+import type { Enlazar } from "./ficha.js";
 import { PanelContexto } from "./contextoEscrito.js";
 import { soltarDe, visibleEn } from "./contextoLugar.js";
 import { BotonContextoVentana, tareaDeEspera } from "./contextoVentana.js";
@@ -60,7 +63,7 @@ export function esperanOrdenados(agentes: readonly AgenteVista[]): AgenteVista[]
   return agentes.filter((a) => a.need).sort(comparar);
 }
 
-export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder }: {
+export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder, bloqueadas = [], lector = null, enlazar, ahora = Date.now() }: {
   /** Los mismos que cuentan los contadores (ya con el filtro por empresa). */
   agentes: readonly AgenteVista[];
   /** Primera lectura, sin agentes todavía: la franja queda vacía, del mismo alto. */
@@ -69,6 +72,12 @@ export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder 
   sinAtencion: boolean;
   /** Abre la ventana de responder; `desde` es el ítem, de donde sale la ventana. */
   onResponder: (agenteId: string, desde: HTMLElement | null) => void;
+  /** JST-426: las tareas bloqueadas sin nadie moviéndolas, ya con el filtro por empresa. Van aparte, callados y sin sumar a nada. */
+  bloqueadas?: readonly Bloqueada[];
+  lector?: LectorMotivos | null;
+  /** Cómo se abre una tarea (el mismo de «Abrir tarea» de la ficha). Sin él no se dibuja el botón. */
+  enlazar?: Enlazar;
+  ahora?: number;
 }) {
   const esperan = esperanOrdenados(agentes);
   // La franja no muestra barra: con la rueda del mouse (sin trackpad) se desplaza a lo ancho cuando no caben todos.
@@ -151,6 +160,7 @@ export function FranjaTeNecesitan({ agentes, cargando, sinAtencion, onResponder 
   return (
     <div ref={raiz} className="of-te" role="region" aria-label={t("Te necesitan")}>
       {contenido}
+      {enlazar ? <BotonBloqueadas bloqueadas={bloqueadas} agentes={agentes} lector={lector} enlazar={enlazar} ahora={ahora} /> : null}
       <PanelDeLaFranja franja={raiz} />
     </div>
   );

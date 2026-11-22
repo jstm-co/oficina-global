@@ -37,6 +37,7 @@ import { Avisos, Capa, Tooltip, useAvisos, useEsc, useTooltip } from "./capas.js
 import { Banners, ChipAnimacionReducida, Contadores, ContadoresCelular, ConteoEmpresas, EstadoVivo, FiltroEmpresas, Leyenda, Menores, type Resaltado } from "./encabezado.js";
 import { BotonConversaciones } from "./menuConversaciones.js";
 import { BotonAmbiente } from "./menuAmbiente.js";
+import { bloqueosDe } from "../bloqueos.js";
 import { FranjaTeNecesitan } from "./franjaToca.js";
 import { BotonResumen } from "./menuResumen.js";
 import { abrirMenu } from "./paneles.js";
@@ -616,7 +617,7 @@ export function OficinaGlobalPage({ context }: PluginPageProps) {
             <Contadores modo="pagina" {...pCont} />
             <FiltroEmpresas oficina={oficina} filtro={filtro} onFiltro={setFiltro} celular={false} />
           </div>
-          <FranjaTeNecesitan agentes={visibles} cargando={cargandoCont} sinAtencion={oficina.sinAtencion} onResponder={(id, desde) => responderDesde(id, desde)} />
+          <FranjaTeNecesitan agentes={visibles} cargando={cargandoCont} sinAtencion={oficina.sinAtencion} onResponder={(id, desde) => responderDesde(id, desde)} bloqueadas={bloqueosDe(oficina.bloqueadas, salaAcercada ? [salaAcercada.prefijo] : filtro)} lector={oficina.sync?.motivos() ?? null} enlazar={enlazarTarea} ahora={ahora} />
         </div>
         <div className="of-msgs">
           <Banners oficina={oficina} corto={false} c={c} libres={libres} />
