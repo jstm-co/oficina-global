@@ -2,6 +2,7 @@
 // compartido por la página, el widget y el modo TV (JST-66). Con la pestaña
 // oculta se cierran los canales y, al volver, se recarga una vez.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { Bloqueada } from "../bloqueos.js";
 import { prefijoDe } from "../estado.js";
 import type { Conexion } from "../fuentes.js";
 import { HistorialRuns, HorasDeGlobos, textoGlobo } from "../hora.js";
@@ -37,6 +38,8 @@ export interface Oficina {
   agentes: AgenteVista[];
   /** Empresas que no respondieron (salas a oscuras). */
   caidas: EmpresaVista[];
+  /** JST-426: tareas bloqueadas sin nadie moviéndolas (de todas las empresas; la página filtra). No cuentan como «te necesita». */
+  bloqueadas: Bloqueada[];
   /** Alguna empresa no pudo leer «Te toca». */
   sinAtencion: boolean;
   cargando: boolean;
@@ -331,6 +334,7 @@ export function armar(sync: Sincronizador, forma: Record<string, number> = forma
     empresas,
     ocultas,
     agentes,
+    bloqueadas: sync.bloqueos(),
     // Una empresa que no se dibuja no avisa si falla: no tiene sala que se apague (§9).
     caidas: empresas.filter((e) => e.estado.error !== null),
     sinAtencion: empresas.some((e) => !e.estado.error && !e.estado.cargando && e.estado.sinAtencion),
@@ -355,6 +359,7 @@ const VACIA: Oficina = {
   empresas: [],
   ocultas: [],
   agentes: [],
+  bloqueadas: [],
   caidas: [],
   sinAtencion: false,
   cargando: true,

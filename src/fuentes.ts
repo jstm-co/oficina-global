@@ -105,6 +105,16 @@ export async function leerTarea(cx: Conexion, issueId: string): Promise<TareaRef
   return { id: issue.id, identifier: issue.identifier ?? null, title: issue.title, status: issue.status ?? null };
 }
 
+/**
+ * JST-426: lo que escribió el agente al dejar la tarea bloqueada (`unblockDescriptor.action` de `GET /api/issues/:id`),
+ * o `null` si no hay texto. Es lectura pura: no cambia nada en Paperclip.
+ */
+export async function leerMotivoBloqueo(cx: Conexion, issueId: string): Promise<string | null> {
+  const issue = await pedir<{ unblockDescriptor?: { action?: unknown } | null }>(cx, `/issues/${encodeURIComponent(issueId)}`);
+  const accion = issue?.unblockDescriptor?.action;
+  return typeof accion === "string" && accion.trim() ? accion.trim() : null;
+}
+
 /** La tarea en curso que tomó un run que partió sin `issueId` (JST-374). */
 export async function tareaDelRun(cx: Conexion, companyId: string, agentId: string, runId: string): Promise<TareaRef | null> {
   const filas = await pedir<Array<TareaRef & { executionRunId?: string | null; checkoutRunId?: string | null }>>(

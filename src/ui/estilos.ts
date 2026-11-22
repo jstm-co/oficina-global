@@ -364,6 +364,23 @@ svg.of-i.of-s12 { width: 12px; height: 12px; } svg.of-i.of-s14 { width: 14px; he
 .of-te-mas { flex: none; font-size: 11.5px; font-weight: 600; color: var(--of-s-toca-fg); }
 .of-te-it > .of-btn { flex: none; }
 .of-te-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--of-muted-fg); white-space: nowrap; }
+.of-te > .of-bq-b { flex: none; margin-left: auto; }
+.of-bq-b { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--of-border); background: transparent; color: var(--of-muted-fg); font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.of-bq-b b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--of-fg); }
+.of-bq-b:hover, .of-bq-b.is-open { background: var(--of-muted); color: var(--of-fg); }
+.of-bq-b:focus-visible, .of-bq:focus-visible, .of-bq-a:focus-visible { outline: 2px solid var(--of-ring); outline-offset: 1px; }
+.of-bq { width: 400px; padding: 12px 14px; outline: none; }
+.of-bq-h { margin: 0; font-size: 13.5px; font-weight: 650; }
+.of-bq-p { margin: 4px 0 8px; font-size: 12px; color: var(--of-muted-fg); }
+.of-bq-l { list-style: none; margin: 0; padding: 0; }
+.of-bq-it { padding: 9px 0; border-top: 1px solid var(--of-border); display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.of-bq-t { display: flex; align-items: center; gap: 6px; max-width: 100%; font-size: 12.5px; }
+.of-bq-t .of-tid { flex: none; font: 500 11.5px/17px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--of-muted-fg); }
+.of-bq-ti { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
+.of-bq-s { font-size: 11.5px; color: var(--of-muted-fg); }
+.of-bq-m { font-size: 12px; color: var(--of-fg); overflow-wrap: anywhere; }
+.of-bq-a { margin-top: 3px; }
+.of-bq-mas { margin: 6px 0 0; font-size: 12px; color: var(--of-muted-fg); }
 .of-live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--of-muted-fg); white-space: nowrap; }
 .of-live.is-warn { color: var(--of-danger-fg); }
 .of-live.is-warn svg { color: var(--of-s-error); }
