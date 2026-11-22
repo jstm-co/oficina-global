@@ -10,6 +10,7 @@ import { Sincronizador, type EstadoCarga } from "../sincronizador.js";
 import { TitulosConocidos } from "../rotulo.js";
 import { LectorTemas } from "../temas.js";
 import { vistaDe, type AgenteVista } from "../vista.js";
+import { alLlegarInstanciaTarde, cargarInstancia } from "./instanciaUi.js";
 
 export interface EmpresaVista {
   id: string;
@@ -134,9 +135,22 @@ export function conectarCompartido(cx: Conexion): Sincronizador {
   });
   const visibilidad = () => (document.hidden && !mantenerVivo() ? sync.pausar() : sync.reanudar());
   document.addEventListener("visibilitychange", visibilidad);
-  quitarVisibilidad = () => document.removeEventListener("visibilitychange", visibilidad);
-  void sync.iniciar().then(() => {
-    if (document.hidden && !mantenerVivo()) sync.pausar();
+  // Si los datos de la instancia llegan después del tope, lo ya dibujado se vuelve a calcular con ellos.
+  const quitarTarde = alLlegarInstanciaTarde(() => {
+    version += 1;
+    for (const oyente of oyentes) oyente();
+  });
+  quitarVisibilidad = () => {
+    document.removeEventListener("visibilitychange", visibilidad);
+    quitarTarde();
+  };
+  // Primero los datos de la instancia (aspecto, nombres cortos): ningún agente se dibuja ni se nombra antes de tenerlos.
+  // Si mientras tanto se soltó el sincronizador (o se armó otro), no se inicia uno detenido.
+  void cargarInstancia().then(() => {
+    if (compartido !== sync) return;
+    return sync.iniciar().then(() => {
+      if (compartido === sync && document.hidden && !mantenerVivo()) sync.pausar();
+    });
   });
   return sync;
 }

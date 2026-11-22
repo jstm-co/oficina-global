@@ -15,9 +15,8 @@ instancia real de Paperclip. El revisor busca lo que no debe salir de ese equipo
      solo GET) o con `--real`: los nombres de las empresas, los IDs de las empresas y de
      los agentes, y los títulos de las tareas (cualquier tramo de 5 palabras seguidas de
      un título).
-  4. Rutas que no se publican (`.claude/`, `instancia.local.ts`…), un `src/instancia.ts`
-     con datos, y archivos que no se pueden leer como texto fuera de las carpetas de
-     imágenes y sonidos.
+  4. Rutas que no se publican (`.claude/`, el `instancia.json` de una instancia…) y
+     archivos que no se pueden leer como texto fuera de las carpetas de imágenes y sonidos.
 
 `subir.py` y el control `pre-push` no revisan una carpeta sino los objetos de git que
 se van a enviar (`Revisor.objetos`): todos los archivos de todos los commits nuevos, con
@@ -69,14 +68,12 @@ PATRONES = [
 # Rutas que nunca van al repo, estén o no en .gitignore (alguien puede forzarlas con `git add -f`).
 RUTAS_PROHIBIDAS = [
     ("carpeta que no se publica", r"^(?:\.claude|spike|pruebas|publico|_privado)(?:/|$)"),
-    ("archivo propio de una instancia", r"(?:^|/)instancia\.local\.ts$"),
+    # Lo propio de una instancia: el `instancia.json` que el plugin lee al arrancar (JST-425) y el `instancia.local.ts` de antes.
+    ("archivo propio de una instancia", r"(?i)(?:^|/)instancia(?:\.local)?\.(?:ts|json)(?:\.[^/]*)?$"),
     ("archivo de entorno", r"(?:^|/)\.env(?:\.|$)"),
 ]
 # Donde sí puede haber archivos que no son texto (imágenes, sonidos y la voz de referencia).
 BINARIOS_PERMITIDOS = re.compile(r"^(?:src/ui/assets/|generador/referencias/|static/)|^(?:package/)?(?:dist/|generador/referencias/)")
-# El archivo de ejemplo de la instancia: en el repo va vacío (lo de cada instancia va en instancia.local.ts).
-INSTANCIA_REPO = "src/instancia.ts"
-INSTANCIA_VACIA = re.compile(r"export const \w+\s*:[^=]+=\s*(\{\s*\}|\[\s*\])\s*;")
 
 # Quién puede firmar un commit que va a un repo público: las direcciones «noreply» de GitHub (las de cada
 # cuenta y la de los merges hechos en la web). La configuración puede sumar otras.
@@ -323,13 +320,7 @@ class Revisor:
                 return 0
             print(f"{ruta}: no es texto UTF-8 y no está en una carpeta de imágenes o sonidos: no lo puedo revisar")
             return 1
-        n = self.texto(ruta, texto, en_dist)
-        if ruta == INSTANCIA_REPO:
-            sin_comentarios = re.sub(r"/\*.*?\*/|//[^\n]*", "", texto, flags=re.S)
-            if len(INSTANCIA_VACIA.findall(sin_comentarios)) != sin_comentarios.count("export const"):
-                print(f"{ruta}: trae datos de una instancia; en el repo va vacío (lo propio va en instancia.local.ts)")
-                n += 1
-        return n
+        return self.texto(ruta, texto, en_dist)
 
     def carpeta(self, carpeta: Path, con_dist: bool = False) -> int:
         """Una carpeta en disco (el paquete de npm ya armado). Para lo que se sube a git, ver `objetos`."""

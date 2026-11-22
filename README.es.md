@@ -131,10 +131,22 @@ Fuera de Chrome, el plugin usa el `LanguageModel` que tenga la página, si hay u
 
 ## Adaptarla a tu instancia
 
-Para esto hay que instalarla desde el código.
+- **El personaje fijo de tus agentes, sus nombres cortos y cómo se pronuncian** van en un archivo `instancia.json` en la carpeta de datos del plugin, junto a las voces: `~/Library/Application Support/oficina-global/` en macOS, `%LOCALAPPDATA%\oficina-global\` en Windows y `~/.local/share/oficina-global/` en Linux. El plugin lo lee al arrancar, así que reinicia el plugin después de editarlo. No hay que compilar nada, y una actualización desde npm no lo pierde. Todas las claves son opcionales:
 
-- `src/instancia.ts`: el personaje fijo de algunos agentes (por ID) y cómo se pronuncian nombres propios en las voces. En el repositorio va vacío: cada agente recibe un personaje según su nombre, cargo y rol. Para poner los tuyos, cópialo como `instancia.local.ts` en la raíz (git lo ignora) y compila.
-- `src/plano.ts`: cuántas columnas tiene cada sala y qué empresas tienen color propio, por prefijo. Viene ajustado para las salas de nuestra instancia (prefijos `BET`, `ELM`, `JST` y `MIG`); las demás se dibujan con las medidas por omisión y en gris.
+  ```json
+  {
+    "aspectoFijo": { "<id del agente>": "direccion-1" },
+    "nombresCortos": { "Ingeniera de Datos y Reportes": "Datos" },
+    "pronunciarKokoro": [["\\bNombre\\b", "Cómo se dice"]]
+  }
+  ```
+
+  - `aspectoFijo`: el personaje de un agente, por su ID. El valor es una fila de [personajes.png](src/ui/assets/personajes.png), como `direccion-1` o `qa-2`; una que no existe se ignora.
+  - `nombresCortos`: el nombre corto de un agente, por su nombre como está escrito en Paperclip, cuando el automático queda raro.
+  - `pronunciarKokoro`: pares de expresión regular y reemplazo, para los nombres que el motor de voz Kokoro dice mal.
+
+  Sin el archivo, cada agente recibe un personaje según su nombre, cargo y rol.
+- `src/plano.ts` (para esto sí hay que instalarla desde el código): cuántas columnas tiene cada sala y qué empresas tienen color propio, por prefijo. Viene ajustado para las salas de nuestra instancia (prefijos `BET`, `ELM`, `JST` y `MIG`); las demás se dibujan con las medidas por omisión y en gris.
 
 ## Desarrollo
 

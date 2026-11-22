@@ -29,11 +29,19 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { carpetaAlmacen, despublicar, prepararAlmacen, publicar } from "../src/almacenVoces.js";
+import { cargarInstanciaDeArchivo } from "../src/instanciaArchivo.js";
 import { grupoDe, leerEleccion, vocesDe, type GrupoMotor } from "../src/eleccionVoces.js";
 import { claveAudio, leerIndice, VOCES, VOZ_RESUMEN, type IndiceVoces, type Motor } from "../src/voces.js";
 import { bajarModelo, comandoMotor, datosDeVoz, dejarListo, hayModelo, modeloKokoro, MODELO_SUPERTONIC, pesoModelo, PRUEBA_FFMPEG, revisar } from "./motores.js";
 import { asignarVoces, plan, type AgentePlan, type Trabajo } from "./plan.js";
 import { paraDecir } from "./pronunciar.js";
+
+// Los nombres cortos y la pronunciación de la instancia, de su archivo (cambian los textos y el índice de los audios).
+{
+  const { ruta, error, datos } = cargarInstanciaDeArchivo();
+  if (error) console.warn(`instancia: no se pudo leer ${ruta} (${error}); se usan los datos vacíos`);
+  else console.log(`instancia: ${Object.keys(datos.nombresCortos).length} nombres cortos, ${datos.pronunciarKokoro.length} pronunciaciones (${ruta})`);
+}
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Map<string, string>();

@@ -1,14 +1,17 @@
 """Sube la rama de una tarea a GitHub y abre o actualiza su pull request a develop (JST-284, JST-419).
 
-Uso, desde la carpeta del repo y con el cambio ya commiteado (es pesado: corre todo antes de subir):
-  python3 -I subir.py JST-NN -m "JST-NN: what changes" [--listo] [--rapido] [--seco]
+Uso, desde la carpeta del repo y con el cambio ya commiteado:
+  python3 -I subir.py JST-NN -m "JST-NN: what changes" [--listo] [--local] [--seco]
 
   -m        título del pull request, en inglés como el README principal. Lo ve cualquiera.
-  --listo   el PR queda listo para que lo aprueben (la QA pasó o no hace falta).
+  --listo   el PR queda listo para que lo aprueben (la QA pasó o no hace falta), pero solo
+            después de que el CI de GitHub termine en verde para este commit: el comando
+            espera. Si el CI falla, el PR queda como borrador y el comando termina en 1.
             Sin --listo queda como borrador, que GitHub no deja fusionar.
-  --rapido  no corre pruebas, tipos ni build aquí (el CI de GitHub los corre igual). Solo
-            para borradores: con --listo se corre todo.
+  --local   además corre aquí pruebas, tipos, build y la revisión del paquete antes de subir
+            (pesado: va por la cola de trabajos pesados). No hace falta: el CI los corre igual.
   --seco    hace todo menos subir: muestra la rama, el título y el texto del PR.
+  --rapido  ya no cambia nada (es lo normal desde JST-425); se acepta por costumbre.
 
 Qué hace:
   1. Exige que la rama contenga el develop actual; así una rama vieja no puede borrar
@@ -19,9 +22,11 @@ Qué hace:
      rama, y el título y el texto del PR. Este repo es público: lo que se sube no se puede
      retirar. Usa el revisor que está en develop, no el de la rama: nadie es juez de su
      propio cambio.
-  3. Sin --rapido, en una copia limpia del commit: `npm ci`, pruebas, tipos, build y la
-     revisión de lo que trae el paquete de npm (`dist/` incluido).
-  4. Sube la rama `jst-NN` y abre o actualiza el PR a develop. El release posterior
+  3. Sube la rama `jst-NN` y abre o actualiza el PR a develop. Pruebas, tipos, build y el
+     contenido del paquete los revisa el CI de GitHub en el PR (.github/workflows/ci.yml):
+     aquí no se compila (JST-425). Lo único que tiene que pasar en este equipo es el paso 2,
+     porque debe ocurrir antes de que algo llegue al repo público.
+  4. Con --listo espera ese CI y solo si pasa marca el PR como listo. El release posterior
      develop → main (scripts/release.py) calcula y publica una versión por fecha en npm
      (.github/workflows/publish.yml); no hay que subir ninguna versión a mano.
 
@@ -41,6 +46,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent
@@ -50,6 +56,24 @@ BASE = "develop"
 EN_EL_PAQUETE = ("package.json", "README.md", "README.es.md", "LICENSE", "AVISOS.md", "dist/worker.js", "dist/manifest.js",
                  "dist/ui/index.js", "dist/ui/tv.html", "dist/generar_voces.mjs", "generador/motor_kokoro.py",
                  "generador/referencias/ref_hombre_cl.wav")
+
+
+# Cuánto se espera al CI con --listo: que aparezca (segundos), que termine (segundos) y cada cuánto se mira.
+CI_APARECE = float(os.environ.get("OFICINA_CI_APARECE", 180))
+CI_TERMINA = float(os.environ.get("OFICINA_CI_TERMINA", 30 * 60))
+CI_CADA = float(os.environ.get("OFICINA_CI_CADA", 15))
+CI_BIEN = ("success", "skipped", "neutral")
+
+
+def corridas_ci(commit: str, env: dict) -> list[dict]:
+    """Las corridas de GitHub Actions de ese commit (vacío si GitHub respondió algo que no se entiende)."""
+    r = correr(["gh", "api", f"repos/{GH_REPO}/actions/runs?head_sha={commit}&per_page=100"], env=env)
+    try:
+        datos = json.loads(r.stdout)
+    except ValueError:
+        return []
+    corridas = datos.get("workflow_runs", []) if isinstance(datos, dict) else []
+    return [c for c in corridas if isinstance(c, dict)]
 
 
 class Alto(Exception):
@@ -170,6 +194,47 @@ def texto_del_pr(subidos: list[str], del_paquete: bool, listo: bool) -> str:
     ])
 
 
+def esperar_ci(commit: str, env: dict) -> None:
+    """Espera a que el CI de GitHub termine para `commit` y exige que todo pase. Si no, Alto.
+
+    Mira las corridas de GitHub Actions de ese commit: mientras no haya ninguna espera a que aparezcan, y
+    después a que todas terminen. Una corrida cancelada o fallida cuenta como falla, y tiene que haber al
+    menos una que de verdad pasó (si todas se saltaron, nada se probó): lo que se marca listo es lo que el
+    CI probó entero. Cuando todas terminaron vuelve a mirar una vez, por si otra corrida apareció después.
+    """
+    desde = time.monotonic()
+    vistas = False
+    aviso = 0.0
+    while True:
+        corridas = corridas_ci(commit, env)
+        pasado = time.monotonic() - desde
+        if corridas:
+            vistas = True
+            pendientes = [c for c in corridas if c.get("status") != "completed"]
+            if not pendientes:
+                time.sleep(CI_CADA)
+                otra_vez = corridas_ci(commit, env)
+                if len(otra_vez) != len(corridas) or any(c.get("status") != "completed" for c in otra_vez):
+                    continue  # apareció otra corrida, o una volvió a correr: se sigue esperando
+                corridas = otra_vez
+                malas = [c for c in corridas if c.get("conclusion") not in CI_BIEN]
+                if malas:
+                    detalle = "\n".join(f"  - {c.get('name')}: {c.get('conclusion')} {c.get('html_url', '')}" for c in malas)
+                    raise Alto(f"El CI de GitHub no pasó para {commit[:7]}:\n{detalle}\nCorrige, haz commit y vuelve a subir.")
+                if not any(c.get("conclusion") == "success" for c in corridas):
+                    raise Alto(f"El CI de GitHub no probó nada para {commit[:7]}: todas sus corridas se saltaron. No marco el PR como listo.")
+                print(f"CI de GitHub en verde para {commit[:7]}: {', '.join(sorted(str(c.get('name')) for c in corridas))}.")
+                return
+            if pasado > CI_TERMINA:
+                raise Alto(f"El CI de GitHub sigue corriendo después de {int(CI_TERMINA // 60)} min. Cuando termine en verde, vuelve a correr este comando con --listo.")
+        elif pasado > CI_APARECE:
+            raise Alto(f"El CI de GitHub no empezó para {commit[:7]} en {int(CI_APARECE)} s. Mira la pestaña Actions del repo y vuelve a correr este comando con --listo.")
+        if pasado - aviso >= 60 or aviso == 0.0:
+            print(f"Esperando el CI de GitHub para {commit[:7]}… ({'corriendo' if vistas else 'todavía no empieza'})", flush=True)
+            aviso = pasado or 0.001
+        time.sleep(CI_CADA)
+
+
 NO_PUSH = "sin-push-directo--usa-subir.py"
 
 
@@ -219,9 +284,7 @@ def subir(args: list[str]) -> int:
     mensaje = args[args.index("-m") + 1].strip()
     if not mensaje.startswith(f"{tarea}: "):
         raise Alto(f"El mensaje empieza con «{tarea}: ».")
-    listo, rapido, seco = "--listo" in args, "--rapido" in args, "--seco" in args
-    if listo and rapido:
-        raise Alto("--listo va sin --rapido: lo que se puede fusionar (y publicar) pasa antes por pruebas, build y la revisión del paquete.")
+    listo, local, seco = "--listo" in args, "--local" in args, "--seco" in args
 
     commit = git("rev-parse", "HEAD")  # lo que se revisa y lo que se sube: este commit, aunque HEAD se mueva después
     sucio = git("status", "--porcelain", "--", ".")
@@ -250,17 +313,19 @@ def subir(args: list[str]) -> int:
             raise Alto(str(error)) from error
         del_paquete = any(not sin_version(ruta) for ruta in git("diff", "--name-only", "--no-renames", ref_base, commit).splitlines())
         titulo = mensaje
-        cuerpo = texto_del_pr(subidos, del_paquete, listo)
+        # El texto dice «listo» solo cuando el CI ya pasó: hasta entonces el PR es un borrador.
+        cuerpo = texto_del_pr(subidos, del_paquete, False)
+        cuerpo_listo = texto_del_pr(subidos, del_paquete, True)
 
         hallazgos = revisor.objetos(REPO, *nuevo)
         hallazgos += revisor.commits(REPO, *nuevo)
         hallazgos += revisor.ruta(rama)
-        hallazgos += revisor.texto("título del PR", titulo) + revisor.texto("texto del PR", cuerpo)
+        hallazgos += revisor.texto("título del PR", titulo) + revisor.texto("texto del PR", cuerpo) + revisor.texto("texto del PR", cuerpo_listo)
         if hallazgos:
             raise Alto(f"Hay algo privado en lo que se iba a subir ({hallazgos} hallazgos, arriba). Corrígelo y vuelve a intentarlo; "
                        "si está en el mensaje o la firma de un commit, reescríbelo (`git rebase -i` o `git commit --amend --reset-author`).")
         print("0 hallazgos de datos privados en los archivos, los commits y el texto del PR.")
-        if not rapido:
+        if local:
             copia = tmp / "copia"
             copia_limpia(copia, commit)
             probar(copia, revisor, commit)
@@ -274,7 +339,8 @@ def subir(args: list[str]) -> int:
                            f"Tráelos con `git pull origin {rama}` y vuelve a intentarlo.")
         if seco:
             print(f"\n[seco] rama {rama}; PR {rama} → {BASE} ({'existe' if hay_remota else 'nueva'}), commit {commit[:7]}"
-                  f"\n[seco] título: {titulo}\n{cuerpo}")
+                  f"\n[seco] título: {titulo}\n{cuerpo_listo if listo else cuerpo}"
+                  + ("\n[seco] con --listo: esperaría el CI de GitHub y, si pasa, marcaría el PR como listo." if listo else ""))
             print(git("diff", "--stat", ref_base, commit))
             return 0
 
@@ -293,16 +359,33 @@ def subir(args: list[str]) -> int:
             cuerpo_j = tmp / "cuerpo.json"
             cuerpo_j.write_text(json.dumps({"title": titulo, "body": cuerpo}))
             correr(["gh", "api", "-X", "PATCH", f"repos/{GH_REPO}/pulls/{pr['number']}", "--input", str(cuerpo_j)], env=env_gh)
-            if listo and pr["isDraft"]:
-                correr(["gh", "pr", "ready", str(pr["number"]), "--repo", GH_REPO], env=env_gh)
-            elif not listo and not pr["isDraft"]:
+            if not pr["isDraft"]:
+                # Trae un commit que el CI todavía no probó: vuelve a borrador hasta que pase.
                 correr(["gh", "pr", "ready", str(pr["number"]), "--repo", GH_REPO, "--undo"], env=env_gh)
-            url = pr["url"]
+            numero, url = str(pr["number"]), pr["url"]
         else:
-            url = correr(comando_pr_publico(rama, titulo, cuerpo_f, listo), env=env_gh).stdout.decode().strip().splitlines()[-1]
-        print(f"\nPR: {url}\n  rama {rama} → {BASE}, commit {commit[:7]}, "
-              f"{'entra al próximo release con versión por fecha' if del_paquete else 'no cambia el paquete'}, "
-              f"{'listo para aprobar' if listo else 'borrador (falta QA)'}")
+            url = correr(comando_pr_publico(rama, titulo, cuerpo_f, False), env=env_gh).stdout.decode().strip().splitlines()[-1]
+            numero = url.rstrip("/").rsplit("/", 1)[-1]
+        resumen = (f"  rama {rama} → {BASE}, commit {commit[:7]}, "
+                   f"{'entra al próximo release con versión por fecha' if del_paquete else 'no cambia el paquete'}")
+        if not listo:
+            print(f"\nPR: {url}\n{resumen}, borrador (falta QA). El CI de GitHub corre pruebas, tipos y build.")
+            return 0
+        print(f"\nPR: {url} (borrador hasta que pase el CI)", flush=True)
+        esperar_ci(commit, env_gh)
+        # Lo que pasó el CI es este commit: si mientras tanto alguien subió otro a la rama, el PR ya no es lo que se probó.
+        try:
+            cabeza = json.loads(correr(["gh", "api", f"repos/{GH_REPO}/pulls/{numero}"], env=env_gh).stdout)["head"]["sha"]
+        except (ValueError, KeyError, TypeError) as error:
+            raise Alto("No pude leer en qué commit está el PR. Queda como borrador.") from error
+        if cabeza != commit:
+            raise Alto(f"El PR ya no está en {commit[:7]} sino en {str(cabeza)[:7]}: alguien subió otro commit a la rama mientras corría el CI. "
+                       "Queda como borrador; trae ese commit y vuelve a subir con --listo.")
+        correr(["gh", "pr", "ready", numero, "--repo", GH_REPO], env=env_gh)
+        cuerpo_j = tmp / "cuerpo-listo.json"
+        cuerpo_j.write_text(json.dumps({"title": titulo, "body": cuerpo_listo}))
+        correr(["gh", "api", "-X", "PATCH", f"repos/{GH_REPO}/pulls/{numero}", "--input", str(cuerpo_j)], env=env_gh)
+        print(f"\nPR: {url}\n{resumen}, listo para aprobar")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -313,7 +396,7 @@ def main() -> int:
         return subir(sys.argv[1:])
     except Alto as e:
         if SUBIDO:
-            print(f"\nSubí {', '.join(SUBIDO)}, pero después falló el PR: hay que revisarlo a mano. {e}")
+            print(f"\nSubí {', '.join(SUBIDO)}, pero después algo no salió: revisa el PR. {e}")
         else:
             print(f"\nNo subí nada. {e}")
         return 1
